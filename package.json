@@ -23,7 +23,9 @@
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:reset": "docker compose down -v && docker compose up -d",
-    "lint:fix": "biome check --write"
+    "lint:fix": "biome check --write",
+    "assets:render": "pnpm --filter @freak-hub/assets render",
+    "diagrams:check": "pnpm --filter @freak-hub/assets check-diagrams"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.2"

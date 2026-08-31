@@ -2,26 +2,45 @@
 
 ## Vista general
 
-```
-   Navegador
-       │
-       ▼
-┌──────────────────┐   JWT de sesión   ┌──────────────────┐
-│  apps/web        │ ────────────────► │  apps/api        │
-│  Next.js 16      │                   │  Go 1.26 + chi   │
-│  React 19        │ ◄──────────────── │  hexagonal       │
-│  Tailwind 4      │      JSON         └────────┬─────────┘
-└────────┬─────────┘                            │
-         │                                      │ pgx
-         │ SDK de Clerk                         ▼
-         ▼                             ┌──────────────────┐
-┌──────────────────┐   webhooks Svix   │  PostgreSQL 18   │
-│      Clerk       │ ─────────────────►└──────────────────┘
-│  (autenticación) │                            ▲
-└──────────────────┘                            │
-                                       ┌──────────────────┐
-                                       │  MinIO (S3)      │
-                                       └──────────────────┘
+```mermaid
+flowchart LR
+    B["Navegador"]
+
+    subgraph app["Freak Hub"]
+        direction TB
+        W["apps/web<br/>Next.js 16 · React 19 · Tailwind 4"]
+        A["apps/api<br/>Go 1.26 · chi · hexagonal"]
+    end
+
+    subgraph datos["Estado"]
+        direction TB
+        P[("PostgreSQL 18")]
+        S[("MinIO · S3")]
+    end
+
+    C["Clerk<br/>autenticación"]
+
+    B --> W
+    W -->|"JWT de sesión"| A
+    A -->|"JSON"| W
+    A -->|"pgx"| P
+    A --> S
+    W -.->|"SDK"| C
+    C -.->|"webhooks Svix"| A
+
+    classDef web   fill:#e8a33d,stroke:#8a5c12,stroke-width:2px,color:#1a1410
+    classDef api   fill:#4fb8e8,stroke:#14566f,stroke-width:2px,color:#0b1720
+    classDef store fill:#5fd18a,stroke:#166b3d,stroke-width:2px,color:#0d1a12
+    classDef ident fill:#e0574f,stroke:#7d1c17,stroke-width:2px,color:#1c0c0b
+    classDef user  fill:#c9c9d4,stroke:#4a4a58,stroke-width:2px,color:#16161d
+    classDef group fill:none,stroke:#6b6b7d,stroke-dasharray:4 4,color:#8b8b9d
+
+    class W web
+    class A api
+    class P,S store
+    class C ident
+    class B user
+    class app,datos group
 ```
 
 ## La regla que lo explica casi todo

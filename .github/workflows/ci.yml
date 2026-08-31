@@ -106,6 +106,29 @@ jobs:
           pnpm contracts:generate
           git diff --exit-code packages/contracts/generated
 
+  diagrams:
+    name: Docs · every Mermaid diagram parses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm --filter @freak-hub/assets exec playwright install --with-deps chromium
+
+      # A broken diagram renders as a grey error box on GitHub, which is worse
+      # than no diagram at all: catch it here instead.
+      - name: Parse the diagrams
+        run: pnpm diagrams:check
+
   migrations:
     name: Migrations · apply against a real Postgres
     runs-on: ubuntu-latest

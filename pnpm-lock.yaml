@@ -100,6 +100,12 @@ importers:
         specifier: ^7.9.1
         version: 7.13.0(typescript@5.9.3)
 
+  tools/assets:
+    devDependencies:
+      playwright:
+        specifier: ^1.57.0
+        version: 1.62.1
+
 packages:
 
   '@adobe/css-tools@4.5.0':

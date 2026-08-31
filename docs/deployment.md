@@ -6,22 +6,37 @@ Un **VPS propio** con Docker Compose: Postgres, MinIO, la API en Go y la web de
 Next.js. Coste fijo bajo y control total, a cambio de encargarnos nosotros de
 copias de seguridad, TLS y actualizaciones.
 
-```
-                    ┌─── Proxy inverso (Caddy o Traefik) ───┐
-                    │      TLS automático · un solo puerto   │
-                    └───────┬───────────────────────┬───────┘
-                            │                       │
-                     freakhub.es              api.freakhub.es
-                            │                       │
-                        ┌───▼───┐               ┌───▼───┐
-                        │  web  │──────────────►│  api  │
-                        └───────┘               └───┬───┘
-                                                    │
-                                     ┌──────────────┴──────────────┐
-                                     │                             │
-                               ┌─────▼─────┐                 ┌─────▼─────┐
-                               │ postgres  │                 │   minio   │
-                               └───────────┘                 └───────────┘
+```mermaid
+flowchart TB
+    NET(["Internet"])
+    PX["Proxy inverso · Caddy o Traefik<br/>TLS automático"]
+
+    subgraph vps["VPS · docker compose"]
+        direction TB
+        W["web<br/>freakhub.es"]
+        A["api<br/>api.freakhub.es"]
+        P[("postgres")]
+        S[("minio")]
+    end
+
+    NET --> PX
+    PX --> W
+    PX --> A
+    W --> A
+    A --> P
+    A --> S
+
+    classDef web   fill:#e8a33d,stroke:#8a5c12,stroke-width:2px,color:#1a1410
+    classDef api   fill:#4fb8e8,stroke:#14566f,stroke-width:2px,color:#0b1720
+    classDef store fill:#5fd18a,stroke:#166b3d,stroke-width:2px,color:#0d1a12
+    classDef edge  fill:#c9c9d4,stroke:#4a4a58,stroke-width:2px,color:#16161d
+    classDef group fill:none,stroke:#6b6b7d,stroke-dasharray:4 4,color:#8b8b9d
+
+    class W web
+    class A api
+    class P,S store
+    class NET,PX edge
+    class vps group
 ```
 
 El proxy inverso **no está en el compose todavía**: es lo primero que hay que

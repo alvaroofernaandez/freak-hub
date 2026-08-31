@@ -1,0 +1,14 @@
+{
+  "name": "@freak-hub/assets",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders the README hero and the social image from an HTML template",
+  "scripts": {
+    "render": "node render.mjs",
+    "check-diagrams": "node check-diagrams.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0"
+  }
+}

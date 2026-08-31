@@ -19,10 +19,47 @@ La salida es separar **qué es una cosa** de **qué relación tienes tú con ell
 
 ## Las tres piezas
 
+```mermaid
+erDiagram
+    MEMBER ||--o{ LIBRARY_ENTRY : "lleva"
+    WORK   ||--o{ LIBRARY_ENTRY : "es registrada en"
+    MEMBER ||--o{ RECOMMENDATION : "envía"
+    MEMBER ||--o{ RECOMMENDATION : "recibe"
+    WORK   ||--o{ RECOMMENDATION : "trata sobre"
+    MEMBER ||--o{ MEMBER : "invita a"
+
+    WORK {
+        uuid   id
+        string title
+        string category "anime|manga|game|film|boardgame|tcg"
+        string source   "anilist|tmdb|igdb|bgg|scryfall|manual"
+        json   metadata "lo específico de cada categoría"
+    }
+    LIBRARY_ENTRY {
+        uuid   id
+        string status "wishlist|pending|in_progress|completed|dropped|on_hold"
+        int    progress
+        int    rating "1-10, opcional"
+        bool   is_favourite
+        bool   owned
+        string note
+    }
+    MEMBER {
+        uuid   id
+        string username
+        string display_name
+        uuid   invited_by "NULL en los fundadores"
+    }
+    RECOMMENDATION {
+        uuid   id
+        string reason "obligatorio: sin motivo no es recomendación"
+        string status "pending|accepted|dismissed"
+    }
 ```
-      Work  ──────<  LibraryEntry  >──────  Member
-   (la obra)        (tu relación)         (la persona)
-```
+
+Una obra es **compartida por todo el grupo**; la relación con ella es **de cada
+persona**. Esa separación es lo que hace que las coincidencias y las
+recomendaciones signifiquen algo.
 
 ### Work — la obra
 
@@ -53,6 +90,25 @@ guarda:
 | `note` | Texto corto y privado por defecto |
 | `owned` | Si lo tienes físicamente. Relevante en mesa, manga y TCG |
 | `started_at` / `finished_at` | Fechas, opcionales |
+
+El ciclo de vida de una entrada, que es donde se ve que la wishlist no necesita
+tabla propia:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> wishlist: lo quiero
+    [*] --> pending: ya lo tengo
+    wishlist --> pending: lo consigo
+    pending --> in_progress: empiezo
+    in_progress --> on_hold: lo aparco
+    on_hold --> in_progress: retomo
+    in_progress --> completed: termino
+    in_progress --> dropped: lo dejo
+    completed --> in_progress: revisito
+    completed --> [*]
+    dropped --> [*]
+```
 
 **La wishlist no es una lista aparte**: es `status = 'wishlist'`. Una entrada
 pendiente pasa a en curso y luego a terminada sin cambiar de tabla ni perder su

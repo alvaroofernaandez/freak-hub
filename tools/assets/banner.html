@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Sora:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  /* ---------------------------------------------------------------------
+   * Freak Hub — banner and social image.
+   *
+   * Concept: an arcade character-select screen. The friends are the party.
+   * The palette is pulled from the artwork itself, not from a catalogue:
+   * Ed's alchemic amber, Gon's acid green, Killua's electric cyan, and the
+   * crimson of the coat for the "closed door" marker.
+   * ------------------------------------------------------------------- */
+  :root {
+    --bg:        oklch(0.145 0.022 275);
+    --bg-deep:   oklch(0.105 0.020 275);
+    --ink:       oklch(0.975 0.008 275);
+    --muted:     oklch(0.745 0.020 275);
+    --line:      oklch(0.32 0.030 275);
+    --ed:        oklch(0.80 0.150 78);
+    --gon:       oklch(0.80 0.190 148);
+    --killua:    oklch(0.80 0.130 225);
+    --coat:      oklch(0.62 0.190 22);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body { background: transparent; }
+
+  .stage {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Sora", system-ui, sans-serif;
+    isolation: isolate;
+  }
+
+  /* Cabinet spotlights: one warm pool per character, so each side of the
+     frame is lit by that character's own colour instead of a generic glow. */
+  .stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      radial-gradient(52% 78% at 10% 95%, oklch(0.80 0.150 78 / 0.24), transparent 66%),
+      radial-gradient(46% 74% at 90% 95%, oklch(0.80 0.190 148 / 0.20), transparent 64%),
+      radial-gradient(34% 58% at 97% 80%, oklch(0.80 0.130 225 / 0.18), transparent 62%),
+      radial-gradient(120% 130% at 50% 118%, transparent 40%, var(--bg-deep) 100%);
+  }
+
+  /* Faint dot matrix, the texture of a cabinet bezel. Under 5% alpha so it
+     reads as material, never as pattern. */
+  .stage::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image: radial-gradient(oklch(0.98 0 0 / 0.045) 1px, transparent 1px);
+    background-size: var(--dot, 26px) var(--dot, 26px);
+    mask-image: radial-gradient(115% 100% at 50% 55%, #000 30%, transparent 76%);
+  }
+
+  /* The two art pieces are cropped very differently (Ed is a 1.63 bust, the
+     duo a 0.69 full body), so each is framed by a fixed box with its own
+     object-position rather than by a shared rule that would float one. */
+  .char {
+    position: absolute;
+    bottom: 0;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .char img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: bottom center;
+  }
+  .char--ed  { left: var(--ed-left, -30px);  width: var(--ed-w); height: var(--ed-h); }
+  .char--duo { right: var(--duo-right, -18px); width: var(--duo-w); height: var(--duo-h); }
+
+  .core {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: var(--core-gap, 20px);
+    padding-bottom: var(--core-lift, 16px);
+    pointer-events: none;
+  }
+  .core > * { max-width: var(--core-width, 560px); }
+  .core::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: radial-gradient(58% 72% at 50% 48%,
+      oklch(0.145 0.022 275 / var(--scrim, 0.92)) 22%,
+      oklch(0.145 0.022 275 / calc(var(--scrim, 0.92) * 0.78)) 52%,
+      transparent 76%);
+  }
+
+  .wordmark {
+    font-family: "Bungee", "Sora", sans-serif;
+    font-size: var(--word-size, 92px);
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+    text-shadow: 0 0 var(--word-glow, 30px) oklch(0.145 0.022 275 / 0.95);
+  }
+  .wordmark .freak { color: var(--ink); }
+  .wordmark .hub   { color: var(--ed); }
+
+  .tagline {
+    font-size: var(--tag-size, 25px);
+    font-weight: 600;
+    color: var(--muted);
+    line-height: 1.35;
+    text-wrap: balance;
+  }
+
+  .cats {
+    max-width: var(--cats-width, 340px);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--cat-gap, 9px);
+  }
+  .cat {
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 500;
+    font-size: var(--cat-size, 16px);
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    padding: var(--cat-pad, 7px 14px);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: oklch(0.19 0.026 275 / 0.88);
+  }
+  .cat i { font-style: normal; color: var(--tone, var(--muted)); margin-right: 7px; }
+
+  .gate {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: "JetBrains Mono", monospace;
+    font-weight: 700;
+    font-size: var(--gate-size, 15px);
+    letter-spacing: 0.10em;
+    color: oklch(0.78 0.150 22);
+    padding: var(--gate-pad, 8px 16px);
+    border: 1px solid oklch(0.62 0.190 22 / 0.60);
+    border-radius: 999px;
+    background: oklch(0.20 0.060 22 / 0.90);
+  }
+  .gate::before {
+    content: "";
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--coat);
+  }
+
+  /* The cabinet moulding: three colours, one per party member. */
+  .moulding {
+    position: absolute;
+    inset: auto 0 0 0;
+    height: var(--moulding, 7px);
+    z-index: 3;
+    background: linear-gradient(90deg,
+      var(--ed) 0%, var(--ed) 33%,
+      var(--gon) 33%, var(--gon) 66%,
+      var(--killua) 66%, var(--killua) 100%);
+  }
+
+  /* ---- Variant: README hero (wide, rounded, alpha corners) ------------ */
+  #hero {
+    --scrim: 0.42;
+    width: 1800px;
+    height: 470px;
+    border-radius: 22px;
+    --dot: 30px;
+    --word-size: 86px;
+    --word-glow: 40px;
+    --tag-size: 23px;
+    --core-gap: 18px;
+    --core-width: 760px;
+    --cats-width: 380px;
+    --core-lift: 16px;
+    --cat-size: 14px;
+    --cat-pad: 7px 13px;
+    --cat-gap: 9px;
+    --gate-size: 13px;
+    --gate-pad: 7px 15px;
+    --moulding: 6px;
+    --ed-w: 580px;  --ed-h: 356px;  --ed-left: -34px;
+    --duo-w: 318px; --duo-h: 464px; --duo-right: -14px;
+  }
+
+  /* ---- Variant: social / OG card (1280x640, opaque, denser) ---------- */
+  #og {
+    width: 1280px;
+    height: 640px;
+    --dot: 24px;
+    --word-size: 94px;
+    --word-glow: 34px;
+    --tag-size: 25px;
+    --core-gap: 19px;
+    --core-width: 470px;
+    --cats-width: 336px;
+    --core-lift: 14px;
+    --cat-size: 15px;
+    --cat-pad: 7px 13px;
+    --gate-size: 14px;
+    --moulding: 8px;
+    --ed-w: 545px;  --ed-h: 334px;  --ed-left: -34px;
+    --duo-w: 352px; --duo-h: 513px; --duo-right: -14px;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="stage" id="hero">
+  <div class="char char--ed"><img src="../../docs/assets/char-ed.png" alt=""></div>
+  <div class="core">
+    <div class="wordmark"><span class="freak">FREAK</span> <span class="hub">HUB</span></div>
+    <p class="tagline">La biblioteca compartida del grupo</p>
+    <div class="cats">
+      <span class="cat" style="--tone: var(--ed)"><i>◆</i>Anime</span>
+      <span class="cat" style="--tone: var(--ed)"><i>◆</i>Manga</span>
+      <span class="cat" style="--tone: var(--gon)"><i>◆</i>Videojuegos</span>
+      <span class="cat" style="--tone: var(--gon)"><i>◆</i>Películas</span>
+      <span class="cat" style="--tone: var(--killua)"><i>◆</i>Juegos de mesa</span>
+      <span class="cat" style="--tone: var(--killua)"><i>◆</i>TCG</span>
+    </div>
+    <span class="gate">SOLO POR INVITACIÓN</span>
+  </div>
+  <div class="char char--duo"><img src="../../docs/assets/char-gonkillua.png" alt=""></div>
+  <div class="moulding"></div>
+</div>
+
+<div class="stage" id="og">
+  <div class="char char--ed"><img src="../../docs/assets/char-ed.png" alt=""></div>
+  <div class="core">
+    <div class="wordmark"><span class="freak">FREAK</span><br><span class="hub">HUB</span></div>
+    <p class="tagline">La biblioteca compartida del grupo</p>
+    <div class="cats">
+      <span class="cat" style="--tone: var(--ed)"><i>◆</i>Anime</span>
+      <span class="cat" style="--tone: var(--ed)"><i>◆</i>Manga</span>
+      <span class="cat" style="--tone: var(--gon)"><i>◆</i>Juegos</span>
+      <span class="cat" style="--tone: var(--gon)"><i>◆</i>Cine</span>
+      <span class="cat" style="--tone: var(--killua)"><i>◆</i>Mesa</span>
+      <span class="cat" style="--tone: var(--killua)"><i>◆</i>TCG</span>
+    </div>
+    <span class="gate">SOLO POR INVITACIÓN</span>
+  </div>
+  <div class="char char--duo"><img src="../../docs/assets/char-gonkillua.png" alt=""></div>
+  <div class="moulding"></div>
+</div>
+
+</body>
+</html>

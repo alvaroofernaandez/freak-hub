@@ -1,6 +1,7 @@
 packages:
   - "apps/web"
   - "packages/*"
+  - "tools/*"
 
 ignoredBuiltDependencies:
   - sharp

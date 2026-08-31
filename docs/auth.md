@@ -73,27 +73,30 @@ clerk config patch --file config.json
 
 ## El flujo de invitación
 
-```
-Miembro                Web              API (Go)           Clerk            Invitado
-  │                     │                  │                 │                 │
-  ├─ email ────────────►│                  │                 │                 │
-  │                     ├─ POST /v1/       │                 │                 │
-  │                     │   invitations ──►│                 │                 │
-  │                     │                  ├─ ¿ya es miembro?│                 │
-  │                     │                  ├─ ¿hay pendiente?│                 │
-  │                     │                  ├─ crear ────────►│                 │
-  │                     │                  │                 ├─ email ────────►│
-  │                     │                  │◄─ invitation_id │                 │
-  │                     │                  ├─ guardar quién  │                 │
-  │                     │◄─ 201 ───────────┤   invitó a quién│                 │
-  │                     │                  │                 │◄─ clic ─────────┤
-  │                     │                  │                 ├─ /registro?     │
-  │                     │                  │                 │  __clerk_ticket │
-  │                     │                  │◄── webhook ─────┤                 │
-  │                     │                  │   user.created  │                 │
-  │                     │                  ├─ crear miembro  │                 │
-  │                     │                  ├─ invitación →   │                 │
-  │                     │                  │   aceptada      │                 │
+```mermaid
+sequenceDiagram
+    autonumber
+    actor M as Miembro
+    participant W as Web
+    participant A as API en Go
+    participant C as Clerk
+    actor I as Invitado
+
+    M->>W: escribe un correo
+    W->>A: POST /v1/invitations
+    A->>A: ¿ese correo ya es miembro?
+    A->>A: ¿hay una invitación pendiente?
+    Note over A: Todo lo que puede rechazar se comprueba<br/>ANTES de llamar a Clerk
+    A->>C: crear invitación
+    C-->>I: correo con el ticket
+    C-->>A: invitation_id
+    A->>A: guarda quién invitó a quién
+    A-->>W: 201 Created
+    I->>C: pulsa el enlace
+    C->>I: /registro con __clerk_ticket
+    C-)A: webhook user.created
+    A->>A: crea el miembro
+    A->>A: marca la invitación aceptada
 ```
 
 ### Las reglas y dónde están escritas
