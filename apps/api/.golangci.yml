@@ -1,0 +1,43 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    - bodyclose      # every HTTP response body must be closed
+    - errorlint      # use errors.Is/As instead of type switches on errors
+    - gosec          # common security mistakes
+    - misspell
+    - nilerr         # returning nil after checking an error is almost always a bug
+    - noctx          # HTTP requests must carry a context
+    - revive
+    - unconvert
+    - wastedassign
+    - whitespace
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+    gosec:
+      excludes:
+        - G104 # handled by errcheck
+  exclusions:
+    rules:
+      # Test doubles and fixtures do not need the same hardening as production code.
+      - path: '(.+)_test\.go'
+        linters:
+          - gosec
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/alvaroofernaandez/freak-hub/apps/api
