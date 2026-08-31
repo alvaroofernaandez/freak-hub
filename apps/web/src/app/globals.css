@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Provisional design tokens.
+ *
+ * The visual direction is not decided yet (see docs/design.md). These values
+ * exist so the auth flow is legible and accessible today, and are meant to be
+ * replaced wholesale once the direction is chosen. Do not build a component
+ * library on top of them.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --color-surface: oklch(0.16 0.02 275);
+  --color-surface-raised: oklch(0.21 0.025 275);
+  --color-border: oklch(0.32 0.03 275);
+  --color-content: oklch(0.95 0.01 275);
+  --color-content-muted: oklch(0.72 0.02 275);
+  --color-accent: oklch(0.72 0.18 300);
+  --color-accent-content: oklch(0.15 0.03 300);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-content);
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
