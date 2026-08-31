@@ -1,0 +1,50 @@
+name: Deploy
+
+# Deliberately manual. A group of friends does not need continuous deployment,
+# and an accidental merge should never take the service down.
+on:
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: "Apply pending migrations before starting the new version"
+        type: boolean
+        default: true
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to the VPS
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Pull, build and restart over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.VPS_APP_PATH }}
+            git pull --ff-only
+            docker compose --profile apps build
+            if [ "${{ inputs.run_migrations }}" = "true" ]; then
+              docker compose --profile apps run --rm migrate
+            fi
+            docker compose --profile apps up -d
+            docker compose ps
+
+      - name: Health check
+        run: |
+          for attempt in $(seq 1 10); do
+            if curl -fsS "${{ secrets.API_HEALTH_URL }}" > /dev/null; then
+              echo "the api answered on attempt $attempt"
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "the api never became healthy"
+          exit 1
