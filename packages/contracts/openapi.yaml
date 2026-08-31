@@ -1,0 +1,257 @@
+openapi: 3.1.0
+
+info:
+  title: Freak Hub API
+  version: 0.1.0
+  description: |
+    HTTP contract between the Next.js front end and the Go API.
+
+    This file is the source of truth: the TypeScript types the web consumes are
+    generated from it (`pnpm contracts:generate`). Change the contract here
+    first, then implement it on both sides.
+
+    Authentication is a Clerk session JWT in `Authorization: Bearer <token>`,
+    which the API verifies against Clerk's JWKS. The only unauthenticated
+    endpoints are the health check and the Clerk webhook, and the latter
+    authenticates with a Svix signature instead.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.freakhub.local
+    description: Production (replace with the real host)
+
+tags:
+  - name: system
+    description: Liveness and readiness
+  - name: members
+    description: The people inside Freak Hub
+  - name: invitations
+    description: The only door into the community
+  - name: webhooks
+    description: Deliveries from Clerk
+
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      tags: [system]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: The API is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+
+  /v1/me:
+    get:
+      operationId: getCurrentMember
+      tags: [members]
+      summary: The member behind the current session
+      responses:
+        "200":
+          description: The authenticated member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: |
+            The session is valid but no member row exists yet, which happens
+            while the `user.created` webhook is still in flight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/invitations:
+    get:
+      operationId: listMyInvitations
+      tags: [invitations]
+      summary: Invitations sent by the current member
+      responses:
+        "200":
+          description: The caller's invitations, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Invitation"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      operationId: createInvitation
+      tags: [invitations]
+      summary: Invite somebody
+      description: |
+        Any member can invite, with no quota. The API asks Clerk to send the
+        email and records who invited whom.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              additionalProperties: false
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "201":
+          description: The invitation was sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invitation"
+        "400":
+          description: The body is malformed or carries unknown fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: An invitation is already pending, or the email is already a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The email is not valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /webhooks/clerk:
+    post:
+      operationId: receiveClerkWebhook
+      tags: [webhooks]
+      summary: Clerk event delivery
+      description: |
+        Authenticated with a Svix signature, never with a session. Handles
+        `user.created`, `user.updated` and `user.deleted`; every other event is
+        acknowledged and ignored. Deliveries are at-least-once, so the handler
+        is idempotent.
+      security: []
+      parameters:
+        - in: header
+          name: svix-id
+          required: true
+          schema: { type: string }
+        - in: header
+          name: svix-timestamp
+          required: true
+          schema: { type: string }
+        - in: header
+          name: svix-signature
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, data]
+              properties:
+                type: { type: string }
+                data: { type: object, additionalProperties: true }
+      responses:
+        "204":
+          description: Processed, or deliberately ignored
+        "400":
+          description: The payload is not valid JSON
+        "401":
+          description: The Svix signature does not check out
+        "422":
+          description: The event is well formed but cannot be projected
+
+components:
+  securitySchemes:
+    clerkSession:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Clerk session token, obtained in the browser with `getToken()`.
+
+  responses:
+    Unauthorized:
+      description: The session is missing, malformed or expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      description: |
+        The single error envelope of the whole API. Branch on `code`; `message`
+        is Spanish prose meant for people and may be reworded at any time.
+      properties:
+        code:
+          type: string
+          examples: [invitation_already_sent, invalid_token, not_found]
+        message:
+          type: string
+
+    Member:
+      type: object
+      required: [id, clerk_user_id, username, display_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        clerk_user_id:
+          type: string
+        username:
+          type: string
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+
+    Invitation:
+      type: object
+      required: [id, email, status, inviter_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [pending, accepted, revoked]
+        inviter_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+security:
+  - clerkSession: []
