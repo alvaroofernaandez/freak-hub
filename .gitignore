@@ -1,0 +1,45 @@
+# --- Dependencies -----------------------------------------------------------
+node_modules/
+.pnpm-store/
+
+# --- Build output -----------------------------------------------------------
+.next/
+out/
+dist/
+build/
+apps/api/bin/
+*.test
+*.out
+
+# --- Environment & secrets --------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/**/*.key
+
+# --- Local infrastructure ---------------------------------------------------
+.docker-data/
+postgres-data/
+minio-data/
+
+# --- Tooling caches ---------------------------------------------------------
+.turbo/
+.cache/
+coverage/
+*.lcov
+.vitest/
+playwright-report/
+test-results/
+.golangci-cache/
+
+# --- Agent & editor ---------------------------------------------------------
+.atl/
+.code-review-graph/
+.claude/settings.local.json
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

@@ -1,0 +1,31 @@
+{
+  "name": "freak-hub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared tracking and recommendation platform for a closed group of friends",
+  "packageManager": "pnpm@10.32.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @freak-hub/web dev",
+    "build": "pnpm --filter @freak-hub/web build",
+    "start": "pnpm --filter @freak-hub/web start",
+    "lint": "biome check",
+    "format": "biome format --write",
+    "typecheck": "pnpm --filter @freak-hub/web typecheck",
+    "test": "pnpm --filter @freak-hub/web test",
+    "test:e2e": "pnpm --filter @freak-hub/web test:e2e",
+    "contracts:generate": "pnpm --filter @freak-hub/contracts generate",
+    "api:dev": "make -C apps/api dev",
+    "api:test": "make -C apps/api test",
+    "api:lint": "make -C apps/api lint",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "lint:fix": "biome check --write"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.2"
+  }
+}
