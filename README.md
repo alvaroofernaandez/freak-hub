@@ -465,11 +465,12 @@ visual y levantar `works` + `library_entries` con una sola categoría antes de
 generalizar a las seis.
 
 > [!NOTE]
-> **La estética de la aplicación está sin decidir a propósito.** `globals.css`
-> lleva tokens provisionales, marcados como tales, suficientes para que el flujo de
-> autenticación se lea. No construyas un sistema de diseño encima de ellos.
-> El banner y la imagen social de este README sí tienen dirección propia, y se
-> regeneran con `pnpm assets:render`.
+> **La dirección visual ya está decidida** (["character select"](docs/design.md),
+> [ADR-0008](docs/decisions/0008-direccion-visual.md)): extiende la identidad de
+> este mismo banner —oscuro, paleta oklch, un color por categoría— a toda la
+> aplicación. `globals.css` todavía lleva los tokens provisionales; sustituirlos
+> es el siguiente paso, antes de construir pantallas de verdad. El banner y la
+> imagen social de este README se regeneran con `pnpm assets:render`.
 
 Detalle completo en [docs/roadmap.md](docs/roadmap.md).
 
