@@ -10,6 +10,10 @@ top y recomendaciones): [wireframes/low-fidelity-wireframes.html](wireframes/low
 Escala de grises a propósito: solo estructura, la estética final es la de
 [design.md](design.md) y todavía no se ha aplicado.
 
+Alta fidelidad de las mismas diez pantallas, en escritorio, con la paleta y
+tipografía de [design.md](design.md) ya aplicadas: [design/high-fidelity-desktop.html](design/high-fidelity-desktop.html).
+Faltan las versiones de móvil y tablet, y el tema claro.
+
 ## Listado de pantallas
 
 | Pantalla | Ruta | Qué resuelve |
