@@ -4,6 +4,12 @@ Listado cerrado de pantallas de la aplicación y de la estructura de
 navegación que las conecta. Decisión tomada en [ADR-0009](decisions/0009-arquitectura-de-informacion.md);
 la paleta y la tipografía con las que se construirán están en [design.md](design.md).
 
+Wireframes de baja fidelidad de las diez pantallas principales (núcleo de
+biblioteca más perfil propio y de un amigo, con sus secciones de actividad,
+top y recomendaciones): [wireframes/low-fidelity-wireframes.html](wireframes/low-fidelity-wireframes.html).
+Escala de grises a propósito: solo estructura, la estética final es la de
+[design.md](design.md) y todavía no se ha aplicado.
+
 ## Listado de pantallas
 
 | Pantalla | Ruta | Qué resuelve |
