@@ -25,7 +25,9 @@
    [design.md](design.md) y [ADR-0008](decisions/0008-direccion-visual.md)).
    Falta aplicarla: sustituir los tokens provisionales de `globals.css` y
    cambiar la fuente de cuerpo de Inter a Sora en `app/layout.tsx`. Eso va
-   antes de construir pantallas de verdad.
+   antes de construir pantallas de verdad. El listado de pantallas y la
+   navegación ya están decididos (ver [screens.md](screens.md) y
+   [ADR-0009](decisions/0009-arquitectura-de-informacion.md)).
 2. **`works` y `library_entries`.** El corazón del producto: registrar algo con su
    estado y su progreso. Empezar por **una sola categoría** (anime, vía AniList) y
    generalizar cuando el modelo haya sobrevivido al uso real.
