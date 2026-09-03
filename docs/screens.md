@@ -28,7 +28,7 @@ Escala de grises a propósito: solo estructura, la estética final es la de
 | Recomendaciones | `/recomendaciones` | Recibidas pendientes y enviadas, con su motivo |
 | Actividad | `/actividad` | Feed cronológico completo del grupo, sin algoritmo. Separado de inicio a propósito |
 | Grupo | `/miembros` | Listado de quién está dentro |
-| Perfil de miembro | `/miembros/[username]` | Su biblioteca pública, favoritos y actividad reciente |
+| Perfil de miembro | `/miembros/[username]` | Cuatro secciones alternables (ADR-0010): Biblioteca (pública, favoritos), Actividad (gráficas y estadísticas personales, nunca comparativas), Top (mejor valoradas, filtrable por categoría) y Recomendaciones (enviadas/recibidas entre el visitante y el dueño del perfil). En tu propio perfil puedes elegir qué secciones se muestran y cuál se abre por defecto — solo afecta a tu vista, no a la de quien te visita |
 | Ajustes | `/ajustes` | Cuenta (widget de Clerk), tema claro/oscuro, exportar y borrar tus datos, atribución de catálogos externos |
 
 ## Lo que deliberadamente no es una pantalla
@@ -40,7 +40,7 @@ Escala de grises a propósito: solo estructura, la estética final es la de
 | Detalle de un mazo | El modelo mazo↔carta está sin decidir (ADR-0007); la ficha solo lista nombres |
 | Explorar / descubrir | El producto descarta explícitamente el descubrimiento público (product.md) |
 | Editar entrada | Es un panel dentro de la ficha de obra, no tiene sentido sin el contexto de la obra |
-| Ranking o estadísticas del grupo | Métrica de vanidad descartada por producto |
+| Ranking o estadísticas comparativas entre miembros | Métrica de vanidad descartada por producto — las estadísticas y el "top" del perfil (ADR-0010) son siempre personales, nunca una comparación entre miembros |
 
 ## Navegación
 
