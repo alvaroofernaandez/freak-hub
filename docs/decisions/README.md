@@ -18,3 +18,4 @@ qué se decidió algo vale tanto como la decisión.
 | [0006](0006-expansiones-de-juegos-de-mesa.md) | Las expansiones son un Work enlazado al juego base | Aceptada |
 | [0007](0007-mazos-de-tcg.md) | Un TCG se agrupa por juego; el modelo de mazo se aplaza | Aceptada |
 | [0008](0008-direccion-visual.md) | Dirección visual: "character select", oscuro por defecto | Aceptada |
+| [0009](0009-arquitectura-de-informacion.md) | Pantallas y navegación: lobby propio, inicio como panel personal | Aceptada |
