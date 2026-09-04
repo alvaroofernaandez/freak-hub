@@ -51,7 +51,7 @@ export default async function WorkPage({ params }: WorkPageProps) {
             </span>
           ) : null}
           {work.isFavourite ? (
-            <span aria-label="Favorito" className="text-lg">
+            <span role="img" aria-label="Favorito" className="text-lg">
               ★
             </span>
           ) : null}

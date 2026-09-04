@@ -24,7 +24,7 @@ export function WorkCard({ work }: WorkCardProps) {
       >
         <div className="flex justify-end">
           {work.isFavourite ? (
-            <span aria-label="Favorito" className="text-lg">
+            <span role="img" aria-label="Favorito" className="text-lg">
               ★
             </span>
           ) : null}
