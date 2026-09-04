@@ -44,6 +44,9 @@ detalle de implementación.
   la nota es juicio.
 - **Recomendar** algo a una persona concreta del grupo, con un motivo.
 - **Ver la actividad** de los demás en un feed cronológico sencillo.
+- **Ver tus propias estadísticas** en tu perfil: gráficas de actividad y tu
+  top de obras mejor valoradas, filtrables por categoría — siempre datos
+  tuyos, nunca comparados con los de otro miembro.
 - **Invitar** a alguien nuevo. Cualquier miembro puede hacerlo, sin límite.
 
 ## Qué NO es
