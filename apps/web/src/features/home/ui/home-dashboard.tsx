@@ -43,9 +43,7 @@ export function HomeDashboard({
               className="rounded-lg border border-border bg-surface-raised p-4"
             >
               <p>
-                <span className="font-medium">
-                  {recommendation.workTitle}
-                </span>{" "}
+                <span className="font-medium">{recommendation.workTitle}</span>{" "}
                 <span className="text-ink-muted">
                   · de @{recommendation.fromUsername}
                 </span>

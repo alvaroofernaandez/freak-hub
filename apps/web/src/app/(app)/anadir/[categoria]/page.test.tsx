@@ -46,8 +46,9 @@ describe("AddSearchPage", () => {
     });
     render(page);
 
-    expect(
-      screen.getByRole("link", { name: /alta manual/i }),
-    ).toHaveAttribute("href", "/anadir/anime/manual");
+    expect(screen.getByRole("link", { name: /alta manual/i })).toHaveAttribute(
+      "href",
+      "/anadir/anime/manual",
+    );
   });
 });
