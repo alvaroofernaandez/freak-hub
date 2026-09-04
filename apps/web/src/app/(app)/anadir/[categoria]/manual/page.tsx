@@ -40,9 +40,7 @@ export default async function ManualAddPage({ params }: ManualAddPageProps) {
         <h1 className="text-3xl font-semibold">
           Alta manual · {CATEGORY_LABELS[categoria]}
         </h1>
-        <p className="text-ink-muted">
-          Para lo que no aparece en el catálogo.
-        </p>
+        <p className="text-ink-muted">Para lo que no aparece en el catálogo.</p>
       </div>
 
       <form className="flex max-w-lg flex-col gap-4">
