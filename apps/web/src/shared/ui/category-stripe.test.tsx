@@ -1,6 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CategoryStripe } from "./category-stripe";
+import {
+  CATEGORY_COLOR_CLASS,
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  CategoryStripe,
+} from "./category-stripe";
 
 const SEGMENTS_IN_ORDER = [
   { id: "anime", colorClass: "bg-cat-anime" },
@@ -10,6 +15,24 @@ const SEGMENTS_IN_ORDER = [
   { id: "boardgame", colorClass: "bg-cat-board" },
   { id: "tcg", colorClass: "bg-cat-tcg" },
 ] as const;
+
+describe("CATEGORY_ORDER, CATEGORY_COLOR_CLASS and CATEGORY_LABELS", () => {
+  it("agree on the same six categories, in the same order", () => {
+    expect(CATEGORY_ORDER).toEqual(SEGMENTS_IN_ORDER.map((s) => s.id));
+  });
+
+  it("maps each category to its stripe color class", () => {
+    for (const { id, colorClass } of SEGMENTS_IN_ORDER) {
+      expect(CATEGORY_COLOR_CLASS[id]).toBe(colorClass);
+    }
+  });
+
+  it("gives every category a non-empty Spanish label", () => {
+    for (const id of CATEGORY_ORDER) {
+      expect(CATEGORY_LABELS[id]).toMatch(/\S/);
+    }
+  });
+});
 
 describe("CategoryStripe", () => {
   it("renders the six segments, in order, each with its category color", () => {

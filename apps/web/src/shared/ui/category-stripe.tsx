@@ -21,6 +21,27 @@ const SEGMENTS: { id: CategoryId; colorClass: string }[] = [
   { id: "tcg", colorClass: "bg-cat-tcg" },
 ];
 
+/** The six categories, in their canonical order (docs/screens.md). */
+export const CATEGORY_ORDER: CategoryId[] = SEGMENTS.map(
+  (segment) => segment.id,
+);
+
+/** Category -> stripe color class, the single source of truth for the roster colors. */
+export const CATEGORY_COLOR_CLASS: Record<CategoryId, string> =
+  Object.fromEntries(
+    SEGMENTS.map((segment) => [segment.id, segment.colorClass]),
+  ) as Record<CategoryId, string>;
+
+/** Category -> Spanish display label. */
+export const CATEGORY_LABELS: Record<CategoryId, string> = {
+  anime: "Anime",
+  manga: "Manga",
+  game: "Videojuegos",
+  film: "Películas",
+  boardgame: "Juegos de mesa",
+  tcg: "TCG",
+};
+
 type CategoryStripeProps = {
   activeCategory?: CategoryId;
 };
