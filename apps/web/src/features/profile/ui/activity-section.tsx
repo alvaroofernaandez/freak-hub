@@ -42,7 +42,11 @@ export function ActivitySection({ stats }: ActivitySectionProps) {
 
       <div className="space-y-4">
         {visible.map((stat) => (
-          <div key={stat.category} data-testid="activity-row" className="space-y-1.5">
+          <div
+            key={stat.category}
+            data-testid="activity-row"
+            className="space-y-1.5"
+          >
             <p className="text-sm">{CATEGORY_LABELS[stat.category]}</p>
             <div className="flex items-center gap-2">
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-surface-raised">

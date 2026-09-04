@@ -4,7 +4,9 @@ import { CategoryTile } from "./category-tile";
 
 describe("CategoryTile", () => {
   it("links to the given href", () => {
-    render(<CategoryTile category="anime" count={3} href="/biblioteca/anime" />);
+    render(
+      <CategoryTile category="anime" count={3} href="/biblioteca/anime" />,
+    );
 
     expect(screen.getByRole("link")).toHaveAttribute(
       "href",
@@ -13,7 +15,13 @@ describe("CategoryTile", () => {
   });
 
   it("shows the category's Spanish label", () => {
-    render(<CategoryTile category="boardgame" count={2} href="/biblioteca/boardgame" />);
+    render(
+      <CategoryTile
+        category="boardgame"
+        count={2}
+        href="/biblioteca/boardgame"
+      />,
+    );
 
     expect(screen.getByText("Juegos de mesa")).toBeInTheDocument();
   });
@@ -30,10 +38,14 @@ describe("CategoryTile", () => {
     );
     expect(screen.getByText("0 obras")).toBeInTheDocument();
 
-    rerender(<CategoryTile category="anime" count={1} href="/biblioteca/anime" />);
+    rerender(
+      <CategoryTile category="anime" count={1} href="/biblioteca/anime" />,
+    );
     expect(screen.getByText("1 obra")).toBeInTheDocument();
 
-    rerender(<CategoryTile category="anime" count={5} href="/biblioteca/anime" />);
+    rerender(
+      <CategoryTile category="anime" count={5} href="/biblioteca/anime" />,
+    );
     expect(screen.getByText("5 obras")).toBeInTheDocument();
   });
 });

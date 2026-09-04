@@ -4,9 +4,7 @@ import { FriendProfileView } from "./friend-profile-view";
 
 describe("FriendProfileView", () => {
   it("shows the friend's header", () => {
-    render(
-      <FriendProfileView displayName="Gon Freecss" username="gon" />,
-    );
+    render(<FriendProfileView displayName="Gon Freecss" username="gon" />);
 
     expect(
       screen.getByRole("heading", { name: "Gon Freecss" }),

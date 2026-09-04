@@ -20,11 +20,14 @@ const STATUSES: Record<EntryStatus, { icon: string; label: string }> = {
 };
 
 /** The six statuses, in their canonical order, for anything that lists them (e.g. filters). */
-export const STATUS_ORDER: { status: EntryStatus; icon: string; label: string }[] =
-  (Object.keys(STATUSES) as EntryStatus[]).map((status) => ({
-    status,
-    ...STATUSES[status],
-  }));
+export const STATUS_ORDER: {
+  status: EntryStatus;
+  icon: string;
+  label: string;
+}[] = (Object.keys(STATUSES) as EntryStatus[]).map((status) => ({
+  status,
+  ...STATUSES[status],
+}));
 
 type StatusBadgeProps = {
   status: EntryStatus;

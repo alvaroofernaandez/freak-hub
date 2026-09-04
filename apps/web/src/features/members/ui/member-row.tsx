@@ -8,7 +8,11 @@ type MemberRowProps = {
 };
 
 /** A row in the group listing, linking to the member's profile (docs/screens.md). */
-export function MemberRow({ username, displayName, avatarUrl }: MemberRowProps) {
+export function MemberRow({
+  username,
+  displayName,
+  avatarUrl,
+}: MemberRowProps) {
   return (
     <Link
       href={`/miembros/${username}`}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { cn } from "@/shared/lib/cn";
 
 export type SectionId = "library" | "activity" | "top" | "recommendations";

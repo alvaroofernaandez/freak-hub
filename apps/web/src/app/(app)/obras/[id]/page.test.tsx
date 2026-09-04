@@ -40,7 +40,9 @@ describe("WorkPage", () => {
     expect(
       screen.getByRole("heading", { name: "Expansiones" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Wingspan: European Expansion")).toBeInTheDocument();
+    expect(
+      screen.getByText("Wingspan: European Expansion"),
+    ).toBeInTheDocument();
   });
 
   it("does not show Expansiones for an expansion itself", async () => {

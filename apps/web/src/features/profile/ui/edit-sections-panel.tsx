@@ -34,8 +34,9 @@ export function EditSectionsPanel({
         )
       : orderedVisible.filter((candidate) => candidate !== id);
 
-    const nextDefault =
-      nextVisible.includes(defaultSection) ? defaultSection : nextVisible[0];
+    const nextDefault = nextVisible.includes(defaultSection)
+      ? defaultSection
+      : nextVisible[0];
 
     onChange({ visibleSections: nextVisible, defaultSection: nextDefault });
   }
