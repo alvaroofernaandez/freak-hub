@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { StatusBadge } from "./status-badge";
+import { STATUS_ORDER, StatusBadge } from "./status-badge";
 
 const VARIANTS = [
   { status: "wishlist", icon: "☆", label: "Wishlist" },
@@ -46,6 +46,18 @@ describe("StatusBadge", () => {
 
     for (const className of classNames) {
       expect(className).toBe(classNames[0]);
+    }
+  });
+});
+
+describe("STATUS_ORDER", () => {
+  it("lists all six statuses with their icon and label", () => {
+    expect(STATUS_ORDER.map((entry) => entry.status)).toEqual(
+      VARIANTS.map((v) => v.status),
+    );
+    for (const [index, entry] of STATUS_ORDER.entries()) {
+      expect(entry.icon).toBe(VARIANTS[index].icon);
+      expect(entry.label).toBe(VARIANTS[index].label);
     }
   });
 });
