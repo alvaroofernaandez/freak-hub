@@ -14,7 +14,9 @@
       "!**/dist",
       "!**/build",
       "!apps/api",
-      "!packages/contracts/generated"
+      "!packages/contracts/generated",
+      "!docs/design/high-fidelity-desktop.html",
+      "!docs/wireframes/low-fidelity-wireframes.html"
     ]
   },
   "formatter": {
