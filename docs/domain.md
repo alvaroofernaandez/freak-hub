@@ -27,6 +27,7 @@ erDiagram
     MEMBER ||--o{ RECOMMENDATION : "recibe"
     WORK   ||--o{ RECOMMENDATION : "trata sobre"
     MEMBER ||--o{ MEMBER : "invita a"
+    WORK   ||--o{ WORK : "tiene expansión"
 
     WORK {
         uuid   id
@@ -34,6 +35,7 @@ erDiagram
         string category "anime|manga|game|film|boardgame|tcg"
         string source   "anilist|tmdb|igdb|bgg|scryfall|manual"
         json   metadata "lo específico de cada categoría"
+        uuid   expansion_of "solo boardgame, NULL si es el juego base"
     }
     LIBRARY_ENTRY {
         uuid   id
@@ -76,6 +78,19 @@ jugadores, set de cartas) vive en un campo `metadata` JSONB, **no** en columnas
 nuevas. La regla: si un dato solo aplica a una categoría, va en `metadata`; si
 aplica a todas, es columna.
 
+Una expansión de un juego de mesa es un caso especial: es un `Work` propio —con
+su propia ficha, su propio `source_id` en BGG y su propia `LibraryEntry`— pero
+enlazado al juego base con `expansion_of` en lugar de vivir suelto en el
+catálogo. Al añadir un juego de mesa, un miembro puede seleccionar o dar de alta
+sus expansiones y abrir su propia `LibraryEntry` para marcar que la ha probado o
+jugado, sin tabla nueva. Ver
+[ADR-0006](decisions/0006-expansiones-de-juegos-de-mesa.md).
+
+En TCG, el `Work` es **el juego** (Magic, Pokémon, Yu-Gi-Oh!…), no una carta ni
+un mazo: los mazos son una creación personal de cada miembro dentro de un juego,
+y su modelo se deja para cuando se construya esa categoría. Ver
+[ADR-0007](decisions/0007-mazos-de-tcg.md).
+
 ### LibraryEntry — tu relación con la obra
 
 Lo que convierte un catálogo en *tu* biblioteca. Une un `Member` con un `Work` y
@@ -87,7 +102,7 @@ guarda:
 | `progress` | Unidad según la categoría: episodios, capítulos, horas, partidas |
 | `rating` | 1–10, opcional, solo tiene sentido cuando hay opinión formada |
 | `is_favourite` | Afecto, no nota. Se puede tener un favorito con un 6 |
-| `note` | Texto corto y privado por defecto |
+| `note` | Texto corto, público: lo lee todo el grupo |
 | `owned` | Si lo tienes físicamente. Relevante en mesa, manga y TCG |
 | `started_at` / `finished_at` | Fechas, opcionales |
 
@@ -150,11 +165,13 @@ volumen demuestre lo contrario.
 5. La unidad de `progress` depende de la categoría, así que **la valida el
    dominio**, no la base de datos.
 
-## Lo que aún no está decidido
+## Decisiones que estaban abiertas y ya se cerraron
 
-- Si las notas pueden hacerse públicas al grupo (hoy son privadas).
-- Si las expansiones de juegos de mesa son un `Work` propio o metadatos del
-  juego base.
-- Si un mazo de TCG es un `Work` (una carta concreta) o una entidad aparte que
-  agrupa cartas. Probablemente lo segundo, y es la decisión de modelado más
-  espinosa que queda pendiente.
+- **Las notas son públicas**, sin ajuste de privacidad por entrada. Ver
+  [ADR-0005](decisions/0005-notas-publicas.md).
+- **Una expansión de un juego de mesa es un `Work` propio**, enlazado al juego
+  base con `expansion_of`. Ver
+  [ADR-0006](decisions/0006-expansiones-de-juegos-de-mesa.md).
+- **Un TCG se agrupa por juego, no por carta.** El modelo concreto del mazo
+  (su relación con las cartas) se deja para cuando se construya esa categoría.
+  Ver [ADR-0007](decisions/0007-mazos-de-tcg.md).

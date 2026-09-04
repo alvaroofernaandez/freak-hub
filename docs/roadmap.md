@@ -20,9 +20,14 @@
 
 ## Siguiente — el dominio
 
-1. **Dirección visual.** Está deliberadamente sin decidir. Hoy solo hay tokens
-   provisionales en `globals.css`, suficientes para que el flujo de auth se lea.
-   Es lo primero que hay que cerrar antes de construir pantallas de verdad.
+1. **Dirección visual.** Decidida: "character select", oscura por defecto con
+   tema claro disponible, extendiendo la identidad del banner del README (ver
+   [design.md](design.md) y [ADR-0008](decisions/0008-direccion-visual.md)).
+   Falta aplicarla: sustituir los tokens provisionales de `globals.css` y
+   cambiar la fuente de cuerpo de Inter a Sora en `app/layout.tsx`. Eso va
+   antes de construir pantallas de verdad. El listado de pantallas y la
+   navegación ya están decididos (ver [screens.md](screens.md) y
+   [ADR-0009](decisions/0009-arquitectura-de-informacion.md)).
 2. **`works` y `library_entries`.** El corazón del producto: registrar algo con su
    estado y su progreso. Empezar por **una sola categoría** (anime, vía AniList) y
    generalizar cuando el modelo haya sobrevivido al uso real.
@@ -46,8 +51,7 @@
 
 | Tema | Por qué espera |
 | :--- | :--- |
-| Dirección visual | Se decidirá con el pipeline de diseño completo |
 | Paginación | Se fija con el primer endpoint que liste obras |
 | Rate limiting | Hace falta cuando las invitaciones se usen de verdad |
 | App móvil | La API ya está lista para ello; el producto no |
-| Modelado de mazos TCG | La decisión de modelado más espinosa que queda |
+| Modelo físico de un mazo de TCG | La dirección ya está decidida (ADR-0007: el `Work` es el juego, el mazo es personal); falta el modelo mazo↔carta, que se resuelve al construir la categoría |
