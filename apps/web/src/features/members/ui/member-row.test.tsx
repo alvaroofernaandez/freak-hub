@@ -6,10 +6,7 @@ describe("MemberRow", () => {
   it("links to the member's profile", () => {
     render(<MemberRow username="gon" displayName="Gon Freecss" />);
 
-    expect(screen.getByRole("link")).toHaveAttribute(
-      "href",
-      "/miembros/gon",
-    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/miembros/gon");
   });
 
   it("shows the display name and the handle", () => {
@@ -28,8 +25,9 @@ describe("MemberRow", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("img", { name: "Gon Freecss" }),
-    ).toHaveAttribute("src", "https://example.com/gon.png");
+    expect(screen.getByRole("img", { name: "Gon Freecss" })).toHaveAttribute(
+      "src",
+      "https://example.com/gon.png",
+    );
   });
 });

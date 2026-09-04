@@ -18,7 +18,9 @@ export function TopSection({ works }: TopSectionProps) {
   const [category, setCategory] = useState<CategoryId | "all">("all");
 
   const categoriesWithRatedWorks = CATEGORY_ORDER.filter((id) =>
-    works.some((work) => work.category === id && typeof work.rating === "number"),
+    works.some(
+      (work) => work.category === id && typeof work.rating === "number",
+    ),
   );
 
   const top = works

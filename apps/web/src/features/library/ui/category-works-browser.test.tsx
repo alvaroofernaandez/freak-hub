@@ -44,18 +44,11 @@ describe("CategoryWorksBrowser", () => {
     const user = userEvent.setup();
     render(<CategoryWorksBrowser works={WORKS} />);
 
-    await user.selectOptions(
-      screen.getByLabelText("Estado"),
-      "in_progress",
-    );
+    await user.selectOptions(screen.getByLabelText("Estado"), "in_progress");
 
     expect(screen.getByText("En curso, no favorita")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Terminada y favorita"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Wishlist, no tenida"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Terminada y favorita")).not.toBeInTheDocument();
+    expect(screen.queryByText("Wishlist, no tenida")).not.toBeInTheDocument();
   });
 
   it("filters by favourite only", async () => {
@@ -65,9 +58,7 @@ describe("CategoryWorksBrowser", () => {
     await user.click(screen.getByLabelText("Solo favoritos"));
 
     expect(screen.getByText("Terminada y favorita")).toBeInTheDocument();
-    expect(
-      screen.queryByText("En curso, no favorita"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("En curso, no favorita")).not.toBeInTheDocument();
   });
 
   it("filters by owned only", async () => {
@@ -78,9 +69,7 @@ describe("CategoryWorksBrowser", () => {
 
     expect(screen.getByText("Terminada y favorita")).toBeInTheDocument();
     expect(screen.getByText("En curso, no favorita")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Wishlist, no tenida"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Wishlist, no tenida")).not.toBeInTheDocument();
   });
 
   it("shows an empty state when no work matches the filters", async () => {

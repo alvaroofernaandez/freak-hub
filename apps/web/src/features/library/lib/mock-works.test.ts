@@ -31,9 +31,9 @@ describe("MOCK_WORKS", () => {
     );
 
     expect(expansion).toBeDefined();
-    expect(
-      MOCK_WORKS.some((work) => work.id === expansion?.expansionOf),
-    ).toBe(true);
+    expect(MOCK_WORKS.some((work) => work.id === expansion?.expansionOf)).toBe(
+      true,
+    );
   });
 
   it("includes a tcg work with two or more decks", () => {

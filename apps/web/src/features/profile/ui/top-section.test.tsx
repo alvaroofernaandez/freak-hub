@@ -53,10 +53,7 @@ describe("TopSection", () => {
     const user = userEvent.setup();
     render(<TopSection works={WORKS} />);
 
-    await user.selectOptions(
-      screen.getByLabelText("Categoría"),
-      "boardgame",
-    );
+    await user.selectOptions(screen.getByLabelText("Categoría"), "boardgame");
 
     expect(screen.getByText("Seis de mesa")).toBeInTheDocument();
     expect(screen.queryByText("Diez")).not.toBeInTheDocument();

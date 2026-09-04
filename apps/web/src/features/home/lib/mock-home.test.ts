@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { MOCK_PENDING_RECOMMENDATIONS, MOCK_RECENT_ACTIVITY } from "./mock-home";
+import {
+  MOCK_PENDING_RECOMMENDATIONS,
+  MOCK_RECENT_ACTIVITY,
+} from "./mock-home";
 
 describe("MOCK_PENDING_RECOMMENDATIONS", () => {
   it("has at least two recommendations, each with a reason", () => {

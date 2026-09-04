@@ -26,8 +26,9 @@ describe("ProfileHeader", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("img", { name: "Edward Elric" }),
-    ).toHaveAttribute("src", "https://example.com/ed.png");
+    expect(screen.getByRole("img", { name: "Edward Elric" })).toHaveAttribute(
+      "src",
+      "https://example.com/ed.png",
+    );
   });
 });

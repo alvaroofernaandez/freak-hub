@@ -29,13 +29,9 @@ describe("OwnProfileView", () => {
     const user = userEvent.setup();
     render(<OwnProfileView {...PROPS} />);
 
-    expect(
-      screen.queryByText("Secciones visibles"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Secciones visibles")).not.toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("button", { name: /editar secciones/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /editar secciones/i }));
 
     expect(screen.getByText("Secciones visibles")).toBeInTheDocument();
   });
@@ -44,9 +40,7 @@ describe("OwnProfileView", () => {
     const user = userEvent.setup();
     const { unmount } = render(<OwnProfileView {...PROPS} />);
 
-    await user.click(
-      screen.getByRole("button", { name: /editar secciones/i }),
-    );
+    await user.click(screen.getByRole("button", { name: /editar secciones/i }));
     await user.click(screen.getByRole("checkbox", { name: "Actividad" }));
 
     expect(

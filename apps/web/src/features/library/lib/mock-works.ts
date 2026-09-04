@@ -225,9 +225,7 @@ export const MOCK_WORKS: MockWork[] = [
   },
 ];
 
-export function countByCategory(
-  works: MockWork[],
-): Record<CategoryId, number> {
+export function countByCategory(works: MockWork[]): Record<CategoryId, number> {
   const counts: Record<CategoryId, number> = {
     anime: 0,
     manga: 0,

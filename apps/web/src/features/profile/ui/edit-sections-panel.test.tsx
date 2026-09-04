@@ -1,8 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { SECTION_ORDER } from "./section-tabs";
 import { EditSectionsPanel } from "./edit-sections-panel";
+import { SECTION_ORDER } from "./section-tabs";
 
 describe("EditSectionsPanel", () => {
   it("renders a checkbox per section, checked when visible", () => {
@@ -15,14 +15,10 @@ describe("EditSectionsPanel", () => {
     );
 
     for (const label of ["Biblioteca", "Top"]) {
-      expect(
-        screen.getByRole("checkbox", { name: label }),
-      ).toBeChecked();
+      expect(screen.getByRole("checkbox", { name: label })).toBeChecked();
     }
     for (const label of ["Actividad", "Recomendaciones"]) {
-      expect(
-        screen.getByRole("checkbox", { name: label }),
-      ).not.toBeChecked();
+      expect(screen.getByRole("checkbox", { name: label })).not.toBeChecked();
     }
   });
 

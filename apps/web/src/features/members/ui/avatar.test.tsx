@@ -5,7 +5,10 @@ import { Avatar } from "./avatar";
 describe("Avatar", () => {
   it("renders an image with an accessible name when given an image URL", () => {
     render(
-      <Avatar displayName="Edward Elric" imageUrl="https://example.com/ed.png" />,
+      <Avatar
+        displayName="Edward Elric"
+        imageUrl="https://example.com/ed.png"
+      />,
     );
 
     const image = screen.getByRole("img", { name: "Edward Elric" });

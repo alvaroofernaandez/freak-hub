@@ -32,8 +32,6 @@ describe("recommendationsForMember", () => {
   });
 
   it("returns an empty array for a member with no recommendations", () => {
-    expect(recommendationsForMember(MOCK_RECOMMENDATIONS, "nadie")).toEqual(
-      [],
-    );
+    expect(recommendationsForMember(MOCK_RECOMMENDATIONS, "nadie")).toEqual([]);
   });
 });

@@ -22,9 +22,8 @@ export function activityStatsByCategory(
       category,
       completed: categoryWorks.filter((work) => work.status === "completed")
         .length,
-      inProgress: categoryWorks.filter(
-        (work) => work.status === "in_progress",
-      ).length,
+      inProgress: categoryWorks.filter((work) => work.status === "in_progress")
+        .length,
     };
   });
 }
