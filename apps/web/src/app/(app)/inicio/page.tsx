@@ -30,14 +30,14 @@ export default async function HomePage() {
     <section className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold">Tu biblioteca</h1>
-        <p className="text-content-muted">
+        <p className="text-ink-muted">
           Todavía no hay nada que registrar. Las colecciones, la lista de
           pendientes y las recomendaciones llegarán en las siguientes entregas.
         </p>
       </div>
 
       <div className="rounded-xl border border-border bg-surface-raised p-5">
-        <h2 className="font-mono text-xs uppercase tracking-widest text-content-muted">
+        <h2 className="font-mono text-xs uppercase tracking-widest text-ink-muted">
           Estado de la conexión con la API
         </h2>
         {profile ? (
@@ -46,7 +46,7 @@ export default async function HomePage() {
             <span className="font-mono">@{profile.username}</span>.
           </p>
         ) : (
-          <p className="mt-2 text-sm text-content-muted">
+          <p className="mt-2 text-sm text-ink-muted">
             Sin respuesta de la API ({error}). Arranca el backend con{" "}
             <code className="font-mono">pnpm api:dev</code>.
           </p>

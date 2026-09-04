@@ -1,10 +1,15 @@
 import { esES } from "@clerk/localizations";
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Bungee, JetBrains_Mono, Sora } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const sora = Sora({ subsets: ["latin"], variable: "--font-sora" });
+const bungee = Bungee({
+  subsets: ["latin"],
+  weight: "400",
+  variable: "--font-bungee",
+});
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-jetbrains-mono",
@@ -22,14 +27,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#141420",
+  themeColor: "oklch(0.130 0.020 272)",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="es"
+      className={`${sora.variable} ${bungee.variable} ${jetbrainsMono.variable}`}
+    >
       <body className="min-h-dvh antialiased">
         {/* Core 3 requires the provider inside <body>, not wrapping <html>. */}
         <ClerkProvider localization={esES}>{children}</ClerkProvider>
