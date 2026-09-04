@@ -23,7 +23,7 @@ export default async function AppLayout({
           </Link>
           <div className="flex items-center gap-4">
             {user?.username ? (
-              <span className="hidden text-sm text-content-muted sm:inline">
+              <span className="hidden text-sm text-ink-muted sm:inline">
                 @{user.username}
               </span>
             ) : null}
