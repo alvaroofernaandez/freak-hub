@@ -51,7 +51,6 @@
 
 | Tema | Por qué espera |
 | :--- | :--- |
-| Paginación | Se fija con el primer endpoint que liste obras |
 | Rate limiting | Hace falta cuando las invitaciones se usen de verdad |
 | App móvil | La API ya está lista para ello; el producto no |
 | Modelo físico de un mazo de TCG | La dirección ya está decidida (ADR-0007: el `Work` es el juego, el mazo es personal); falta el modelo mazo↔carta, que se resuelve al construir la categoría |
