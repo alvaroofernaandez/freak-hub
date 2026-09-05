@@ -54,13 +54,22 @@ público, y tiene tests. En la API, todo lo que cuelga de `/v1` pasa por
 
 ## Diseño
 
-**La dirección visual está deliberadamente sin decidir.** `globals.css` tiene
-tokens provisionales, suficientes para que el flujo de autenticación se lea, y
-están marcados como tales.
+**La dirección visual ya está decidida**: "character select", oscura por defecto
+con tema claro disponible, extendiendo la identidad del banner del README. Los
+valores están escritos —paleta oklch sobre un solo hue (272), un color por cada
+una de las seis categorías, Bungee para el wordmark, Sora para la interfaz y
+JetBrains Mono para datos— en [docs/design.md](docs/design.md) y
+[ADR-0008](docs/decisions/0008-direccion-visual.md).
 
-No construyas un sistema de diseño encima de ellos. Cuando llegue el momento de
-decidir la estética, se hace con el pipeline de diseño completo y se documenta
-antes de escribir componentes.
+**Lo que falta es aplicarla.** `globals.css` sigue con los tokens provisionales y
+`app/layout.tsx` sigue con Inter en lugar de Sora. Esos dos cambios van antes de
+construir pantallas de verdad.
+
+No inventes tokens ni amplíes la paleta por tu cuenta: los valores ya están en
+`design.md`. Y recuerda la regla que más fácil se rompe: el color identifica la
+**categoría**; el estado de una entrada se comunica con icono y etiqueta, nunca
+con color. Si hace falta una decisión visual que `design.md` no cubra, se
+documenta antes de escribir componentes.
 
 ## Comandos
 
@@ -69,6 +78,8 @@ pnpm dev · build · test · test:e2e · typecheck · lint · lint:fix
 pnpm contracts:generate
 pnpm infra:up · infra:down · infra:reset
 pnpm api:dev · api:test · api:lint
+pnpm diagrams:check          # cada diagrama Mermaid de la documentación parsea
+pnpm assets:render           # regenera el banner y la imagen social del README
 
 make -C apps/api help        # todos los targets del backend
 ```
@@ -79,6 +90,7 @@ make -C apps/api help        # todos los targets del backend
 - [ ] `make -C apps/api lint && make -C apps/api test`
 - [ ] Si cambió el contrato: `pnpm contracts:generate` y el diff committeado
 - [ ] Si cambió el esquema: migración **con su `Down`** y `make -C apps/api sqlc`
+- [ ] Si cambió un diagrama de la documentación: `pnpm diagrams:check`
 - [ ] Si cambió una decisión: ADR nuevo en `docs/decisions/`
 - [ ] La documentación afectada, actualizada en el mismo cambio
 
