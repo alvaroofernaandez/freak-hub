@@ -20,3 +20,4 @@ qué se decidió algo vale tanto como la decisión.
 | [0008](0008-direccion-visual.md) | Dirección visual: "character select", oscuro por defecto | Aceptada |
 | [0009](0009-arquitectura-de-informacion.md) | Pantallas y navegación: lobby propio, inicio como panel personal | Aceptada |
 | [0010](0010-estadisticas-personales-de-perfil.md) | Estadísticas personales y secciones configurables en el perfil | Aceptada |
+| [0011](0011-paginacion-por-cursor.md) | Paginación por cursor, con un sobre de página común | Aceptada |

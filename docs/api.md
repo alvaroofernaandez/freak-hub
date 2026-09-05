@@ -40,6 +40,10 @@ documento explica las decisiones que hay detrás.
 | `already_member` | 409 | Ese correo ya está dentro |
 | `not_found` | 404 | Ruta inexistente |
 | `internal_error` | 500 | Fallo nuestro. El detalle va al log, nunca al cliente |
+| `invalid_cursor` | 400 | El cursor de paginación no decodifica. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
+
+`invalid_cursor` entra en vigor con el primer endpoint paginado: está decidido,
+pero todavía no lo devuelve ninguna ruta.
 
 ## Cómo evolucionar el contrato sin romper nada
 
@@ -51,11 +55,35 @@ documento explica las decisiones que hay detrás.
 - `generated/api.ts` está versionado a propósito: si alguien cambia el YAML y no
   regenera, el CI lo detecta.
 
+## Paginación
+
+El criterio está decidido en
+[ADR-0011](decisions/0011-paginacion-por-cursor.md): **cursor (keyset)**, y se
+aplica a todo endpoint que liste.
+
+Todo listado devuelve un objeto, nunca un array desnudo:
+
+```json
+{ "items": [ … ], "next_cursor": "eyJ0IjoiMjAyNi0wOS0wNVQxMDoyMzowMFoiLCJpIjoiOTRhZiJ9" }
+```
+
+| Aspecto | Criterio |
+| :--- | :--- |
+| Parámetros | `?limit=` (defecto 25, mínimo 1, máximo 100) y `?cursor=` |
+| Fin de la lista | `next_cursor` a `null` |
+| Orden | `(created_at DESC, id DESC)`. `created_at` sola no es única y haría el recorrido no determinista |
+| Cursor | Opaco. Base64 de `created_at` e `id`; para el cliente es una cadena sin estructura |
+| Total | No se devuelve. Contar exige recorrer la tabla y ninguna pantalla lo necesita |
+| `limit` fuera de rango | `400 invalid_payload`. No se recorta en silencio |
+| Cursor corrupto | `400 invalid_cursor` |
+
+> **Estado.** El criterio está fijado; la implementación llega con el primer
+> endpoint que lista obras. `GET /v1/invitations` todavía devuelve la colección
+> entera como array: su migración al sobre de página es un cambio incompatible
+> **deliberado**, decidido en el ADR-0011 y pendiente de aplicar.
+
 ## Lo que aún no está resuelto
 
-- **Paginación.** `GET /v1/invitations` devuelve todo. Con listas de biblioteca
-  hará falta un criterio (cursor, previsiblemente) y conviene fijarlo antes del
-  primer endpoint que liste obras.
 - **Rate limiting.** Hoy no hay. `POST /v1/invitations` es el candidato obvio: sin
   cupo por miembro, un límite por ventana temporal es la única defensa contra un
   bucle accidental.
