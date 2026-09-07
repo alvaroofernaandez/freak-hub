@@ -18,6 +18,10 @@ describe("CategoryLibraryPage", () => {
       screen.getByRole("heading", { name: CATEGORY_LABELS.anime }),
     ).toBeInTheDocument();
     expect(notFound).not.toHaveBeenCalled();
+    expect(screen.getByTestId("active-category")).toHaveAttribute(
+      "data-category",
+      "anime",
+    );
   });
 
   it("calls notFound for a category that does not exist", async () => {
