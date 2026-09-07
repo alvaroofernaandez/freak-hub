@@ -1,6 +1,9 @@
 import { UserButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
-import { CategoryStripe } from "@/shared/ui/category-stripe";
+import {
+  ActiveCategoryProvider,
+  CategoryStripeHost,
+} from "@/shared/ui/active-category";
 import { Navbar } from "@/shared/ui/navbar";
 
 /**
@@ -13,23 +16,25 @@ export default async function AppLayout({
   const user = await currentUser();
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <Navbar
-        userSlot={
-          <div className="flex items-center gap-4">
-            {user?.username ? (
-              <span className="hidden text-sm text-ink-muted sm:inline">
-                @{user.username}
-              </span>
-            ) : null}
-            <UserButton />
-          </div>
-        }
-      />
-      <CategoryStripe />
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
-        {children}
-      </main>
-    </div>
+    <ActiveCategoryProvider>
+      <div className="flex min-h-dvh flex-col">
+        <Navbar
+          userSlot={
+            <div className="flex items-center gap-4">
+              {user?.username ? (
+                <span className="hidden text-sm text-ink-muted sm:inline">
+                  @{user.username}
+                </span>
+              ) : null}
+              <UserButton />
+            </div>
+          }
+        />
+        <CategoryStripeHost />
+        <main className="mx-auto w-full max-w-5xl flex-1 px-6 pt-10 pb-24 md:pb-10">
+          {children}
+        </main>
+      </div>
+    </ActiveCategoryProvider>
   );
 }

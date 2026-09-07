@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MOCK_WORKS, worksByCategory } from "@/features/library/lib/mock-works";
 import { CategoryWorksBrowser } from "@/features/library/ui/category-works-browser";
+import { SetActiveCategory } from "@/shared/ui/active-category";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
@@ -38,6 +39,7 @@ export default async function CategoryLibraryPage({
 
   return (
     <section className="space-y-6">
+      <SetActiveCategory category={categoria} />
       <h1 className="text-3xl font-semibold">{CATEGORY_LABELS[categoria]}</h1>
       <CategoryWorksBrowser works={works} />
     </section>
