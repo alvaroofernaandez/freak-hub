@@ -11,7 +11,10 @@ type NavbarProps = {
 export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
   return (
     <header className="border-b border-border">
-      <nav className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+      <nav
+        aria-label="Navegación principal"
+        className="mx-auto hidden max-w-5xl items-center justify-between gap-5 px-[22px] md:flex md:h-[58px] lg:h-16 lg:gap-8 lg:px-7"
+      >
         <Link href="/inicio" className="font-display text-lg">
           Freak Hub
         </Link>
@@ -39,6 +42,42 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
           ) : null}
           {userSlot}
         </div>
+      </nav>
+      <nav
+        aria-label="Navegación inferior"
+        className="fixed inset-x-0 bottom-0 z-10 flex h-16 items-center justify-around border-t border-border bg-surface md:hidden"
+      >
+        <Link
+          href="/inicio"
+          className="flex min-h-11 min-w-11 flex-col items-center justify-center text-xs"
+        >
+          Inicio
+        </Link>
+        <Link
+          href="/biblioteca"
+          className="flex min-h-11 min-w-11 flex-col items-center justify-center text-xs"
+        >
+          Biblioteca
+        </Link>
+        <Link
+          href="/anadir"
+          aria-label="Añadir"
+          className="-mt-6 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-accent text-2xl text-accent-ink shadow-lg"
+        >
+          +
+        </Link>
+        <Link
+          href="/actividad"
+          className="flex min-h-11 min-w-11 flex-col items-center justify-center text-xs"
+        >
+          Actividad
+        </Link>
+        <Link
+          href="/recomendaciones"
+          className="flex min-h-11 min-w-11 flex-col items-center justify-center text-xs"
+        >
+          Recom.
+        </Link>
       </nav>
     </header>
   );

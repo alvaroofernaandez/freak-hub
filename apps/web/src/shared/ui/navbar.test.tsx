@@ -15,21 +15,27 @@ describe("Navbar", () => {
   it("renders the four top-level links with their href", () => {
     render(<Navbar />);
 
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+
     for (const link of navLinks) {
-      expect(screen.getByRole("link", { name: link.label })).toHaveAttribute(
-        "href",
-        link.href,
-      );
+      expect(
+        within(topNav).getByRole("link", { name: link.label }),
+      ).toHaveAttribute("href", link.href);
     }
   });
 
   it("links the add button to /anadir", () => {
     render(<Navbar />);
 
-    expect(screen.getByRole("link", { name: /añadir/i })).toHaveAttribute(
-      "href",
-      "/anadir",
-    );
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+
+    expect(
+      within(topNav).getByRole("link", { name: /añadir/i }),
+    ).toHaveAttribute("href", "/anadir");
   });
 
   it("does not render a badge when there are no pending recommendations", () => {
