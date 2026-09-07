@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { navLinks } from "@/shared/lib/nav-links";
 import { Navbar } from "./navbar";
@@ -60,5 +60,29 @@ describe("Navbar", () => {
     render(<Navbar userSlot={<span>slot-de-usuario</span>} />);
 
     expect(screen.getByText("slot-de-usuario")).toBeInTheDocument();
+  });
+
+  it("renders a mobile bottom bar with its five items", () => {
+    render(<Navbar />);
+
+    const bottomBar = screen.getByRole("navigation", {
+      name: /navegación inferior/i,
+    });
+
+    expect(
+      within(bottomBar).getByRole("link", { name: "Inicio" }),
+    ).toHaveAttribute("href", "/inicio");
+    expect(
+      within(bottomBar).getByRole("link", { name: "Biblioteca" }),
+    ).toHaveAttribute("href", "/biblioteca");
+    expect(
+      within(bottomBar).getByRole("link", { name: /añadir/i }),
+    ).toHaveAttribute("href", "/anadir");
+    expect(
+      within(bottomBar).getByRole("link", { name: "Actividad" }),
+    ).toHaveAttribute("href", "/actividad");
+    expect(
+      within(bottomBar).getByRole("link", { name: /recom/i }),
+    ).toHaveAttribute("href", "/recomendaciones");
   });
 });
