@@ -1,7 +1,23 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { navLinks } from "@/shared/lib/nav-links";
+import {
+  AddCategoryModalHost,
+  AddCategoryModalProvider,
+} from "./add-category-modal";
 import { Navbar } from "./navbar";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+function renderWithAddCategoryModal() {
+  return render(
+    <AddCategoryModalProvider>
+      <Navbar />
+      <AddCategoryModalHost />
+    </AddCategoryModalProvider>,
+  );
+}
 
 describe("Navbar", () => {
   it("links the wordmark to /inicio with the display font", () => {
@@ -26,16 +42,21 @@ describe("Navbar", () => {
     }
   });
 
-  it("links the add button to /anadir", () => {
-    render(<Navbar />);
+  it("opens the add-category modal from the desktop add button, instead of navigating", async () => {
+    const user = userEvent.setup();
+    renderWithAddCategoryModal();
 
     const topNav = screen.getByRole("navigation", {
       name: /navegación principal/i,
     });
+    const addButton = within(topNav).getByRole("button", { name: /añadir/i });
+    expect(addButton).not.toHaveAttribute("href");
+
+    await user.click(addButton);
 
     expect(
-      within(topNav).getByRole("link", { name: /añadir/i }),
-    ).toHaveAttribute("href", "/anadir");
+      screen.getByRole("dialog", { name: "¿Qué quieres añadir?" }),
+    ).toBeInTheDocument();
   });
 
   it("does not render a badge when there are no pending recommendations", () => {
@@ -82,13 +103,30 @@ describe("Navbar", () => {
       within(bottomBar).getByRole("link", { name: "Biblioteca" }),
     ).toHaveAttribute("href", "/biblioteca");
     expect(
-      within(bottomBar).getByRole("link", { name: /añadir/i }),
-    ).toHaveAttribute("href", "/anadir");
+      within(bottomBar).getByRole("button", { name: /añadir/i }),
+    ).not.toHaveAttribute("href");
     expect(
       within(bottomBar).getByRole("link", { name: "Actividad" }),
     ).toHaveAttribute("href", "/actividad");
     expect(
       within(bottomBar).getByRole("link", { name: /recom/i }),
     ).toHaveAttribute("href", "/recomendaciones");
+  });
+
+  it("opens the add-category modal from the mobile FAB, instead of navigating", async () => {
+    const user = userEvent.setup();
+    renderWithAddCategoryModal();
+
+    const bottomBar = screen.getByRole("navigation", {
+      name: /navegación inferior/i,
+    });
+
+    await user.click(
+      within(bottomBar).getByRole("button", { name: /añadir/i }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "¿Qué quieres añadir?" }),
+    ).toBeInTheDocument();
   });
 });
