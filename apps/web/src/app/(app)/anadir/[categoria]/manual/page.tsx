@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   CATEGORY_LABELS,
@@ -36,16 +37,29 @@ export default async function ManualAddPage({ params }: ManualAddPageProps) {
 
   return (
     <section className="space-y-6">
+      <Link
+        href={`/anadir/${categoria}`}
+        className="text-sm font-semibold text-ink-muted"
+      >
+        ‹ Volver
+      </Link>
+
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold">
-          Alta manual · {CATEGORY_LABELS[categoria]}
+          Añadir · {CATEGORY_LABELS[categoria]} · Alta manual
         </h1>
         <p className="text-ink-muted">Para lo que no aparece en el catálogo.</p>
       </div>
 
-      <form className="flex max-w-lg flex-col gap-4">
+      <form
+        data-testid="manual-add-form"
+        className="flex max-w-[520px] flex-col gap-4"
+      >
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="title" className="text-sm text-ink-muted">
+          <label
+            htmlFor="title"
+            className="font-mono text-xs uppercase tracking-widest text-ink-muted"
+          >
             Título
           </label>
           <input
@@ -56,7 +70,10 @@ export default async function ManualAddPage({ params }: ManualAddPageProps) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="year" className="text-sm text-ink-muted">
+          <label
+            htmlFor="year"
+            className="font-mono text-xs uppercase tracking-widest text-ink-muted"
+          >
             Año
           </label>
           <input
@@ -67,7 +84,10 @@ export default async function ManualAddPage({ params }: ManualAddPageProps) {
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="synopsis" className="text-sm text-ink-muted">
+          <label
+            htmlFor="synopsis"
+            className="font-mono text-xs uppercase tracking-widest text-ink-muted"
+          >
             Sinopsis
           </label>
           <textarea
