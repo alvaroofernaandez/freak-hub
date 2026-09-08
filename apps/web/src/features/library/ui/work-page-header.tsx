@@ -1,4 +1,5 @@
 import type { MockWork } from "@/features/library/lib/mock-works";
+import { CoverPlaceholder } from "@/features/library/ui/cover-placeholder";
 import { cn } from "@/shared/lib/cn";
 import {
   CATEGORY_ACCENT_CLASS,
@@ -36,16 +37,10 @@ export function WorkPageHeader({ work }: WorkPageHeaderProps) {
 
   return (
     <div className="flex flex-col gap-[22px] md:flex-row md:gap-[22px] lg:gap-[30px]">
-      <div
-        data-testid="work-page-header-cover"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(45deg, var(--color-ground-deep), var(--color-ground-deep) 6px, var(--color-surface-raised) 6px, var(--color-surface-raised) 12px)",
-        }}
-        className="flex h-[220px] w-full flex-none items-center justify-center rounded-xl font-mono text-[11px] text-ink-faint md:h-[230px] md:w-[170px] lg:h-[300px] lg:w-[220px]"
-      >
-        portada
-      </div>
+      <CoverPlaceholder
+        testId="work-page-header-cover"
+        className="h-[220px] w-full md:h-[230px] md:w-[170px] lg:h-[300px] lg:w-[220px]"
+      />
       <div className="flex flex-col gap-2.5 md:gap-[9px] md:pt-1.5 lg:gap-3 lg:pt-2">
         <h1 className="text-2xl font-bold text-ink md:text-[23px] lg:text-3xl">
           {work.title}
