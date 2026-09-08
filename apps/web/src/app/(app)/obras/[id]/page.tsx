@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MOCK_WORKS } from "@/features/library/lib/mock-works";
 import { WorkCard } from "@/features/library/ui/work-card";
+import { WorkPageHeader } from "@/features/library/ui/work-page-header";
 import { SetActiveCategory } from "@/shared/ui/active-category";
-import { CATEGORY_LABELS } from "@/shared/ui/category-stripe";
 import { StatusBadge } from "@/shared/ui/status-badge";
 
 type WorkPageProps = {
@@ -40,12 +40,12 @@ export default async function WorkPage({ params }: WorkPageProps) {
   return (
     <article className="space-y-8">
       <SetActiveCategory category={work.category} />
-      <header className="space-y-3">
-        <p className="font-mono text-xs uppercase tracking-widest text-ink-muted">
-          {CATEGORY_LABELS[work.category]}
-        </p>
-        <h1 className="text-3xl font-semibold">{work.title}</h1>
-        <div className="flex flex-wrap items-center gap-4">
+      <header className="space-y-4">
+        <WorkPageHeader work={work} />
+        <div
+          data-testid="work-page-status-row"
+          className="flex flex-wrap items-center gap-4"
+        >
           <StatusBadge status={work.status} />
           {work.rating ? (
             <span className="font-mono text-sm text-ink-muted">
