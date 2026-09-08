@@ -54,6 +54,40 @@ describe("OwnProfileView", () => {
     expect(screen.getByText("Secciones visibles")).toBeInTheDocument();
   });
 
+  it("opens edit-sections as a 560px modal dialog", async () => {
+    const user = userEvent.setup();
+    render(<OwnProfileView {...PROPS} />);
+
+    await user.click(screen.getByRole("button", { name: /editar secciones/i }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Editar secciones de tu perfil",
+    });
+    expect(dialog).toHaveClass("max-w-[560px]");
+  });
+
+  it("closes the edit-sections modal with the visible close button", async () => {
+    const user = userEvent.setup();
+    render(<OwnProfileView {...PROPS} />);
+
+    await user.click(screen.getByRole("button", { name: /editar secciones/i }));
+    await user.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the edit-sections modal on Escape and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    render(<OwnProfileView {...PROPS} />);
+    const trigger = screen.getByRole("button", { name: /editar secciones/i });
+    await user.click(trigger);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("hides a section immediately when it is unchecked, and persists it across a reload", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<OwnProfileView {...PROPS} />);
