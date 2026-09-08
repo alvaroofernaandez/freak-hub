@@ -29,4 +29,51 @@ describe("ManualAddPage", () => {
     expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();
     expect(notFound).not.toHaveBeenCalled();
   });
+
+  it("titles the page with the full add-flow trail", async () => {
+    const page = await ManualAddPage({
+      params: Promise.resolve({ categoria: "boardgame" }),
+    });
+    render(page);
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Añadir · Juegos de mesa · Alta manual",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("links back to the category's search screen", async () => {
+    const page = await ManualAddPage({
+      params: Promise.resolve({ categoria: "boardgame" }),
+    });
+    render(page);
+
+    expect(screen.getByRole("link", { name: /volver/i })).toHaveAttribute(
+      "href",
+      "/anadir/boardgame",
+    );
+  });
+
+  it("constrains the form to the mockup's max width", async () => {
+    const page = await ManualAddPage({
+      params: Promise.resolve({ categoria: "boardgame" }),
+    });
+    render(page);
+
+    expect(screen.getByTestId("manual-add-form")).toHaveClass("max-w-[520px]");
+  });
+
+  it("gives the form labels the mono uppercase tracking pattern", async () => {
+    const page = await ManualAddPage({
+      params: Promise.resolve({ categoria: "boardgame" }),
+    });
+    render(page);
+
+    expect(screen.getByText("Título")).toHaveClass(
+      "font-mono",
+      "uppercase",
+      "tracking-widest",
+    );
+  });
 });
