@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
 import {
   MOCK_PENDING_RECOMMENDATIONS,
@@ -20,6 +20,8 @@ export const metadata: Metadata = { title: "Inicio" };
 export default async function HomePage() {
   const { getToken } = await auth();
   const token = await getToken();
+  const user = await currentUser();
+  const displayName = user?.fullName ?? user?.username ?? "";
 
   let profile: Member | null = null;
   let error: string | null = null;
@@ -39,15 +41,8 @@ export default async function HomePage() {
 
   return (
     <section className="space-y-8">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold">Tu biblioteca</h1>
-        <p className="text-ink-muted">
-          Lo que tienes en curso, lo que te han recomendado y lo último que ha
-          pasado en el grupo.
-        </p>
-      </div>
-
       <HomeDashboard
+        displayName={displayName}
         inProgressWorks={inProgressWorks}
         recommendations={MOCK_PENDING_RECOMMENDATIONS}
         activity={MOCK_RECENT_ACTIVITY}
