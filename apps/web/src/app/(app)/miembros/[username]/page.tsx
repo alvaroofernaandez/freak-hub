@@ -46,6 +46,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
     <FriendProfileView
       displayName={member.displayName}
       username={member.username}
+      memberSince={member.memberSince}
     />
   );
 }
