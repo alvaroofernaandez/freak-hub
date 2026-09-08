@@ -30,6 +30,7 @@ export default async function ProfilePage({ params }: ProfilePageProps) {
         displayName={user.fullName ?? user.username}
         username={username}
         avatarUrl={user.imageUrl}
+        memberSince={findMember(username)?.memberSince}
       />
     );
   }

@@ -33,4 +33,13 @@ describe("Avatar", () => {
 
     expect(screen.getByText("G")).toBeInTheDocument();
   });
+
+  it("uses the accent-to-tcg gradient behind the initials", () => {
+    render(<Avatar displayName="Edward Elric" />);
+
+    expect(screen.getByText("EE")).toHaveStyle({
+      backgroundImage:
+        "linear-gradient(135deg, var(--color-accent), var(--color-cat-tcg))",
+    });
+  });
 });

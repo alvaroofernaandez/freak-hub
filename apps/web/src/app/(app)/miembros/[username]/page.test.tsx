@@ -36,6 +36,23 @@ describe("ProfilePage", () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
+  it("shows the member-since line on your own profile when you are a known mock member", async () => {
+    currentUser.mockResolvedValue({
+      username: "edward",
+      fullName: "Edward Elric",
+      imageUrl: null,
+    });
+
+    const page = await ProfilePage({
+      params: Promise.resolve({ username: "edward" }),
+    });
+    render(page);
+
+    expect(
+      screen.getByText(/en el grupo desde marzo de 2022/),
+    ).toBeInTheDocument();
+  });
+
   it("renders a mock friend's profile, without the edit control, when it is not you", async () => {
     currentUser.mockResolvedValue({
       username: "edward",
