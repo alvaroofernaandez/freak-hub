@@ -41,7 +41,7 @@ describe("WorkPage", () => {
     });
     render(page);
 
-    expect(screen.getByText("portada")).toBeInTheDocument();
+    expect(screen.getByTestId("work-page-header-cover")).toBeInTheDocument();
     expect(screen.getByText("Juegos de mesa")).toBeInTheDocument();
   });
 
