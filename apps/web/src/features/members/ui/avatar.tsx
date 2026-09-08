@@ -28,7 +28,11 @@ export function Avatar({ displayName, imageUrl }: AvatarProps) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-full w-full items-center justify-center rounded-full bg-surface-raised font-display text-sm"
+      style={{
+        backgroundImage:
+          "linear-gradient(135deg, var(--color-accent), var(--color-cat-tcg))",
+      }}
+      className="flex h-full w-full items-center justify-center rounded-full font-display text-sm text-ground-deep"
     >
       {initials(displayName)}
     </span>

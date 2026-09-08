@@ -25,6 +25,24 @@ describe("OwnProfileView", () => {
     ]);
   });
 
+  it("shows the gear icon on the edit-sections button", () => {
+    render(<OwnProfileView {...PROPS} />);
+
+    expect(
+      screen.getByRole("button", { name: /editar secciones/i }),
+    ).toHaveTextContent("⚙");
+  });
+
+  it("shows the member-since line when memberSince is given", () => {
+    render(
+      <OwnProfileView {...PROPS} memberSince="2022-03-15T00:00:00.000Z" />,
+    );
+
+    expect(
+      screen.getByText(/en el grupo desde marzo de 2022/),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the edit-sections panel closed until asked to open it", async () => {
     const user = userEvent.setup();
     render(<OwnProfileView {...PROPS} />);

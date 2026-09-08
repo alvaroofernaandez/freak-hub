@@ -22,6 +22,8 @@ type OwnProfileViewProps = {
   displayName: string;
   username: string;
   avatarUrl?: string | null;
+  /** ISO 8601 timestamp of when the member joined the group (see ProfileHeader). */
+  memberSince?: string;
 };
 
 /**
@@ -62,6 +64,7 @@ export function OwnProfileView({
   displayName,
   username,
   avatarUrl,
+  memberSince,
 }: OwnProfileViewProps) {
   const [preferences, setPreferences] =
     useState<ProfilePreferences>(DEFAULT_PREFERENCES);
@@ -83,13 +86,14 @@ export function OwnProfileView({
           displayName={displayName}
           username={username}
           avatarUrl={avatarUrl}
+          memberSince={memberSince}
         />
         <button
           type="button"
           onClick={() => setEditing((current) => !current)}
           className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink-muted"
         >
-          Editar secciones
+          ⚙ Editar secciones
         </button>
       </div>
 
