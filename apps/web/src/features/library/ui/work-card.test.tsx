@@ -29,10 +29,13 @@ describe("WorkCard", () => {
     ).toBeInTheDocument();
   });
 
-  it("applies the work's category color to the cover", () => {
+  it("uses a neutral card background with a cover placeholder, not a category-colored cover", () => {
     render(<WorkCard work={BASE_WORK} />);
 
-    expect(screen.getByTestId("work-card-cover")).toHaveClass("bg-cat-anime");
+    expect(screen.getByRole("link")).toHaveClass("bg-surface");
+    const cover = screen.getByTestId("work-card-cover");
+    expect(cover).not.toHaveClass("bg-cat-anime");
+    expect(cover).toHaveTextContent("portada");
   });
 
   it("shows the entry's status badge", () => {
@@ -49,6 +52,17 @@ describe("WorkCard", () => {
 
     rerender(<WorkCard work={{ ...BASE_WORK, isFavourite: false }} />);
     expect(screen.queryByLabelText("Favorito")).not.toBeInTheDocument();
+  });
+
+  it("overlays the favourite marker on the cover, not the title/status area", () => {
+    render(<WorkCard work={{ ...BASE_WORK, isFavourite: true }} />);
+
+    const cover = screen.getByTestId("work-card-cover");
+    const favourite = screen.getByLabelText("Favorito");
+    expect(cover.parentElement).toContainElement(favourite);
+
+    const title = screen.getByTestId("work-card-title");
+    expect(title.parentElement).not.toContainElement(favourite);
   });
 
   it("shows the rating when it is present, and hides it otherwise", () => {
