@@ -32,6 +32,22 @@ export const CATEGORY_COLOR_CLASS: Record<CategoryId, string> =
     SEGMENTS.map((segment) => [segment.id, segment.colorClass]),
   ) as Record<CategoryId, string>;
 
+/**
+ * Category -> "border + text" classes: color as an accent (outline), never a
+ * solid fill (docs/design/high-fidelity-desktop.html §4, same criterion
+ * applied to the lobby tile in issue #23).
+ */
+export const CATEGORY_ACCENT_CLASS: Record<CategoryId, string> =
+  Object.fromEntries(
+    SEGMENTS.map((segment) => [
+      segment.id,
+      cn(
+        segment.colorClass.replace("bg-", "border-"),
+        segment.colorClass.replace("bg-", "text-"),
+      ),
+    ]),
+  ) as Record<CategoryId, string>;
+
 /** Category -> Spanish display label. */
 export const CATEGORY_LABELS: Record<CategoryId, string> = {
   anime: "Anime",
