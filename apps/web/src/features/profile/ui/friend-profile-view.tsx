@@ -14,16 +14,23 @@ import { TopSection } from "./top-section";
 type FriendProfileViewProps = {
   displayName: string;
   username: string;
+  /** ISO 8601 timestamp of when the member joined the group (see ProfileHeader). */
+  memberSince?: string;
 };
 
 /** A friend's profile: the four sections, always all visible, no editing (ADR-0010). */
 export function FriendProfileView({
   displayName,
   username,
+  memberSince,
 }: FriendProfileViewProps) {
   return (
     <div className="space-y-8">
-      <ProfileHeader displayName={displayName} username={username} />
+      <ProfileHeader
+        displayName={displayName}
+        username={username}
+        memberSince={memberSince}
+      />
       <SectionTabs
         visibleSections={SECTION_ORDER}
         defaultSection="library"
