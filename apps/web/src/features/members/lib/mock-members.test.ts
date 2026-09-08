@@ -10,6 +10,15 @@ describe("MOCK_MEMBERS", () => {
     }
   });
 
+  it("gives every member a valid ISO member-since date", () => {
+    for (const member of MOCK_MEMBERS) {
+      expect(member.memberSince).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/,
+      );
+      expect(Number.isNaN(new Date(member.memberSince).getTime())).toBe(false);
+    }
+  });
+
   it("has unique usernames", () => {
     const usernames = MOCK_MEMBERS.map((member) => member.username);
     expect(new Set(usernames).size).toBe(usernames.length);
