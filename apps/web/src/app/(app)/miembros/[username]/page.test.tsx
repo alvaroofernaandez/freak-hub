@@ -74,6 +74,23 @@ describe("ProfilePage", () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
+  it("shows the member-since line on a mock friend's profile", async () => {
+    currentUser.mockResolvedValue({
+      username: "edward",
+      fullName: "Edward Elric",
+      imageUrl: null,
+    });
+
+    const page = await ProfilePage({
+      params: Promise.resolve({ username: "gon" }),
+    });
+    render(page);
+
+    expect(
+      screen.getByText(/en el grupo desde septiembre de 2023/),
+    ).toBeInTheDocument();
+  });
+
   it("calls notFound for a username that is neither you nor a known member", async () => {
     currentUser.mockResolvedValue({
       username: "edward",

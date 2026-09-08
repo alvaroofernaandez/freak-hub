@@ -31,4 +31,18 @@ describe("FriendProfileView", () => {
       screen.queryByRole("button", { name: /editar secciones/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("shows the member-since line when it is passed in", () => {
+    render(
+      <FriendProfileView
+        displayName="Gon Freecss"
+        username="gon"
+        memberSince="2023-09-10T00:00:00.000Z"
+      />,
+    );
+
+    expect(
+      screen.getByText(/en el grupo desde septiembre de 2023/),
+    ).toBeInTheDocument();
+  });
 });

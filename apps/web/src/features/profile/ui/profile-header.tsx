@@ -5,10 +5,9 @@ type ProfileHeaderProps = {
   username: string;
   avatarUrl?: string | null;
   /**
-   * ISO 8601 timestamp of when the member joined the group. Optional: the
-   * own-profile view has it (via the mock members' `memberSince`, docs/
-   * roadmap.md), the friend-profile view doesn't wire it in yet (#31) —
-   * the line only renders once a caller passes it in.
+   * ISO 8601 timestamp of when the member joined the group, from the mock
+   * members' `memberSince` (docs/roadmap.md). Optional: the line only
+   * renders once a caller passes it in.
    */
   memberSince?: string;
 };
