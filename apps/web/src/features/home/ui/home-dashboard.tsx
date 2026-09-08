@@ -1,11 +1,15 @@
+import Link from "next/link";
 import type {
   MockActivityEntry,
   MockRecommendation,
 } from "@/features/home/lib/mock-home";
 import type { MockWork } from "@/features/library/lib/mock-works";
-import { WorkCard } from "@/features/library/ui/work-card";
+import { cn } from "@/shared/lib/cn";
+import { CATEGORY_COLOR_CLASS } from "@/shared/ui/category-stripe";
+import { StatusBadge } from "@/shared/ui/status-badge";
 
 type HomeDashboardProps = {
+  displayName: string;
   inProgressWorks: MockWork[];
   recommendations: MockRecommendation[];
   activity: MockActivityEntry[];
@@ -13,18 +17,33 @@ type HomeDashboardProps = {
 
 /** The /inicio panel: what's in progress, pending recommendations, recent activity. */
 export function HomeDashboard({
+  displayName,
   inProgressWorks,
   recommendations,
   activity,
 }: HomeDashboardProps) {
   return (
     <div className="space-y-8">
+      <div>
+        <h1 className="text-[22px] font-bold text-ink md:text-[24px] lg:text-[27px]">
+          Hola, {displayName}
+        </h1>
+        <p className="mt-1 text-[12px] text-ink-muted lg:text-[13px]">
+          Esto es lo que pasa en tu biblioteca
+        </p>
+      </div>
+
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold">En curso</h2>
+        <h2 className="text-[14px] font-bold text-ink lg:text-[15px]">
+          Sigue donde lo dejaste
+        </h2>
         {inProgressWorks.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          <div
+            data-testid="continue-rail"
+            className="flex gap-3 overflow-x-auto pb-1 md:gap-4 lg:gap-5"
+          >
             {inProgressWorks.map((work) => (
-              <WorkCard key={work.id} work={work} />
+              <ContinueCard key={work.id} work={work} />
             ))}
           </div>
         ) : (
@@ -64,6 +83,56 @@ export function HomeDashboard({
           ))}
         </ul>
       </section>
+    </div>
+  );
+}
+
+type ContinueCardProps = {
+  work: MockWork;
+};
+
+/** A card in the "sigue donde lo dejaste" rail: cover, title, progress and a quick +1. */
+function ContinueCard({ work }: ContinueCardProps) {
+  const progress = work.progress ?? 0;
+
+  return (
+    <div
+      data-testid="continue-card"
+      className="flex w-[210px] flex-none flex-col gap-2 md:w-[230px] lg:w-[280px]"
+    >
+      <Link href={`/obras/${work.id}`} className="flex flex-col gap-2">
+        <div
+          className={cn(
+            "flex h-[110px] flex-col justify-end rounded-xl p-3 text-accent-ink md:h-[120px] lg:h-[140px]",
+            CATEGORY_COLOR_CLASS[work.category],
+          )}
+        >
+          {work.isFavourite ? (
+            <span
+              role="img"
+              aria-label="Favorito"
+              className="self-end text-base"
+            >
+              ★
+            </span>
+          ) : null}
+        </div>
+        <span className="font-display text-sm leading-tight text-ink">
+          {work.title}
+        </span>
+      </Link>
+      <StatusBadge status={work.status} />
+      <div className="h-[5px] overflow-hidden rounded-full bg-border-soft">
+        <div
+          className="h-full rounded-full bg-accent"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="flex justify-end">
+        <span className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-ink">
+          +1
+        </span>
+      </div>
     </div>
   );
 }
