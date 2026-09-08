@@ -31,4 +31,24 @@ describe("ProfileHeader", () => {
       "https://example.com/ed.png",
     );
   });
+
+  it("shows the member-since line, in Spanish, when memberSince is given", () => {
+    render(
+      <ProfileHeader
+        displayName="Edward Elric"
+        username="edward"
+        memberSince="2022-03-15T00:00:00.000Z"
+      />,
+    );
+
+    expect(
+      screen.getByText(/en el grupo desde marzo de 2022/),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the member-since line when it is not given", () => {
+    render(<ProfileHeader displayName="Edward Elric" username="edward" />);
+
+    expect(screen.queryByText(/en el grupo desde/)).not.toBeInTheDocument();
+  });
 });
