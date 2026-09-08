@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { MOCK_WORKS } from "@/features/library/lib/mock-works";
 import { activityStatsByCategory } from "@/features/profile/lib/mock-activity";
 import {
   MOCK_RECOMMENDATIONS,
   recommendationsForMember,
 } from "@/features/profile/lib/mock-recommendations";
+import { Dialog } from "@/shared/ui/dialog";
 import { ActivitySection } from "./activity-section";
 import {
   EditSectionsPanel,
@@ -69,6 +70,7 @@ export function OwnProfileView({
   const [preferences, setPreferences] =
     useState<ProfilePreferences>(DEFAULT_PREFERENCES);
   const [editing, setEditing] = useState(false);
+  const editSectionsTitleId = useId();
 
   useEffect(() => {
     setPreferences(readStoredPreferences());
@@ -90,20 +92,42 @@ export function OwnProfileView({
         />
         <button
           type="button"
-          onClick={() => setEditing((current) => !current)}
+          onClick={() => setEditing(true)}
           className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink-muted"
         >
           ⚙ Editar secciones
         </button>
       </div>
 
-      {editing ? (
+      <Dialog
+        isOpen={editing}
+        onClose={() => setEditing(false)}
+        titleId={editSectionsTitleId}
+        maxWidthClassName="max-w-[560px]"
+        panelClassName="p-[28px] gap-[18px]"
+      >
+        <div className="flex items-baseline justify-between">
+          <h2
+            id={editSectionsTitleId}
+            className="text-[18px] font-bold text-ink"
+          >
+            Editar secciones de tu perfil
+          </h2>
+          <button
+            type="button"
+            aria-label="Cerrar"
+            onClick={() => setEditing(false)}
+            className="text-[15px] text-ink-faint transition-opacity hover:opacity-80"
+          >
+            ✕
+          </button>
+        </div>
         <EditSectionsPanel
           visibleSections={preferences.visibleSections}
           defaultSection={preferences.defaultSection}
           onChange={handleChange}
         />
-      ) : null}
+      </Dialog>
 
       <SectionTabs
         visibleSections={preferences.visibleSections}
