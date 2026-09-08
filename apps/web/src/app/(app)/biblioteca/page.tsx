@@ -10,14 +10,11 @@ export default function LibraryLobbyPage() {
   const counts = countByCategory(MOCK_WORKS);
 
   return (
-    <section className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold">Biblioteca</h1>
-        <p className="text-ink-muted">
-          Elige una categoría para ver lo que tienes registrado.
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+    <section className="space-y-[22px] md:space-y-[18px] lg:space-y-[30px]">
+      <h1 className="text-[24px] font-bold text-ink md:text-[25px] lg:text-[28px]">
+        Tu biblioteca
+      </h1>
+      <div className="grid grid-cols-2 gap-[14px] md:grid-cols-3 md:gap-[18px] lg:gap-[22px]">
         {CATEGORY_ORDER.map((category) => (
           <CategoryTile
             key={category}
