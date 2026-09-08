@@ -29,6 +29,26 @@ describe("AddSearchPage", () => {
     expect(notFound).not.toHaveBeenCalled();
   });
 
+  it("gives the search field the mockup's accent border", async () => {
+    const page = await AddSearchPage({
+      params: Promise.resolve({ categoria: "anime" }),
+    });
+    render(page);
+
+    expect(screen.getByRole("searchbox")).toHaveClass("border-accent");
+  });
+
+  it("constrains the content to the mockup's max width", async () => {
+    const page = await AddSearchPage({
+      params: Promise.resolve({ categoria: "anime" }),
+    });
+    render(page);
+
+    expect(screen.getByTestId("add-search-content")).toHaveClass(
+      "max-w-[820px]",
+    );
+  });
+
   it("lists the category's mock search results", async () => {
     const page = await AddSearchPage({
       params: Promise.resolve({ categoria: "anime" }),
@@ -38,6 +58,29 @@ describe("AddSearchPage", () => {
     for (const result of mockSearchResults("anime")) {
       expect(screen.getByText(result.title)).toBeInTheDocument();
     }
+  });
+
+  it("shows a cover placeholder thumbnail for each result", async () => {
+    const page = await AddSearchPage({
+      params: Promise.resolve({ categoria: "anime" }),
+    });
+    render(page);
+
+    expect(screen.getAllByText("portada")).toHaveLength(
+      mockSearchResults("anime").length,
+    );
+  });
+
+  it("links back to the library", async () => {
+    const page = await AddSearchPage({
+      params: Promise.resolve({ categoria: "anime" }),
+    });
+    render(page);
+
+    expect(screen.getByRole("link", { name: /volver/i })).toHaveAttribute(
+      "href",
+      "/biblioteca",
+    );
   });
 
   it("links to the manual add page as an alternative", async () => {

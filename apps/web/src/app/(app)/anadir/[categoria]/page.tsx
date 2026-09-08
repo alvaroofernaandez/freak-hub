@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { mockSearchResults } from "@/features/library/lib/mock-search-results";
+import { CoverPlaceholder } from "@/features/library/ui/cover-placeholder";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
@@ -39,7 +40,14 @@ export default async function AddSearchPage({ params }: AddSearchPageProps) {
   const results = mockSearchResults(categoria);
 
   return (
-    <section className="space-y-6">
+    <section
+      data-testid="add-search-content"
+      className="max-w-[820px] space-y-6"
+    >
+      <Link href="/biblioteca" className="text-sm font-semibold text-ink-muted">
+        ‹ Volver
+      </Link>
+
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold">
           Añadir · {CATEGORY_LABELS[categoria]}
@@ -54,7 +62,7 @@ export default async function AddSearchPage({ params }: AddSearchPageProps) {
           type="search"
           disabled
           placeholder="Buscar…"
-          className="w-full max-w-md rounded-lg border border-border bg-surface px-4 py-2.5 text-ink placeholder:text-ink-muted disabled:opacity-60"
+          className="w-full max-w-md rounded-lg border border-accent bg-surface px-4 py-2.5 text-ink placeholder:text-ink-muted disabled:opacity-60"
         />
         <p className="font-mono text-xs uppercase tracking-widest text-ink-muted">
           Búsqueda en construcción — estos son resultados de ejemplo
@@ -65,9 +73,10 @@ export default async function AddSearchPage({ params }: AddSearchPageProps) {
         {results.map((result) => (
           <li
             key={result.id}
-            className="flex items-center justify-between rounded-lg border border-border bg-surface-raised px-4 py-3"
+            className="flex items-center gap-4 rounded-lg border border-border bg-surface-raised px-4 py-3"
           >
-            <span>
+            <CoverPlaceholder className="h-[78px] w-[58px] rounded-md text-[9px]" />
+            <span className="flex-1">
               {result.title}{" "}
               <span className="text-ink-muted">({result.year})</span>
             </span>
