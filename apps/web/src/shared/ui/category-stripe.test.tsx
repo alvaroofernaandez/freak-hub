@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  CATEGORY_ACCENT_CLASS,
   CATEGORY_COLOR_CLASS,
   CATEGORY_LABELS,
   CATEGORY_ORDER,
@@ -30,6 +31,15 @@ describe("CATEGORY_ORDER, CATEGORY_COLOR_CLASS and CATEGORY_LABELS", () => {
   it("gives every category a non-empty Spanish label", () => {
     for (const id of CATEGORY_ORDER) {
       expect(CATEGORY_LABELS[id]).toMatch(/\S/);
+    }
+  });
+
+  it("maps each category to a border + text accent class, never a fill", () => {
+    for (const { id } of SEGMENTS_IN_ORDER) {
+      const catSuffix = CATEGORY_COLOR_CLASS[id].replace("bg-", "");
+      expect(CATEGORY_ACCENT_CLASS[id]).toContain(`border-${catSuffix}`);
+      expect(CATEGORY_ACCENT_CLASS[id]).toContain(`text-${catSuffix}`);
+      expect(CATEGORY_ACCENT_CLASS[id]).not.toContain(`bg-${catSuffix}`);
     }
   });
 });

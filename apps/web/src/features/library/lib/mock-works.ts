@@ -16,6 +16,16 @@ export type MockWork = {
   expansionOf?: string;
   /** TCG only: personal decks built inside this game (ADR-0007). */
   decks?: string[];
+  /** Release year, shown in the work page header's metadata line. */
+  year?: number;
+  /** Play time, e.g. "40–70 min", shown in the work page header's metadata line. */
+  duration?: string;
+  /** Player count, e.g. "1–5 jugadores", shown in the work page header's metadata line. */
+  players?: string;
+  /** Publisher/studio name, shown in the work page header's metadata line. */
+  publisher?: string;
+  /** Attribution for where this entry's data comes from (e.g. "BoardGameGeek"). */
+  source?: string;
 };
 
 /**
@@ -168,6 +178,11 @@ export const MOCK_WORKS: MockWork[] = [
     rating: 9,
     isFavourite: true,
     owned: true,
+    year: 2019,
+    duration: "40–70 min",
+    players: "1–5 jugadores",
+    publisher: "Stonemaier Games",
+    source: "BoardGameGeek",
   },
   {
     id: "board-wingspan-european",

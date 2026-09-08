@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const notFound = vi.fn();
@@ -33,6 +33,40 @@ describe("WorkPage", () => {
       "data-category",
       "anime",
     );
+  });
+
+  it("renders a two-column header with a cover placeholder and the category pill", async () => {
+    const page = await WorkPage({
+      params: Promise.resolve({ id: "board-wingspan" }),
+    });
+    render(page);
+
+    expect(screen.getByText("portada")).toBeInTheDocument();
+    expect(screen.getByText("Juegos de mesa")).toBeInTheDocument();
+  });
+
+  it("shows the boardgame's metadata and source attribution lines", async () => {
+    const page = await WorkPage({
+      params: Promise.resolve({ id: "board-wingspan" }),
+    });
+    render(page);
+
+    expect(
+      screen.getByText("2019 · 40–70 min · 1–5 jugadores · Stonemaier Games"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Fuente: BoardGameGeek")).toBeInTheDocument();
+  });
+
+  it("keeps the status, rating and favourite star below the header", async () => {
+    const page = await WorkPage({
+      params: Promise.resolve({ id: "board-wingspan" }),
+    });
+    render(page);
+
+    const statusRow = within(screen.getByTestId("work-page-status-row"));
+    expect(statusRow.getByText("Terminado")).toBeInTheDocument();
+    expect(statusRow.getByText("9/10")).toBeInTheDocument();
+    expect(statusRow.getByLabelText("Favorito")).toBeInTheDocument();
   });
 
   it("shows Expansiones for a base boardgame that has one", async () => {
