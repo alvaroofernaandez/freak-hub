@@ -5,6 +5,14 @@ import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/shared/ui/category-stripe";
 import LibraryLobbyPage from "./page";
 
 describe("LibraryLobbyPage", () => {
+  it("titles the page 'Tu biblioteca', matching the high-fidelity lobby mockup", () => {
+    render(<LibraryLobbyPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Tu biblioteca" }),
+    ).toBeInTheDocument();
+  });
+
   it("renders the six categories, each linking to its own listing with its real count", () => {
     render(<LibraryLobbyPage />);
 

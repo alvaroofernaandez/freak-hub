@@ -26,10 +26,17 @@ describe("CategoryTile", () => {
     expect(screen.getByText("Juegos de mesa")).toBeInTheDocument();
   });
 
-  it("applies the category's color class", () => {
+  it("keeps the card itself neutral, not tinted by the category color", () => {
     render(<CategoryTile category="tcg" count={0} href="/biblioteca/tcg" />);
 
-    expect(screen.getByTestId("category-tile")).toHaveClass("bg-cat-tcg");
+    expect(screen.getByTestId("category-tile")).not.toHaveClass("bg-cat-tcg");
+    expect(screen.getByTestId("category-tile")).toHaveClass("bg-surface");
+  });
+
+  it("carries the category color on the icon square, not the card", () => {
+    render(<CategoryTile category="tcg" count={0} href="/biblioteca/tcg" />);
+
+    expect(screen.getByTestId("category-tile-icon")).toHaveClass("bg-cat-tcg");
   });
 
   it("pluralizes the count correctly", () => {
