@@ -29,6 +29,10 @@ describe("WorkPage", () => {
       }),
     ).toBeInTheDocument();
     expect(notFound).not.toHaveBeenCalled();
+    expect(screen.getByTestId("active-category")).toHaveAttribute(
+      "data-category",
+      "anime",
+    );
   });
 
   it("shows Expansiones for a base boardgame that has one", async () => {
