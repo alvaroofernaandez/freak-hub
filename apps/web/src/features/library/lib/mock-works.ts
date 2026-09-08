@@ -253,12 +253,15 @@ export type WorkFilters = {
   status?: EntryStatus;
   favouriteOnly?: boolean;
   ownedOnly?: boolean;
+  search?: string;
 };
 
 export function filterWorks(
   works: MockWork[],
   filters: WorkFilters,
 ): MockWork[] {
+  const search = filters.search?.trim().toLowerCase();
+
   return works.filter((work) => {
     if (filters.status && work.status !== filters.status) {
       return false;
@@ -269,6 +272,26 @@ export function filterWorks(
     if (filters.ownedOnly && !work.owned) {
       return false;
     }
+    if (search && !work.title.toLowerCase().includes(search)) {
+      return false;
+    }
     return true;
   });
+}
+
+/**
+ * "recent" keeps the mocks' own order (there is no createdAt field yet to
+ * sort by, see docs/roadmap.md), "alphabetical" sorts by title and "rating"
+ * puts the highest-rated works first, unrated ones last.
+ */
+export type WorkSort = "recent" | "alphabetical" | "rating";
+
+export function sortWorks(works: MockWork[], sort: WorkSort): MockWork[] {
+  if (sort === "alphabetical") {
+    return [...works].sort((a, b) => a.title.localeCompare(b.title, "es"));
+  }
+  if (sort === "rating") {
+    return [...works].sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
+  }
+  return works;
 }

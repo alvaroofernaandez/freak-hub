@@ -29,7 +29,10 @@ export function WorkCard({ work }: WorkCardProps) {
             </span>
           ) : null}
         </div>
-        <span className="font-display text-base leading-tight">
+        <span
+          data-testid="work-card-title"
+          className="font-display text-base leading-tight"
+        >
           {work.title}
         </span>
       </div>
