@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { navLinks } from "@/shared/lib/nav-links";
+import { useAddCategoryModal } from "./add-category-modal";
 
 type NavbarProps = {
   pendingRecommendations?: number;
@@ -9,6 +12,8 @@ type NavbarProps = {
 
 /** Session navbar shared by every authenticated route (docs/screens.md#navegación). */
 export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
+  const { open: openAddCategoryModal } = useAddCategoryModal();
+
   return (
     <header className="border-b border-border">
       <nav
@@ -26,12 +31,13 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
           ))}
         </div>
         <div className="flex items-center gap-4">
-          <Link
-            href="/anadir"
+          <button
+            type="button"
+            onClick={openAddCategoryModal}
             className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
           >
             + Añadir
-          </Link>
+          </button>
           {pendingRecommendations ? (
             <output
               aria-label={`${pendingRecommendations} recomendaciones pendientes`}
@@ -59,13 +65,14 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
         >
           Biblioteca
         </Link>
-        <Link
-          href="/anadir"
+        <button
+          type="button"
+          onClick={openAddCategoryModal}
           aria-label="Añadir"
           className="-mt-6 flex h-[52px] w-[52px] items-center justify-center rounded-full bg-accent text-2xl text-accent-ink shadow-lg"
         >
           +
-        </Link>
+        </button>
         <Link
           href="/actividad"
           className="flex min-h-11 min-w-11 flex-col items-center justify-center text-xs"
