@@ -77,6 +77,9 @@ export function CategoryStripe({ activeCategory }: CategoryStripeProps) {
           data-category={segment.id}
           className={cn(
             segment.colorClass,
+            // The stripe is a persistent chrome element: it eases rather than
+            // snapping, but stays still for anyone who asked for less motion.
+            "transition-[flex-grow] duration-200 ease-out motion-reduce:transition-none",
             segment.id === activeCategory ? "flex-[2]" : "flex-1",
           )}
         />
