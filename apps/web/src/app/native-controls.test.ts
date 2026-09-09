@@ -1,6 +1,6 @@
-import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { sourceFilesContaining } from "./source-scan";
 
 const SRC = join(__dirname, "..");
 
@@ -15,18 +15,6 @@ const NATIVE_CONTROLS = ["<select", 'type="checkbox"', 'type="radio"'];
 
 describe("native form controls", () => {
   it.each(NATIVE_CONTROLS)("no longer renders %s", (control) => {
-    let matches: string[] = [];
-    try {
-      matches = execSync(
-        `rg -l --glob '!*.test.*' -F ${JSON.stringify(control)} ${SRC}`,
-        { encoding: "utf8" },
-      )
-        .trim()
-        .split("\n")
-        .filter(Boolean);
-    } catch {
-      // rg exits non-zero when nothing matches, which is the passing case.
-    }
-    expect(matches).toEqual([]);
+    expect(sourceFilesContaining(control, SRC)).toEqual([]);
   });
 });
