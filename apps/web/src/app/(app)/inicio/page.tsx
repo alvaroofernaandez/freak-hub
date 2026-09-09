@@ -1,11 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
-import {
-  MOCK_PENDING_RECOMMENDATIONS,
-  MOCK_RECENT_ACTIVITY,
-} from "@/features/home/lib/mock-home";
 import { HomeDashboard } from "@/features/home/ui/home-dashboard";
-import { MOCK_WORKS } from "@/features/library/lib/mock-works";
 import type { Member } from "@/shared/api/types";
 import { ApiError, apiFetch } from "@/shared/lib/api-client";
 
@@ -13,9 +8,10 @@ export const metadata: Metadata = { title: "Inicio" };
 
 /**
  * Personal panel: what's in progress, pending recommendations, recent
- * activity (docs/screens.md#inicio) — still backed by mock data
- * (docs/roadmap.md). The API status block below is the real smoke test for
- * the stack and stays wired to the actual endpoint.
+ * activity (docs/screens.md#inicio). None of those have a real endpoint yet
+ * (docs/roadmap.md), so `HomeDashboard` renders its empty states. The API
+ * status block below is the real smoke test for the stack and stays wired
+ * to the actual endpoint.
  */
 export default async function HomePage() {
   const { getToken } = await auth();
@@ -35,17 +31,13 @@ export default async function HomePage() {
         : "No se pudo contactar con la API";
   }
 
-  const inProgressWorks = MOCK_WORKS.filter(
-    (work) => work.status === "in_progress",
-  );
-
   return (
     <section className="space-y-8">
       <HomeDashboard
         displayName={displayName}
-        inProgressWorks={inProgressWorks}
-        recommendations={MOCK_PENDING_RECOMMENDATIONS}
-        activity={MOCK_RECENT_ACTIVITY}
+        inProgressWorks={[]}
+        recommendations={[]}
+        activity={[]}
       />
 
       <div className="rounded-xl border border-border bg-surface-raised p-5">

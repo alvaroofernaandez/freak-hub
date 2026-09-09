@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "reicon-react";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
@@ -39,9 +40,10 @@ export default async function ManualAddPage({ params }: ManualAddPageProps) {
     <section className="space-y-6">
       <Link
         href={`/anadir/${categoria}`}
-        className="text-sm font-semibold text-ink-muted"
+        className="text-sm font-semibold text-ink-muted transition-colors duration-150 hover:text-ink"
       >
-        ‹ Volver
+        <ArrowLeft size={16} aria-hidden="true" />
+        Volver
       </Link>
 
       <div className="space-y-2">

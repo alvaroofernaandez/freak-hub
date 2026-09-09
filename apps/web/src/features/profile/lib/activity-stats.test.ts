@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { CATEGORY_ORDER } from "@/shared/ui/category-stripe";
-import { activityStatsByCategory } from "./mock-activity";
+import { activityStatsByCategory } from "./activity-stats";
 
-const WORKS: MockWork[] = [
+const WORKS: Work[] = [
   {
     id: "1",
     title: "Anime terminado",

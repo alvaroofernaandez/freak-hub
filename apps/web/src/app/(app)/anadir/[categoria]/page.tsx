@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { mockSearchResults } from "@/features/library/lib/mock-search-results";
-import { CoverPlaceholder } from "@/features/library/ui/cover-placeholder";
+import { ArrowLeft } from "reicon-react";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   type CategoryId,
 } from "@/shared/ui/category-stripe";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 type AddSearchPageProps = {
   params: Promise<{ categoria: string }>;
@@ -26,8 +26,11 @@ export async function generateMetadata({
 
 /**
  * Step two of adding a work: search the category's external catalog
- * (docs/catalogs.md). Not implemented yet, so the field is disabled and the
- * results are mock data (docs/roadmap.md) — a preview of the future layout.
+ * (docs/catalogs.md). That integration (AniList, IGDB, TMDB, BGG, Scryfall)
+ * does not exist yet (docs/roadmap.md), so the field stays disabled and the
+ * results area says so honestly instead of showing invented results: this
+ * is a "not built yet" state, not an "add your first thing" state, so it
+ * carries no action.
  */
 export default async function AddSearchPage({ params }: AddSearchPageProps) {
   const { categoria } = await params;
@@ -37,15 +40,17 @@ export default async function AddSearchPage({ params }: AddSearchPageProps) {
     return;
   }
 
-  const results = mockSearchResults(categoria);
-
   return (
     <section
       data-testid="add-search-content"
       className="max-w-[820px] space-y-6"
     >
-      <Link href="/biblioteca" className="text-sm font-semibold text-ink-muted">
-        ‹ Volver
+      <Link
+        href="/biblioteca"
+        className="text-sm font-semibold text-ink-muted transition-colors duration-150 hover:text-ink"
+      >
+        <ArrowLeft size={16} aria-hidden="true" />
+        Volver
       </Link>
 
       <div className="space-y-2">
@@ -57,45 +62,23 @@ export default async function AddSearchPage({ params }: AddSearchPageProps) {
         </p>
       </div>
 
-      <div className="space-y-2">
-        <input
-          type="search"
-          disabled
-          placeholder="Buscar…"
-          className="w-full max-w-md rounded-lg border border-accent bg-surface px-4 py-2.5 text-ink placeholder:text-ink-muted disabled:opacity-60"
-        />
-        <p className="font-mono text-xs uppercase tracking-widest text-ink-muted">
-          Búsqueda en construcción — estos son resultados de ejemplo
-        </p>
-      </div>
+      <input
+        type="search"
+        disabled
+        placeholder="Buscar…"
+        className="w-full max-w-md rounded-lg border border-accent bg-surface px-4 py-2.5 text-ink placeholder:text-ink-muted disabled:opacity-60"
+      />
 
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {results.map((result) => (
-          <li
-            key={result.id}
-            className="flex items-center gap-4 rounded-lg border border-border bg-surface-raised px-4 py-3"
-          >
-            <CoverPlaceholder className="h-[78px] w-[58px] rounded-md text-[9px]" />
-            <span className="flex-1">
-              {result.title}{" "}
-              <span className="text-ink-muted">({result.year})</span>
-            </span>
-            <button
-              type="button"
-              disabled
-              className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink-muted disabled:opacity-60"
-            >
-              Añadir
-            </button>
-          </li>
-        ))}
-      </ul>
+      <EmptyState
+        title="La búsqueda en el catálogo externo todavía no está disponible"
+        description="Se conectará cuando integremos AniList, IGDB, TMDB, BGG y Scryfall, según la categoría."
+      />
 
       <p className="text-sm text-ink-muted">
         ¿No aparece lo que buscas?{" "}
         <Link
           href={`/anadir/${categoria}/manual`}
-          className="text-accent underline"
+          className="text-accent underline transition-opacity duration-150 hover:opacity-80"
         >
           Alta manual
         </Link>

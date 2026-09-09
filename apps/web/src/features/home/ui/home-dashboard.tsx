@@ -1,18 +1,20 @@
 import Link from "next/link";
+import { Star } from "reicon-react";
 import type {
-  MockActivityEntry,
-  MockRecommendation,
-} from "@/features/home/lib/mock-home";
-import type { MockWork } from "@/features/library/lib/mock-works";
+  ActivityEntry,
+  PendingRecommendation,
+} from "@/features/home/lib/home-content";
+import type { Work } from "@/features/library/lib/work";
 import { cn } from "@/shared/lib/cn";
 import { CATEGORY_COLOR_CLASS } from "@/shared/ui/category-stripe";
+import { EmptyState } from "@/shared/ui/empty-state";
 import { StatusBadge } from "@/shared/ui/status-badge";
 
 type HomeDashboardProps = {
   displayName: string;
-  inProgressWorks: MockWork[];
-  recommendations: MockRecommendation[];
-  activity: MockActivityEntry[];
+  inProgressWorks: Work[];
+  recommendations: PendingRecommendation[];
+  activity: ActivityEntry[];
 };
 
 /** The /inicio panel: what's in progress, pending recommendations, recent activity. */
@@ -55,40 +57,56 @@ export function HomeDashboard({
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Recomendaciones pendientes</h2>
-        <ul className="space-y-2">
-          {recommendations.map((recommendation) => (
-            <li
-              key={recommendation.id}
-              className="rounded-lg border border-border bg-surface-raised p-4"
-            >
-              <p>
-                <span className="font-medium">{recommendation.workTitle}</span>{" "}
-                <span className="text-ink-muted">
-                  · de @{recommendation.fromUsername}
-                </span>
-              </p>
-              <p className="mt-1 text-sm text-ink-muted">
-                {recommendation.reason}
-              </p>
-            </li>
-          ))}
-        </ul>
+        {recommendations.length > 0 ? (
+          <ul className="space-y-2">
+            {recommendations.map((recommendation) => (
+              <li
+                key={recommendation.id}
+                className="rounded-lg border border-border bg-surface-raised p-4"
+              >
+                <p>
+                  <span className="font-medium">
+                    {recommendation.workTitle}
+                  </span>{" "}
+                  <span className="text-ink-muted">
+                    · de @{recommendation.fromUsername}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-ink-muted">
+                  {recommendation.reason}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            title="Sin recomendaciones pendientes"
+            description="Nadie te ha recomendado nada todavía."
+          />
+        )}
       </section>
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Actividad reciente</h2>
-        <ul className="space-y-1.5 font-mono text-sm text-ink-muted">
-          {activity.map((entry) => (
-            <li key={entry.id}>{entry.text}</li>
-          ))}
-        </ul>
+        {activity.length > 0 ? (
+          <ul className="space-y-1.5 font-mono text-sm text-ink-muted">
+            {activity.map((entry) => (
+              <li key={entry.id}>{entry.text}</li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState
+            title="Sin actividad reciente"
+            description="Todavía no ha pasado nada en el grupo."
+          />
+        )}
       </section>
     </div>
   );
 }
 
 type ContinueCardProps = {
-  work: MockWork;
+  work: Work;
 };
 
 /** A card in the "sigue donde lo dejaste" rail: cover, title, progress and a quick +1. */
@@ -100,7 +118,10 @@ function ContinueCard({ work }: ContinueCardProps) {
       data-testid="continue-card"
       className="flex w-[210px] flex-none flex-col gap-2 md:w-[230px] lg:w-[280px]"
     >
-      <Link href={`/obras/${work.id}`} className="flex flex-col gap-2">
+      <Link
+        href={`/obras/${work.id}`}
+        className="flex flex-col gap-2 transition-opacity duration-150 hover:opacity-90"
+      >
         <div
           className={cn(
             "flex h-[110px] flex-col justify-end rounded-xl p-3 text-accent-ink md:h-[120px] lg:h-[140px]",
@@ -113,7 +134,7 @@ function ContinueCard({ work }: ContinueCardProps) {
               aria-label="Favorito"
               className="self-end text-base"
             >
-              ★
+              <Star size={16} weight="Filled" />
             </span>
           ) : null}
         </div>

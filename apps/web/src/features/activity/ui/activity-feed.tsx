@@ -1,10 +1,24 @@
 import Link from "next/link";
-import type { MockActivityEvent } from "@/features/activity/lib/mock-activity-feed";
-import { findMember } from "@/features/members/lib/mock-members";
+import type {
+  ActivityEvent,
+  ActivityEventType,
+} from "@/features/activity/lib/activity-event";
 import { Avatar } from "@/features/members/ui/avatar";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 type ActivityFeedProps = {
-  events: MockActivityEvent[];
+  events: ActivityEvent[];
+};
+
+/**
+ * One mark per kind of event. Typographic marks, not emoji, matching the
+ * status vocabulary in docs/design.md. Colour plays no part: it is already
+ * spent on category.
+ */
+const EVENT_ICON: Record<ActivityEventType, string> = {
+  rating: "\u25c6",
+  favourite: "\u2605",
+  status: "\u25d0",
 };
 
 const timestampFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -17,11 +31,19 @@ const timestampFormatter = new Intl.DateTimeFormat("es-ES", {
 
 /** The full, chronological group feed (docs/screens.md#actividad, docs/domain.md#feed-de-actividad). */
 export function ActivityFeed({ events }: ActivityFeedProps) {
+  if (events.length === 0) {
+    return (
+      <EmptyState
+        title="Sin actividad todavía"
+        description="Aquí aparecerá lo que vaya pasando en el grupo."
+      />
+    );
+  }
+
   return (
     <ul className="space-y-3">
       {events.map((event) => {
-        const member = findMember(event.actorUsername);
-        const displayName = member?.displayName ?? event.actorUsername;
+        const displayName = event.actorDisplayName ?? event.actorUsername;
 
         return (
           <li
@@ -33,9 +55,18 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
             </div>
             <div className="flex-1 space-y-0.5">
               <p>
+                {event.type ? (
+                  <span
+                    data-testid="activity-event-icon"
+                    aria-hidden="true"
+                    className="mr-1.5 text-ink-muted"
+                  >
+                    {EVENT_ICON[event.type]}
+                  </span>
+                ) : null}
                 <Link
                   href={`/miembros/${event.actorUsername}`}
-                  className="font-medium"
+                  className="font-medium transition-colors duration-150 hover:text-accent"
                 >
                   {displayName}
                 </Link>{" "}
