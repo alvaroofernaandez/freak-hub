@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
@@ -69,6 +71,33 @@ func (r *InvitationRepository) ListByInviter(ctx context.Context, inviterID uuid
 	}
 
 	return found, nil
+}
+
+// ListGroup returns a page of every invitation the group has ever sent,
+// newest first, joined with the inviting member (ADR-0011).
+func (r *InvitationRepository) ListGroup(ctx context.Context, after *invitations.Cursor, limit int) ([]invitations.GroupEntry, error) {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("list group invitations: limit %d out of range", limit)
+	}
+
+	params := sqlcgen.ListGroupInvitationsParams{PageLimit: int32(limit)}
+	if after != nil {
+		params.AfterCreatedAt = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
+		id := after.ID
+		params.AfterID = &id
+	}
+
+	rows, err := r.queries.ListGroupInvitations(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("select group invitations: %w", err)
+	}
+
+	entries := make([]invitations.GroupEntry, 0, len(rows))
+	for _, row := range rows {
+		entries = append(entries, toDomainGroupEntry(row))
+	}
+
+	return entries, nil
 }
 
 // MarkAccepted closes the pending invitation for an address.

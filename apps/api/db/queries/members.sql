@@ -24,3 +24,14 @@ RETURNING *;
 
 -- name: DeleteMemberByClerkID :exec
 DELETE FROM members WHERE clerk_user_id = $1;
+
+-- name: ListMembers :many
+-- Keyset page ordered by member-since ascending, tie-broken by id
+-- (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md). Pass a NULL
+-- after_created_at to fetch the first page.
+SELECT *
+FROM members
+WHERE sqlc.narg(after_created_at)::timestamptz IS NULL
+   OR (created_at, id) > (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid)
+ORDER BY created_at ASC, id ASC
+LIMIT sqlc.arg(page_limit)::int;

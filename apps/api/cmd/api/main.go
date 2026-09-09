@@ -16,6 +16,7 @@ import (
 
 	clerkclient "github.com/clerk/clerk-sdk-go/v2"
 	"github.com/clerk/clerk-sdk-go/v2/invitation"
+	"github.com/clerk/clerk-sdk-go/v2/user"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/api"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/config"
@@ -55,7 +56,11 @@ func run() error {
 	clerkclient.SetKey(cfg.Clerk.SecretKey)
 
 	members := postgres.NewMemberRepository(pool)
-	usersService := users.NewService(members)
+	userClient := user.NewClient(&clerkclient.ClientConfig{})
+	usersService := users.NewService(members,
+		users.WithProfileUpdater(clerkadapter.NewProfileUpdater(userClient)),
+		users.WithAvatarUploader(clerkadapter.NewAvatarUploader(userClient)),
+	)
 	invitationsService := invitations.NewService(invitations.ServiceDeps{
 		Sender:      clerkadapter.NewInvitationSender(invitation.NewClient(&clerkclient.ClientConfig{})),
 		Repository:  postgres.NewInvitationRepository(pool),

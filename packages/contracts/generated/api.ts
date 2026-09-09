@@ -35,6 +35,65 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Edit the current member's name and username
+         * @description Every field is optional, but at least one must be present. The
+         *     request talks to Clerk, never to Postgres directly: Clerk is the
+         *     source of truth, and the `user.updated` webhook is what eventually
+         *     persists the change locally. The response reflects the edit
+         *     immediately even so, as an optimistic projection over the local row.
+         *
+         *     Changing email or password is out of scope for this endpoint.
+         */
+        patch: operations["updateCurrentMember"];
+        trace?: never;
+    };
+    "/v1/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replace the current member's profile image
+         * @description The request talks to Clerk, never to Postgres directly: Clerk is the
+         *     source of truth, and the `user.updated` webhook is what eventually
+         *     persists the change locally. The response reflects the edit
+         *     immediately even so, as an optimistic projection over the local row.
+         *
+         *     The content type is sniffed from the uploaded bytes, never trusted
+         *     from what the client declares. Limited to 5 MB; JPEG, PNG, WEBP and
+         *     GIF only.
+         */
+        post: operations["uploadCurrentMemberAvatar"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The group roster
+         * @description Every member who has ever joined, ordered by member-since ascending
+         *     (oldest first) and keyset-paginated per
+         *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md).
+         */
+        get: operations["listMembers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -54,6 +113,32 @@ export interface paths {
          *     email and records who invited whom.
          */
         post: operations["createInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/invitations/group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every invitation the group has ever sent
+         * @description Unlike `GET /v1/invitations`, which is scoped to the caller, this
+         *     returns every invitation any member has sent, with who sent it, newest
+         *     first and keyset-paginated per
+         *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). It
+         *     includes every status: the screen that shows pending guests can
+         *     filter client-side, and a full trail is what lets two members notice
+         *     they are about to invite the same address.
+         */
+        get: operations["listGroupInvitations"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -108,6 +193,19 @@ export interface components {
             display_name: string;
             /** Format: uri */
             avatar_url?: string;
+            /**
+             * Format: date-time
+             * @description When this member joined ("member since").
+             */
+            created_at: string;
+        };
+        /**
+         * @description A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+         *     nothing more remains to read.
+         */
+        MemberPage: {
+            items: components["schemas"]["Member"][];
+            next_cursor: string | null;
         };
         Invitation: {
             /** Format: uuid */
@@ -120,6 +218,38 @@ export interface components {
             inviter_id: string;
             /** Format: date-time */
             created_at: string;
+        };
+        /** @description The public identity of the member who sent an invitation. */
+        InvitationInviter: {
+            /** Format: uuid */
+            id: string;
+            username: string;
+            display_name: string;
+            /** Format: uri */
+            avatar_url?: string;
+        };
+        /**
+         * @description An invitation as seen from the group's perspective: who was invited,
+         *     by whom, and where it stands.
+         */
+        GroupInvitation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            status: "pending" | "accepted" | "revoked";
+            /** Format: date-time */
+            created_at: string;
+            inviter: components["schemas"]["InvitationInviter"];
+        };
+        /**
+         * @description A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+         *     nothing more remains to read.
+         */
+        GroupInvitationPage: {
+            items: components["schemas"]["GroupInvitation"][];
+            next_cursor: string | null;
         };
     };
     responses: {
@@ -194,6 +324,167 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    updateCurrentMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    first_name?: string;
+                    last_name?: string;
+                    username?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The member, with the requested fields already updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description The session is valid but no member row exists yet, which happens
+             *     while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The requested username is already taken */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The body carries no changes, or a field fails validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    uploadCurrentMemberAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The member, with the avatar already updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Member"];
+                };
+            };
+            /** @description The request carries no file */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description The session is valid but no member row exists yet, which happens
+             *     while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The image is larger than 5 MB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The image is not JPEG, PNG, WEBP or GIF */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMembers: {
+        parameters: {
+            query?: {
+                /** @description Page size. Defaults to 25, must be between 1 and 100. */
+                limit?: number;
+                /** @description Opaque cursor returned as `next_cursor` by a previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the group roster */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberPage"];
+                };
+            };
+            /** @description The limit or the cursor is not valid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     listMyInvitations: {
@@ -272,6 +563,41 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+        };
+    };
+    listGroupInvitations: {
+        parameters: {
+            query?: {
+                /** @description Page size. Defaults to 25, must be between 1 and 100. */
+                limit?: number;
+                /** @description Opaque cursor returned as `next_cursor` by a previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the group's invitations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupInvitationPage"];
+                };
+            };
+            /** @description The limit or the cursor is not valid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
         };
     };
     receiveClerkWebhook: {

@@ -3,8 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/postgres/sqlcgen"
@@ -73,6 +75,32 @@ func (r *MemberRepository) DeleteByClerkID(ctx context.Context, clerkUserID stri
 	}
 
 	return nil
+}
+
+// List implements users.Repository.
+func (r *MemberRepository) List(ctx context.Context, after *users.Cursor, limit int) ([]users.User, error) {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("list members: limit %d out of range", limit)
+	}
+
+	params := sqlcgen.ListMembersParams{PageLimit: int32(limit)}
+	if after != nil {
+		params.AfterCreatedAt = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
+		id := after.ID
+		params.AfterID = &id
+	}
+
+	rows, err := r.queries.ListMembers(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list members: %w", err)
+	}
+
+	members := make([]users.User, 0, len(rows))
+	for _, row := range rows {
+		members = append(members, toDomainMember(row))
+	}
+
+	return members, nil
 }
 
 // ExistsByEmail implements invitations.MemberDirectory.

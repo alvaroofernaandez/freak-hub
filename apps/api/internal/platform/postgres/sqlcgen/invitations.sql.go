@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createInvitation = `-- name: CreateInvitation :one
@@ -67,6 +68,74 @@ func (q *Queries) InvitationsByInviter(ctx context.Context, inviterID uuid.UUID)
 			&i.Status,
 			&i.CreatedAt,
 			&i.AcceptedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGroupInvitations = `-- name: ListGroupInvitations :many
+SELECT
+    i.id,
+    i.email,
+    i.status,
+    i.created_at,
+    m.id           AS inviter_id,
+    m.username     AS inviter_username,
+    m.display_name AS inviter_display_name,
+    m.avatar_url   AS inviter_avatar_url
+FROM invitations i
+JOIN members m ON m.id = i.inviter_id
+WHERE $1::timestamptz IS NULL
+   OR (i.created_at, i.id) < ($1::timestamptz, $2::uuid)
+ORDER BY i.created_at DESC, i.id DESC
+LIMIT $3::int
+`
+
+type ListGroupInvitationsParams struct {
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        *uuid.UUID
+	PageLimit      int32
+}
+
+type ListGroupInvitationsRow struct {
+	ID                 uuid.UUID
+	Email              string
+	Status             InvitationStatus
+	CreatedAt          pgtype.Timestamptz
+	InviterID          uuid.UUID
+	InviterUsername    string
+	InviterDisplayName string
+	InviterAvatarUrl   string
+}
+
+// Every invitation the group has ever sent, newest first, keyset-paginated
+// (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md) and joined with
+// the inviting member, so the group can see who invited whom. Pass a NULL
+// after_created_at to fetch the first page.
+func (q *Queries) ListGroupInvitations(ctx context.Context, arg ListGroupInvitationsParams) ([]ListGroupInvitationsRow, error) {
+	rows, err := q.db.Query(ctx, listGroupInvitations, arg.AfterCreatedAt, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListGroupInvitationsRow{}
+	for rows.Next() {
+		var i ListGroupInvitationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Status,
+			&i.CreatedAt,
+			&i.InviterID,
+			&i.InviterUsername,
+			&i.InviterDisplayName,
+			&i.InviterAvatarUrl,
 		); err != nil {
 			return nil, err
 		}

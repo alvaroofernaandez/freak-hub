@@ -74,6 +74,164 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+    patch:
+      operationId: updateCurrentMember
+      tags: [members]
+      summary: Edit the current member's name and username
+      description: |
+        Every field is optional, but at least one must be present. The
+        request talks to Clerk, never to Postgres directly: Clerk is the
+        source of truth, and the `user.updated` webhook is what eventually
+        persists the change locally. The response reflects the edit
+        immediately even so, as an optimistic projection over the local row.
+
+        Changing email or password is out of scope for this endpoint.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                first_name:
+                  type: string
+                last_name:
+                  type: string
+                username:
+                  type: string
+                  minLength: 3
+                  maxLength: 24
+      responses:
+        "200":
+          description: The member, with the requested fields already updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: |
+            The session is valid but no member row exists yet, which happens
+            while the `user.created` webhook is still in flight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The requested username is already taken
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The body carries no changes, or a field fails validation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/me/avatar:
+    post:
+      operationId: uploadCurrentMemberAvatar
+      tags: [members]
+      summary: Replace the current member's profile image
+      description: |
+        The request talks to Clerk, never to Postgres directly: Clerk is the
+        source of truth, and the `user.updated` webhook is what eventually
+        persists the change locally. The response reflects the edit
+        immediately even so, as an optimistic projection over the local row.
+
+        The content type is sniffed from the uploaded bytes, never trusted
+        from what the client declares. Limited to 5 MB; JPEG, PNG, WEBP and
+        GIF only.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: The member, with the avatar already updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Member"
+        "400":
+          description: The request carries no file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: |
+            The session is valid but no member row exists yet, which happens
+            while the `user.created` webhook is still in flight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: The image is larger than 5 MB
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "415":
+          description: The image is not JPEG, PNG, WEBP or GIF
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/members:
+    get:
+      operationId: listMembers
+      tags: [members]
+      summary: The group roster
+      description: |
+        Every member who has ever joined, ordered by member-since ascending
+        (oldest first) and keyset-paginated per
+        [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md).
+      parameters:
+        - in: query
+          name: limit
+          description: Page size. Defaults to 25, must be between 1 and 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: cursor
+          description: Opaque cursor returned as `next_cursor` by a previous page.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of the group roster
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberPage"
+        "400":
+          description: The limit or the cursor is not valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /v1/invitations:
     get:
       operationId: listMyInvitations
@@ -141,6 +299,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+
+  /v1/invitations/group:
+    get:
+      operationId: listGroupInvitations
+      tags: [invitations]
+      summary: Every invitation the group has ever sent
+      description: |
+        Unlike `GET /v1/invitations`, which is scoped to the caller, this
+        returns every invitation any member has sent, with who sent it, newest
+        first and keyset-paginated per
+        [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). It
+        includes every status: the screen that shows pending guests can
+        filter client-side, and a full trail is what lets two members notice
+        they are about to invite the same address.
+      parameters:
+        - in: query
+          name: limit
+          description: Page size. Defaults to 25, must be between 1 and 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: cursor
+          description: Opaque cursor returned as `next_cursor` by a previous page.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of the group's invitations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupInvitationPage"
+        "400":
+          description: The limit or the cursor is not valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /webhooks/clerk:
     post:
@@ -218,7 +419,7 @@ components:
 
     Member:
       type: object
-      required: [id, clerk_user_id, username, display_name]
+      required: [id, clerk_user_id, username, display_name, created_at]
       properties:
         id:
           type: string
@@ -232,6 +433,24 @@ components:
         avatar_url:
           type: string
           format: uri
+        created_at:
+          description: When this member joined ("member since").
+          type: string
+          format: date-time
+
+    MemberPage:
+      type: object
+      description: |
+        A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+        nothing more remains to read.
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Member"
+        next_cursor:
+          type: [string, "null"]
 
     Invitation:
       type: object
@@ -252,6 +471,58 @@ components:
         created_at:
           type: string
           format: date-time
+
+    InvitationInviter:
+      type: object
+      description: The public identity of the member who sent an invitation.
+      required: [id, username, display_name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        display_name:
+          type: string
+        avatar_url:
+          type: string
+          format: uri
+
+    GroupInvitation:
+      type: object
+      description: |
+        An invitation as seen from the group's perspective: who was invited,
+        by whom, and where it stands.
+      required: [id, email, status, created_at, inviter]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [pending, accepted, revoked]
+        created_at:
+          type: string
+          format: date-time
+        inviter:
+          $ref: "#/components/schemas/InvitationInviter"
+
+    GroupInvitationPage:
+      type: object
+      description: |
+        A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+        nothing more remains to read.
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupInvitation"
+        next_cursor:
+          type: [string, "null"]
 
 security:
   - clerkSession: []
