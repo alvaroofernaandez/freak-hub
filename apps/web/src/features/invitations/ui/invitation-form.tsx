@@ -48,7 +48,7 @@ export function InvitationForm() {
           className={
             state.status === "success"
               ? "text-sm text-accent"
-              : "text-sm text-red-400"
+              : "text-sm text-danger"
           }
         >
           {state.message}

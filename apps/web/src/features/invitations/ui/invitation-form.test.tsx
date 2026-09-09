@@ -23,6 +23,23 @@ describe("InvitationForm", () => {
     createInvitation.mockReset();
   });
 
+  it("reports an error with the danger token, not a raw Tailwind color", async () => {
+    createInvitation.mockResolvedValue({
+      status: "error",
+      message: "No se ha podido enviar la invitación.",
+    });
+
+    render(<InvitationForm />);
+    await userEvent.type(screen.getByLabelText(/correo/i), "amigo@correo.com");
+    await userEvent.click(
+      screen.getByRole("button", { name: /enviar invitación/i }),
+    );
+
+    const message = await screen.findByRole("status");
+    expect(message).toHaveClass("text-danger");
+    expect(message).not.toHaveClass("text-red-400");
+  });
+
   it("exposes an accessible email field wired to its label", () => {
     render(<InvitationForm />);
 
