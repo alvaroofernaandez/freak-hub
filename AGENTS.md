@@ -50,7 +50,12 @@ público, y tiene tests. En la API, todo lo que cuelga de `/v1` pasa por
 ### 7. Commits convencionales
 
 `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`. **Sin** líneas de
-`Co-Authored-By` ni atribución a IA.
+`Co-Authored-By` ni atribución a IA. Antes de un `push` o de abrir una PR,
+compruébalo en **todo el rango de commits que vas a compartir**
+(`git log <base>..<rama> --grep="Co-Authored-By\|Claude\|Anthropic" -i`), no
+solo en los que has creado tú en la sesión actual: un commit heredado de otra
+rama o sesión anterior con esa atribución pasa igual de desapercibido si solo
+miras los tuyos.
 
 ## Diseño
 
