@@ -1,7 +1,8 @@
-import type { MockRecommendation } from "@/features/profile/lib/mock-recommendations";
+import type { Recommendation } from "@/features/profile/lib/recommendation";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 type RecommendationsSectionProps = {
-  recommendations: MockRecommendation[];
+  recommendations: Recommendation[];
   ownerUsername: string;
 };
 
@@ -12,7 +13,10 @@ export function RecommendationsSection({
 }: RecommendationsSectionProps) {
   if (recommendations.length === 0) {
     return (
-      <p className="text-sm text-ink-muted">Sin recomendaciones todavía.</p>
+      <EmptyState
+        title="Sin recomendaciones todavía"
+        description="Aquí aparecerán las recomendaciones que envíes o recibas."
+      />
     );
   }
 

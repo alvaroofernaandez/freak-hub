@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useId, useState } from "react";
-import { MOCK_WORKS } from "@/features/library/lib/mock-works";
-import { activityStatsByCategory } from "@/features/profile/lib/mock-activity";
-import {
-  MOCK_RECOMMENDATIONS,
-  recommendationsForMember,
-} from "@/features/profile/lib/mock-recommendations";
+import { Settings, X } from "reicon-react";
+import { activityStatsByCategory } from "@/features/profile/lib/activity-stats";
+import { recommendationsForMember } from "@/features/profile/lib/recommendation";
 import { Dialog } from "@/shared/ui/dialog";
 import { ActivitySection } from "./activity-section";
+import { EditProfileDialog } from "./edit-profile-dialog";
 import {
   EditSectionsPanel,
   type ProfilePreferences,
@@ -21,6 +19,10 @@ import { TopSection } from "./top-section";
 
 type OwnProfileViewProps = {
   displayName: string;
+  /** Clerk's given name, for the edit form. Falls back to the display name. */
+  firstName?: string;
+  /** Clerk's family name, for the edit form. */
+  lastName?: string;
   username: string;
   avatarUrl?: string | null;
   /** ISO 8601 timestamp of when the member joined the group (see ProfileHeader). */
@@ -60,9 +62,16 @@ function readStoredPreferences(): ProfilePreferences {
   }
 }
 
-/** Your own profile: the header, the section preference editor, and the sections themselves. */
+/**
+ * Your own profile: the header, the section preference editor, and the
+ * sections themselves. There is no library or recommendations endpoint yet
+ * (docs/roadmap.md), so every section starts from empty data and each one
+ * renders its own honest empty state.
+ */
 export function OwnProfileView({
   displayName,
+  firstName,
+  lastName,
   username,
   avatarUrl,
   memberSince,
@@ -83,21 +92,30 @@ export function OwnProfileView({
 
   return (
     <div className="space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <ProfileHeader
-          displayName={displayName}
-          username={username}
-          avatarUrl={avatarUrl}
-          memberSince={memberSince}
-        />
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink-muted"
-        >
-          ⚙ Editar secciones
-        </button>
-      </div>
+      <ProfileHeader
+        displayName={displayName}
+        username={username}
+        avatarUrl={avatarUrl}
+        memberSince={memberSince}
+        actions={
+          <>
+            <EditProfileDialog
+              firstName={firstName ?? displayName}
+              lastName={lastName ?? ""}
+              username={username}
+              avatarUrl={avatarUrl}
+            />
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border px-3.5 py-2 text-sm text-ink-muted transition-colors duration-150 hover:border-accent hover:text-ink"
+            >
+              <Settings size={15} aria-hidden="true" />
+              Editar secciones
+            </button>
+          </>
+        }
+      />
 
       <Dialog
         isOpen={editing}
@@ -117,12 +135,13 @@ export function OwnProfileView({
             type="button"
             aria-label="Cerrar"
             onClick={() => setEditing(false)}
-            className="text-[15px] text-ink-faint transition-opacity hover:opacity-80"
+            className="text-[15px] text-ink-muted transition-opacity hover:opacity-80"
           >
-            ✕
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
         <EditSectionsPanel
+          order={preferences.order}
           visibleSections={preferences.visibleSections}
           defaultSection={preferences.defaultSection}
           onChange={handleChange}
@@ -131,19 +150,15 @@ export function OwnProfileView({
 
       <SectionTabs
         visibleSections={preferences.visibleSections}
+        order={preferences.order}
         defaultSection={preferences.defaultSection}
         sections={{
-          library: <LibrarySection works={MOCK_WORKS} />,
-          activity: (
-            <ActivitySection stats={activityStatsByCategory(MOCK_WORKS)} />
-          ),
-          top: <TopSection works={MOCK_WORKS} />,
+          library: <LibrarySection works={[]} />,
+          activity: <ActivitySection stats={activityStatsByCategory([])} />,
+          top: <TopSection works={[]} />,
           recommendations: (
             <RecommendationsSection
-              recommendations={recommendationsForMember(
-                MOCK_RECOMMENDATIONS,
-                username,
-              )}
+              recommendations={recommendationsForMember([], username)}
               ownerUsername={username}
             />
           ),

@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { TopSection } from "./top-section";
 
-const WORKS: MockWork[] = [
+const WORKS: Work[] = [
   {
     id: "1",
     title: "Ocho",
@@ -53,7 +53,10 @@ describe("TopSection", () => {
     const user = userEvent.setup();
     render(<TopSection works={WORKS} />);
 
-    await user.selectOptions(screen.getByLabelText("Categoría"), "boardgame");
+    await user.click(screen.getByRole("combobox", { name: "Categoría" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Juegos de mesa" }),
+    );
 
     expect(screen.getByText("Seis de mesa")).toBeInTheDocument();
     expect(screen.queryByText("Diez")).not.toBeInTheDocument();

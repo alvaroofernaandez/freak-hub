@@ -25,6 +25,43 @@ describe("SECTION_ORDER and SECTION_LABELS", () => {
 });
 
 describe("SectionTabs", () => {
+  it("renders the tabs in the order the member chose", () => {
+    render(
+      <SectionTabs
+        order={["top", "library"]}
+        visibleSections={["library", "top"]}
+        defaultSection="top"
+        sections={SECTIONS}
+      />,
+    );
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Top",
+      "Biblioteca",
+    ]);
+  });
+
+  it("an unselected tab answers the pointer; the selected one has nothing to offer", () => {
+    render(
+      <SectionTabs
+        visibleSections={["library", "top"]}
+        defaultSection="library"
+        sections={SECTIONS}
+      />,
+    );
+
+    const tabs = screen.getAllByRole("tab");
+    const selected = tabs.find(
+      (tab) => tab.getAttribute("aria-selected") === "true",
+    );
+    const unselected = tabs.find(
+      (tab) => tab.getAttribute("aria-selected") !== "true",
+    );
+
+    expect(unselected).toHaveClass("hover:text-ink");
+    expect(selected).not.toHaveClass("hover:text-ink");
+  });
+
   it("renders a tab for each visible section, in canonical order", () => {
     render(
       <SectionTabs

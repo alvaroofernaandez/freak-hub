@@ -23,6 +23,8 @@ export const SECTION_LABELS: Record<SectionId, string> = {
 
 type SectionTabsProps = {
   visibleSections: SectionId[];
+  /** The member's chosen order. Falls back to the canonical one. */
+  order?: SectionId[];
   defaultSection: SectionId;
   sections: Record<SectionId, ReactNode>;
 };
@@ -30,10 +32,15 @@ type SectionTabsProps = {
 /** The alternable sections of a profile (docs/screens.md, ADR-0010). */
 export function SectionTabs({
   visibleSections,
+  order,
   defaultSection,
   sections,
 }: SectionTabsProps) {
-  const orderedVisible = SECTION_ORDER.filter((id) =>
+  const resolvedOrder = [
+    ...(order ?? []).filter((id) => SECTION_ORDER.includes(id)),
+    ...SECTION_ORDER.filter((id) => !(order ?? []).includes(id)),
+  ];
+  const orderedVisible = resolvedOrder.filter((id) =>
     visibleSections.includes(id),
   );
   const initial = orderedVisible.includes(defaultSection)
@@ -53,10 +60,10 @@ export function SectionTabs({
             aria-selected={id === current}
             onClick={() => setActive(id)}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium",
+              "px-4 py-2.5 text-sm font-medium transition-colors duration-150",
               id === current
                 ? "border-b-2 border-accent text-ink"
-                : "text-ink-muted",
+                : "text-ink-muted hover:text-ink",
             )}
           >
             {SECTION_LABELS[id]}

@@ -3,6 +3,35 @@ import { describe, expect, it } from "vitest";
 import { ProfileHeader } from "./profile-header";
 
 describe("ProfileHeader", () => {
+  it("dates the membership in a machine-readable time element", () => {
+    render(
+      <ProfileHeader
+        displayName="Gon Freecss"
+        username="gon"
+        memberSince="2023-09-10T00:00:00.000Z"
+      />,
+    );
+
+    expect(screen.getByTestId("profile-member-since")).toHaveAttribute(
+      "datetime",
+      "2023-09-10T00:00:00.000Z",
+    );
+  });
+
+  it("renders the actions slot, so a profile can offer editing", () => {
+    render(
+      <ProfileHeader
+        displayName="Gon Freecss"
+        username="gon"
+        actions={<button type="button">Editar perfil</button>}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Editar perfil" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows the display name as a heading", () => {
     render(<ProfileHeader displayName="Edward Elric" username="edward" />);
 
@@ -41,9 +70,11 @@ describe("ProfileHeader", () => {
       />,
     );
 
+    // The line is split across a <span> and a <time>, so match on the
+    // paragraph's whole text instead of a single text node.
     expect(
-      screen.getByText(/en el grupo desde marzo de 2022/),
-    ).toBeInTheDocument();
+      screen.getByTestId("profile-member-since").closest("p"),
+    ).toHaveTextContent(/en el grupo desde marzo de 2022/i);
   });
 
   it("omits the member-since line when it is not given", () => {

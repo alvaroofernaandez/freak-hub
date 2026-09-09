@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import type { CategoryActivityStat } from "@/features/profile/lib/mock-activity";
+import type { CategoryActivityStat } from "@/features/profile/lib/activity-stats";
 import { ActivitySection } from "./activity-section";
 
 const STATS: CategoryActivityStat[] = [
@@ -31,8 +31,21 @@ describe("ActivitySection", () => {
     const user = userEvent.setup();
     render(<ActivitySection stats={STATS} />);
 
-    await user.selectOptions(screen.getByLabelText("Categoría"), "anime");
+    await user.click(screen.getByRole("combobox", { name: "Categoría" }));
+    await user.click(await screen.findByRole("option", { name: "Anime" }));
 
     expect(screen.getAllByTestId("activity-row")).toHaveLength(1);
+  });
+
+  it("shows an empty state instead of six zeroed-out rows when there is no activity at all", () => {
+    const zeroStats: CategoryActivityStat[] = STATS.map((stat) => ({
+      ...stat,
+      completed: 0,
+      inProgress: 0,
+    }));
+    render(<ActivitySection stats={zeroStats} />);
+
+    expect(screen.getByText(/sin actividad todavía/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("activity-row")).not.toBeInTheDocument();
   });
 });

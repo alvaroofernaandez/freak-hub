@@ -1,9 +1,5 @@
-import { MOCK_WORKS } from "@/features/library/lib/mock-works";
-import { activityStatsByCategory } from "@/features/profile/lib/mock-activity";
-import {
-  MOCK_RECOMMENDATIONS,
-  recommendationsForMember,
-} from "@/features/profile/lib/mock-recommendations";
+import { activityStatsByCategory } from "@/features/profile/lib/activity-stats";
+import { recommendationsForMember } from "@/features/profile/lib/recommendation";
 import { ActivitySection } from "./activity-section";
 import { LibrarySection } from "./library-section";
 import { ProfileHeader } from "./profile-header";
@@ -18,7 +14,12 @@ type FriendProfileViewProps = {
   memberSince?: string;
 };
 
-/** A friend's profile: the four sections, always all visible, no editing (ADR-0010). */
+/**
+ * A friend's profile: the four sections, always all visible, no editing
+ * (ADR-0010). There is no library or recommendations endpoint yet
+ * (docs/roadmap.md), so every section starts from empty data and each one
+ * renders its own honest empty state.
+ */
 export function FriendProfileView({
   displayName,
   username,
@@ -35,17 +36,12 @@ export function FriendProfileView({
         visibleSections={SECTION_ORDER}
         defaultSection="library"
         sections={{
-          library: <LibrarySection works={MOCK_WORKS} />,
-          activity: (
-            <ActivitySection stats={activityStatsByCategory(MOCK_WORKS)} />
-          ),
-          top: <TopSection works={MOCK_WORKS} />,
+          library: <LibrarySection works={[]} />,
+          activity: <ActivitySection stats={activityStatsByCategory([])} />,
+          top: <TopSection works={[]} />,
           recommendations: (
             <RecommendationsSection
-              recommendations={recommendationsForMember(
-                MOCK_RECOMMENDATIONS,
-                username,
-              )}
+              recommendations={recommendationsForMember([], username)}
               ownerUsername={username}
             />
           ),

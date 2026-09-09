@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { MockRecommendation } from "@/features/profile/lib/mock-recommendations";
+import type { Recommendation } from "@/features/profile/lib/recommendation";
 import { RecommendationsSection } from "./recommendations-section";
 
-const RECOMMENDATIONS: MockRecommendation[] = [
+const RECOMMENDATIONS: Recommendation[] = [
   {
     id: "1",
     fromUsername: "edward",
