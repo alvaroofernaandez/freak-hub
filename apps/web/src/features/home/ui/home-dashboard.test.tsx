@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { HomeDashboard } from "./home-dashboard";
 
-const IN_PROGRESS_WORKS: MockWork[] = [
+const IN_PROGRESS_WORKS: Work[] = [
   {
     id: "anime-hxh",
     title: "Hunter x Hunter (2011)",
@@ -125,5 +125,33 @@ describe("HomeDashboard", () => {
     );
 
     expect(screen.getByText("@edward terminó Frieren")).toBeInTheDocument();
+  });
+
+  it("shows an empty state when there are no pending recommendations", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressWorks={IN_PROGRESS_WORKS}
+        recommendations={[]}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(
+      screen.getByText(/sin recomendaciones pendientes/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an empty state when there is no recent activity", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressWorks={IN_PROGRESS_WORKS}
+        recommendations={RECOMMENDATIONS}
+        activity={[]}
+      />,
+    );
+
+    expect(screen.getByText(/sin actividad reciente/i)).toBeInTheDocument();
   });
 });

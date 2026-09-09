@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { mockSearchResults } from "@/features/library/lib/mock-search-results";
 
 const notFound = vi.fn();
 vi.mock("next/navigation", () => ({ notFound: () => notFound() }));
@@ -17,7 +16,7 @@ describe("AddSearchPage", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it("renders a disabled search field with a construction note", async () => {
+  it("renders a disabled search field", async () => {
     notFound.mockClear();
     const page = await AddSearchPage({
       params: Promise.resolve({ categoria: "anime" }),
@@ -25,7 +24,6 @@ describe("AddSearchPage", () => {
     render(page);
 
     expect(screen.getByRole("searchbox")).toBeDisabled();
-    expect(screen.getByText(/búsqueda en construcción/i)).toBeInTheDocument();
     expect(notFound).not.toHaveBeenCalled();
   });
 
@@ -49,26 +47,14 @@ describe("AddSearchPage", () => {
     );
   });
 
-  it("lists the category's mock search results", async () => {
+  it("says honestly that the catalog search is not connected yet, instead of showing fake results", async () => {
     const page = await AddSearchPage({
       params: Promise.resolve({ categoria: "anime" }),
     });
     render(page);
 
-    for (const result of mockSearchResults("anime")) {
-      expect(screen.getByText(result.title)).toBeInTheDocument();
-    }
-  });
-
-  it("shows a cover placeholder thumbnail for each result", async () => {
-    const page = await AddSearchPage({
-      params: Promise.resolve({ categoria: "anime" }),
-    });
-    render(page);
-
-    expect(screen.getAllByText("portada")).toHaveLength(
-      mockSearchResults("anime").length,
-    );
+    expect(screen.getByText(/todavía no está disponible/i)).toBeInTheDocument();
+    expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
   });
 
   it("links back to the library", async () => {

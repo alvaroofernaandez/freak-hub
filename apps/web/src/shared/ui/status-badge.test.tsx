@@ -3,24 +3,61 @@ import { describe, expect, it } from "vitest";
 import { STATUS_ORDER, StatusBadge } from "./status-badge";
 
 const VARIANTS = [
-  { status: "wishlist", icon: "☆", label: "Wishlist" },
-  { status: "pending", icon: "○", label: "Pendiente" },
-  { status: "in_progress", icon: "◐", label: "En curso" },
-  { status: "completed", icon: "●", label: "Terminado" },
-  { status: "dropped", icon: "✕", label: "Abandonado" },
-  { status: "on_hold", icon: "❚❚", label: "En pausa" },
+  { status: "wishlist", label: "Wishlist" },
+  { status: "pending", label: "Pendiente" },
+  { status: "in_progress", label: "En curso" },
+  { status: "completed", label: "Terminado" },
+  { status: "dropped", label: "Abandonado" },
+  { status: "on_hold", label: "En pausa" },
 ] as const;
 
 describe("StatusBadge", () => {
+  it("does not pop the icon on the first render", () => {
+    render(<StatusBadge status="pending" />);
+
+    expect(screen.getByTestId("status-badge-icon")).not.toHaveAttribute(
+      "data-pop",
+    );
+  });
+
+  it("pops the icon when the status actually changes", () => {
+    const { rerender } = render(<StatusBadge status="pending" />);
+
+    rerender(<StatusBadge status="completed" />);
+
+    expect(screen.getByTestId("status-badge-icon")).toHaveAttribute("data-pop");
+  });
+
   it.each(VARIANTS)("renders the icon and label for status $status", ({
     status,
-    icon,
     label,
   }) => {
     render(<StatusBadge status={status} />);
 
-    expect(screen.getByTestId("status-badge-icon")).toHaveTextContent(icon);
+    // A real icon, not a typographic glyph borrowed from the body font.
+    expect(
+      screen.getByTestId("status-badge-icon").querySelector("svg"),
+    ).not.toBeNull();
     expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("gives each status its own icon, so none of them read alike", () => {
+    const shapes = new Set<string>();
+
+    for (const { status } of VARIANTS) {
+      const { unmount, getByTestId } = render(<StatusBadge status={status} />);
+      shapes.add(getByTestId("status-badge-icon").innerHTML);
+      unmount();
+    }
+
+    expect(shapes.size).toBe(VARIANTS.length);
+  });
+
+  it("exposes the icon component through STATUS_ORDER, for filters to render", () => {
+    for (const entry of STATUS_ORDER) {
+      expect(typeof entry.Icon).not.toBe("string");
+      expect(entry.Icon).toBeDefined();
+    }
   });
 
   it.each(
@@ -56,8 +93,8 @@ describe("STATUS_ORDER", () => {
       VARIANTS.map((v) => v.status),
     );
     for (const [index, entry] of STATUS_ORDER.entries()) {
-      expect(entry.icon).toBe(VARIANTS[index].icon);
-      expect(entry.label).toBe(VARIANTS[index].label);
+      expect(entry.label).toBe(VARIANTS[index]?.label);
+      expect(entry.Icon).toBeDefined();
     }
   });
 });

@@ -3,6 +3,7 @@ package usersmem
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -90,6 +91,59 @@ func (r *Repository) DeleteByClerkID(_ context.Context, clerkUserID string) erro
 	delete(r.byClerk, clerkUserID)
 
 	return nil
+}
+
+// List implements users.Repository. It orders by member-since ascending,
+// tie-broken by id, matching the keyset order the Postgres adapter uses
+// (ADR-0011).
+func (r *Repository) List(_ context.Context, after *users.Cursor, limit int) ([]users.User, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	all := make([]users.User, 0, len(r.byClerk))
+	for _, user := range r.byClerk {
+		all = append(all, user)
+	}
+
+	sort.Slice(all, func(i, j int) bool {
+		return isBeforeInMemberOrder(all[i], all[j])
+	})
+
+	start := 0
+	if after != nil {
+		// all is sorted in the same order isAfterCursor tests for, so the
+		// predicate is monotonic and sort.Search finds the first match.
+		start = sort.Search(len(all), func(i int) bool {
+			return isAfterCursor(all[i], *after)
+		})
+	}
+
+	end := start + limit
+	if end > len(all) {
+		end = len(all)
+	}
+
+	return append([]users.User{}, all[start:end]...), nil
+}
+
+// isBeforeInMemberOrder reports whether a sorts strictly before b in the
+// stable member-since order (ADR-0011): created_at ascending, id as tiebreak.
+func isBeforeInMemberOrder(a, b users.User) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.Before(b.CreatedAt)
+	}
+
+	return a.ID.String() < b.ID.String()
+}
+
+// isAfterCursor reports whether user comes strictly after cursor in that
+// same order.
+func isAfterCursor(user users.User, cursor users.Cursor) bool {
+	if !user.CreatedAt.Equal(cursor.CreatedAt) {
+		return user.CreatedAt.After(cursor.CreatedAt)
+	}
+
+	return user.ID.String() > cursor.ID.String()
 }
 
 // Count reports how many members are stored, for assertions.

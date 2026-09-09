@@ -3,31 +3,52 @@ import { describe, expect, it } from "vitest";
 import { MemberRow } from "./member-row";
 
 describe("MemberRow", () => {
-  it("links to the member's profile", () => {
-    render(<MemberRow username="gon" displayName="Gon Freecss" />);
+  it("marks your own row so you can find yourself in the roster", () => {
+    render(<MemberRow username="gon" displayName="Gon Freecss" isYou />);
 
-    expect(screen.getByRole("link")).toHaveAttribute("href", "/miembros/gon");
+    expect(screen.getByText("Tú")).toBeInTheDocument();
   });
 
-  it("shows the display name and the handle", () => {
+  it("marks nobody else's row", () => {
     render(<MemberRow username="gon" displayName="Gon Freecss" />);
 
-    expect(screen.getByText("Gon Freecss")).toBeInTheDocument();
-    expect(screen.getByText("@gon")).toBeInTheDocument();
+    expect(screen.queryByText("Tú")).not.toBeInTheDocument();
   });
 
-  it("shows the avatar image when given one", () => {
+  it("answers the pointer: the row lights its border on hover and focus", () => {
+    render(<MemberRow username="gon" displayName="Gon Freecss" />);
+
+    const row = screen.getByRole("link", { name: /gon freecss/i });
+    expect(row).toHaveClass("hover:border-accent");
+    expect(row).toHaveClass("focus-visible:border-accent");
+  });
+
+  it("links the whole row to the member's profile", () => {
+    render(<MemberRow username="gon" displayName="Gon Freecss" />);
+
+    expect(screen.getByRole("link", { name: /gon freecss/i })).toHaveAttribute(
+      "href",
+      "/miembros/gon",
+    );
+  });
+
+  it("says since when they have been in the group, in the mono face used for dates", () => {
     render(
       <MemberRow
         username="gon"
         displayName="Gon Freecss"
-        avatarUrl="https://example.com/gon.png"
+        memberSince="2023-09-10T00:00:00.000Z"
       />,
     );
 
-    expect(screen.getByRole("img", { name: "Gon Freecss" })).toHaveAttribute(
-      "src",
-      "https://example.com/gon.png",
-    );
+    const since = screen.getByText(/septiembre de 2023/i);
+    expect(since).toBeInTheDocument();
+    expect(since).toHaveClass("font-mono");
+  });
+
+  it("omits the joined line when the date is unknown", () => {
+    render(<MemberRow username="gon" displayName="Gon Freecss" />);
+
+    expect(screen.queryByText(/miembro desde/i)).not.toBeInTheDocument();
   });
 });

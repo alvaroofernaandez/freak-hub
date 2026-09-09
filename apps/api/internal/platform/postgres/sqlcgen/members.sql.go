@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const deleteMemberByClerkID = `-- name: DeleteMemberByClerkID :exec
@@ -18,6 +19,54 @@ DELETE FROM members WHERE clerk_user_id = $1
 func (q *Queries) DeleteMemberByClerkID(ctx context.Context, clerkUserID string) error {
 	_, err := q.db.Exec(ctx, deleteMemberByClerkID, clerkUserID)
 	return err
+}
+
+const listMembers = `-- name: ListMembers :many
+SELECT id, clerk_user_id, username, display_name, avatar_url, email, invited_by, created_at, updated_at
+FROM members
+WHERE $1::timestamptz IS NULL
+   OR (created_at, id) > ($1::timestamptz, $2::uuid)
+ORDER BY created_at ASC, id ASC
+LIMIT $3::int
+`
+
+type ListMembersParams struct {
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        *uuid.UUID
+	PageLimit      int32
+}
+
+// Keyset page ordered by member-since ascending, tie-broken by id
+// (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md). Pass a NULL
+// after_created_at to fetch the first page.
+func (q *Queries) ListMembers(ctx context.Context, arg ListMembersParams) ([]Member, error) {
+	rows, err := q.db.Query(ctx, listMembers, arg.AfterCreatedAt, arg.AfterID, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Member{}
+	for rows.Next() {
+		var i Member
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClerkUserID,
+			&i.Username,
+			&i.DisplayName,
+			&i.AvatarUrl,
+			&i.Email,
+			&i.InvitedBy,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const memberByClerkID = `-- name: MemberByClerkID :one

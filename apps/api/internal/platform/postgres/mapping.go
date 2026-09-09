@@ -74,3 +74,21 @@ func toDomainInvitation(row sqlcgen.Invitation) invitations.Invitation {
 		AcceptedAt:        toTimePtr(row.AcceptedAt),
 	}
 }
+
+func toDomainGroupEntry(row sqlcgen.ListGroupInvitationsRow) invitations.GroupEntry {
+	return invitations.GroupEntry{
+		Invitation: invitations.Invitation{
+			ID:        row.ID,
+			Email:     row.Email,
+			InviterID: row.InviterID,
+			Status:    invitations.Status(row.Status),
+			CreatedAt: toTime(row.CreatedAt),
+		},
+		Inviter: invitations.InviterSummary{
+			ID:          row.InviterID,
+			Username:    row.InviterUsername,
+			DisplayName: row.InviterDisplayName,
+			AvatarURL:   row.InviterAvatarUrl,
+		},
+	}
+}

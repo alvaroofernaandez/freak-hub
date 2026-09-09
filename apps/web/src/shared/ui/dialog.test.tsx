@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Dialog } from "./dialog";
 
 function Harness({ maxWidthClassName }: { maxWidthClassName?: string }) {
@@ -27,6 +27,32 @@ function Harness({ maxWidthClassName }: { maxWidthClassName?: string }) {
 }
 
 describe("Dialog", () => {
+  it("closes when the pointer lands outside the panel", async () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog isOpen onClose={onClose} titleId="t">
+        <h2 id="t">Título</h2>
+      </Dialog>,
+    );
+
+    const overlay = document.querySelector("[data-dialog-overlay]");
+    expect(overlay).not.toBeNull();
+    await userEvent.click(overlay as Element);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("dims the page behind it, hard enough to read as switched off", async () => {
+    render(
+      <Dialog isOpen onClose={() => {}} titleId="t">
+        <h2 id="t">Título</h2>
+      </Dialog>,
+    );
+
+    const overlay = document.querySelector("[data-dialog-overlay]");
+    expect(overlay?.className).toMatch(/bg-ground-deep\/[89]\d/);
+  });
+
   it("renders nothing while closed", () => {
     render(<Harness />);
 
@@ -71,7 +97,8 @@ describe("Dialog", () => {
     await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
+    // Radix restores focus on the close transition, not synchronously.
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("traps Tab so it cycles from the last focusable element back to the first", async () => {

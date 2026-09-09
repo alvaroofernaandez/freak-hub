@@ -18,4 +18,9 @@ type Repository interface {
 	Upsert(ctx context.Context, user User) (User, error)
 	// DeleteByClerkID removes a member. Deleting an unknown member is not an error.
 	DeleteByClerkID(ctx context.Context, clerkUserID string) error
+	// List returns members ordered by member-since ascending, tie-broken by id
+	// (ADR-0011). When after is nil it starts from the beginning; otherwise it
+	// returns only members strictly after that position. It returns at most
+	// limit rows.
+	List(ctx context.Context, after *Cursor, limit int) ([]User, error)
 }

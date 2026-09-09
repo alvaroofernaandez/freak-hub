@@ -1,4 +1,4 @@
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { CATEGORY_ORDER, type CategoryId } from "@/shared/ui/category-stripe";
 
 export type CategoryActivityStat = {
@@ -7,14 +7,8 @@ export type CategoryActivityStat = {
   inProgress: number;
 };
 
-/**
- * Completed/in-progress counts per category, derived from the same mock
- * library (docs/roadmap.md) used everywhere else — there is no per-member
- * library modelled yet, so every profile shows the same shared demo data.
- */
-export function activityStatsByCategory(
-  works: MockWork[],
-): CategoryActivityStat[] {
+/** Completed/in-progress counts per category, derived from a member's library. */
+export function activityStatsByCategory(works: Work[]): CategoryActivityStat[] {
   return CATEGORY_ORDER.map((category) => {
     const categoryWorks = works.filter((work) => work.category === category);
 

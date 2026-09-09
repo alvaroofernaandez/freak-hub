@@ -45,6 +45,14 @@ describe("CATEGORY_ORDER, CATEGORY_COLOR_CLASS and CATEGORY_LABELS", () => {
 });
 
 describe("CategoryStripe", () => {
+  it("eases the active segment as it grows, instead of snapping", () => {
+    render(<CategoryStripe activeCategory="manga" />);
+
+    const [segment] = screen.getAllByTestId("category-stripe-segment");
+    expect(segment).toHaveClass("transition-[flex-grow]");
+    expect(segment).toHaveClass("duration-200");
+  });
+
   it("renders the six segments, in order, each with its category color", () => {
     render(<CategoryStripe />);
 

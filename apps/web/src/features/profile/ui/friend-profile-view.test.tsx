@@ -42,7 +42,7 @@ describe("FriendProfileView", () => {
     );
 
     expect(
-      screen.getByText(/en el grupo desde septiembre de 2023/),
-    ).toBeInTheDocument();
+      screen.getByTestId("profile-member-since").closest("p"),
+    ).toHaveTextContent(/en el grupo desde septiembre de 2023/i);
   });
 });

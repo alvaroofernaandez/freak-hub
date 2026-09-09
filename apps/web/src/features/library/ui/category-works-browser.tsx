@@ -1,19 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import { Star } from "reicon-react";
 import {
   filterWorks,
-  type MockWork,
   sortWorks,
+  type Work,
   type WorkFilters,
   type WorkSort,
-} from "@/features/library/lib/mock-works";
+} from "@/features/library/lib/work";
 import { WorkCard } from "@/features/library/ui/work-card";
 import { cn } from "@/shared/lib/cn";
+import type { CategoryId } from "@/shared/ui/category-stripe";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Select } from "@/shared/ui/select";
 import { STATUS_ORDER } from "@/shared/ui/status-badge";
 
 type CategoryWorksBrowserProps = {
-  works: MockWork[];
+  works: Work[];
+  category: CategoryId;
 };
 
 const EMPTY_FILTERS: WorkFilters = {};
@@ -36,9 +42,16 @@ const chipClass = (pressed: boolean) =>
  * Client-side status/favourite/owned/search filtering, plus sorting, over a
  * category's works (docs/screens.md#biblioteca-por-categoría,
  * docs/design/high-fidelity-desktop.html §3). No API call: filters and sorts
- * the mock array already loaded on the page.
+ * the works array already loaded on the page.
+ *
+ * When the category has no works at all yet (there is no library endpoint,
+ * see docs/roadmap.md), the filter bar has nothing to filter, so it is
+ * replaced by an honest empty state with a real action: go add one.
  */
-export function CategoryWorksBrowser({ works }: CategoryWorksBrowserProps) {
+export function CategoryWorksBrowser({
+  works,
+  category,
+}: CategoryWorksBrowserProps) {
   const [filters, setFilters] = useState<WorkFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<WorkSort>("recent");
   const filtered = sortWorks(filterWorks(works, filters), sort);
@@ -50,10 +63,27 @@ export function CategoryWorksBrowser({ works }: CategoryWorksBrowserProps) {
     }));
   };
 
+  if (works.length === 0) {
+    return (
+      <EmptyState
+        title="Aún no has añadido ninguna obra a esta categoría"
+        description="Cuando añadas algo, aparecerá aquí."
+        action={
+          <Link
+            href={`/anadir/${category}`}
+            className="inline-flex items-center rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-ink"
+          >
+            Añadir una obra
+          </Link>
+        }
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-border-soft bg-surface p-3">
-        {STATUS_ORDER.map(({ status, icon, label }) => (
+        {STATUS_ORDER.map(({ status, Icon, label }) => (
           <button
             key={status}
             type="button"
@@ -61,7 +91,8 @@ export function CategoryWorksBrowser({ works }: CategoryWorksBrowserProps) {
             onClick={() => toggleStatus(status)}
             className={chipClass(filters.status === status)}
           >
-            {icon} {label}
+            <Icon size={14} aria-hidden="true" />
+            {label}
           </button>
         ))}
         <div className="mx-1.5 h-5 w-px bg-border" aria-hidden="true" />
@@ -76,7 +107,8 @@ export function CategoryWorksBrowser({ works }: CategoryWorksBrowserProps) {
           }
           className={chipClass(filters.favouriteOnly ?? false)}
         >
-          ☆ Favoritos
+          <Star size={14} aria-hidden="true" />
+          Favoritos
         </button>
         <button
           type="button"
@@ -102,23 +134,14 @@ export function CategoryWorksBrowser({ works }: CategoryWorksBrowserProps) {
               search: event.target.value,
             }))
           }
-          className="min-w-[170px] flex-1 rounded-full border border-border bg-ground-deep px-3.5 py-2 text-xs text-ink placeholder:text-ink-faint"
+          className="min-w-[170px] flex-1 rounded-full border border-border bg-ground-deep px-3.5 py-2 text-xs text-ink placeholder:text-ink-muted"
         />
-        <label className="flex items-center gap-2 text-xs text-ink-muted">
-          <span className="sr-only">Ordenar</span>
-          <select
-            aria-label="Ordenar"
-            value={sort}
-            onChange={(event) => setSort(event.target.value as WorkSort)}
-            className="rounded-full border border-border bg-ground-deep px-3.5 py-2 text-xs text-ink-muted"
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <Select
+          label="Ordenar"
+          value={sort}
+          onValueChange={(value) => setSort(value as WorkSort)}
+          options={[...SORT_OPTIONS]}
+        />
       </div>
 
       {filtered.length > 0 ? (

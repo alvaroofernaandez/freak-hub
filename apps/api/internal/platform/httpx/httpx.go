@@ -24,6 +24,10 @@ const (
 	CodeMissingToken    ErrorCode = "missing_token"
 	CodeInvalidToken    ErrorCode = "invalid_token"
 	CodeUnknownIdentity ErrorCode = "unknown_identity"
+	// CodeInvalidLimit and CodeInvalidCursor are the pagination error codes
+	// ADR-0011 defines for every listing endpoint.
+	CodeInvalidLimit  ErrorCode = "invalid_limit"
+	CodeInvalidCursor ErrorCode = "invalid_cursor"
 )
 
 // ErrorBody is the single error envelope the whole API answers with.

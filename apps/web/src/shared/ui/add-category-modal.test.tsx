@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -36,6 +36,21 @@ function renderModal() {
 describe("AddCategoryModal", () => {
   beforeEach(() => {
     push.mockClear();
+  });
+
+  it("flashes the chosen category before navigating, instead of leaving instantly", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await user.click(screen.getByRole("button", { name: "Añadir" }));
+
+    const anime = screen.getByRole("button", { name: CATEGORY_LABELS.anime });
+    await user.click(anime);
+
+    // The confirmation is visible first, and the route change waits for it.
+    expect(anime).toHaveAttribute("data-confirming");
+    expect(push).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/anadir/anime"));
   });
 
   it("is not rendered until something opens it", () => {
@@ -80,7 +95,8 @@ describe("AddCategoryModal", () => {
     await user.click(screen.getByRole("button", { name: "Añadir" }));
     await user.click(screen.getByRole("button", { name: "TCG" }));
 
-    expect(push).toHaveBeenCalledWith("/anadir/tcg");
+    // Navigation waits for the confirmation flash (#43).
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/anadir/tcg"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 

@@ -65,8 +65,12 @@ func NewRouter(deps Deps) http.Handler {
 		r.Use(auth.Middleware(deps.Verifier))
 
 		r.Get("/me", handlers.me)
+		r.Patch("/me", handlers.patchMe)
+		r.Post("/me/avatar", handlers.uploadAvatar)
+		r.Get("/members", handlers.listMembers)
 		r.Post("/invitations", handlers.createInvitation)
 		r.Get("/invitations", handlers.listInvitations)
+		r.Get("/invitations/group", handlers.listGroupInvitations)
 	})
 
 	return router

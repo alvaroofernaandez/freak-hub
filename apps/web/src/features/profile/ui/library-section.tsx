@@ -1,8 +1,9 @@
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { WorkCard } from "@/features/library/ui/work-card";
+import { EmptyState } from "@/shared/ui/empty-state";
 
 type LibrarySectionProps = {
-  works: MockWork[];
+  works: Work[];
 };
 
 /** The profile's public library: favourites only (docs/screens.md, ADR-0009). */
@@ -10,7 +11,12 @@ export function LibrarySection({ works }: LibrarySectionProps) {
   const favourites = works.filter((work) => work.isFavourite);
 
   if (favourites.length === 0) {
-    return <p className="text-sm text-ink-muted">Sin favoritos todavía.</p>;
+    return (
+      <EmptyState
+        title="Sin favoritos todavía"
+        description="Aquí aparecerán las obras que marques como favoritas."
+      />
+    );
   }
 
   return (

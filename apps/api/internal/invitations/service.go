@@ -98,6 +98,34 @@ func (s *Service) ListMine(ctx context.Context, inviterID uuid.UUID) ([]Invitati
 	return s.repo.ListByInviter(ctx, inviterID)
 }
 
+// ListGroup returns a page of every invitation the group has ever sent,
+// newest first (ADR-0011), and the cursor to fetch the next page, or nil when
+// this is the last one. Every status is included — pending, accepted and
+// revoked alike — so a caller such as the "invitados pendientes" screen can
+// filter client-side without ListGroup closing that door.
+func (s *Service) ListGroup(ctx context.Context, after *Cursor, limit int) ([]GroupEntry, *Cursor, error) {
+	if limit < MinListLimit || limit > MaxListLimit {
+		return nil, nil, ErrInvalidLimit
+	}
+
+	// Ask for one extra row: its presence, not a COUNT(*), is what tells us
+	// whether another page follows (ADR-0011).
+	rows, err := s.repo.ListGroup(ctx, after, limit+1)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list group invitations: %w", err)
+	}
+
+	if len(rows) <= limit {
+		return rows, nil, nil
+	}
+
+	rows = rows[:limit]
+	last := rows[len(rows)-1]
+	next := Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
+
+	return rows, &next, nil
+}
+
 // MarkAccepted closes the loop when Clerk reports the invitation was used.
 func (s *Service) MarkAccepted(ctx context.Context, rawEmail string) error {
 	email, err := normaliseEmail(rawEmail)

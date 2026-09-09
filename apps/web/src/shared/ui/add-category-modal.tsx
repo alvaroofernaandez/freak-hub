@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useCallback, useContext, useId, useState } from "react";
+import { X } from "reicon-react";
 import { cn } from "@/shared/lib/cn";
 import {
+  CATEGORY_ACCENT_CLASS,
   CATEGORY_COLOR_CLASS,
   CATEGORY_LABELS,
   CATEGORY_ORDER,
@@ -82,6 +84,9 @@ export function AddCategoryModalDimmer({
   );
 }
 
+/** Long enough to read as confirmation, short enough not to feel like lag. */
+const CONFIRM_FLASH_MS = 180;
+
 /**
  * The modal itself (docs/design/high-fidelity-desktop.html §5 · AÑADIR —
  * ELEGIR CATEGORÍA): the category grid, wrapped in the generic `Dialog`
@@ -92,10 +97,27 @@ export function AddCategoryModalHost() {
   const { isOpen, close } = useAddCategoryModal();
   const router = useRouter();
   const titleId = useId();
+  const [confirming, setConfirming] = useState<CategoryId | null>(null);
 
   function selectCategory(category: CategoryId) {
-    router.push(`/anadir/${category}`);
-    close();
+    const skipFlash =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+    if (skipFlash) {
+      router.push(`/anadir/${category}`);
+      close();
+      return;
+    }
+
+    // Show which category was chosen before the route changes: picking one is
+    // rare enough to deserve the beat, and it confirms the tap was registered.
+    setConfirming(category);
+    window.setTimeout(() => {
+      router.push(`/anadir/${category}`);
+      close();
+      setConfirming(null);
+    }, CONFIRM_FLASH_MS);
   }
 
   return (
@@ -108,9 +130,9 @@ export function AddCategoryModalHost() {
           type="button"
           aria-label="Cerrar"
           onClick={close}
-          className="text-[15px] text-ink-faint transition-opacity hover:opacity-80"
+          className="text-[15px] text-ink-muted transition-opacity hover:opacity-80"
         >
-          ✕
+          <X size={16} aria-hidden="true" />
         </button>
       </div>
       <div
@@ -122,7 +144,17 @@ export function AddCategoryModalHost() {
             key={category}
             type="button"
             onClick={() => selectCategory(category)}
-            className="flex flex-col items-center gap-2.5 rounded-[10px] border border-border bg-surface px-3 py-[22px] text-center text-[13px] font-semibold text-ink transition-opacity hover:opacity-90"
+            data-confirming={confirming === category || undefined}
+            className={cn(
+              "flex flex-col items-center gap-2.5 rounded-[10px] border border-border bg-surface px-3 py-[22px] text-center text-[13px] font-semibold text-ink",
+              "transition-[transform,box-shadow,opacity] duration-150 ease-out hover:opacity-90",
+              "motion-reduce:transition-none",
+              confirming === category &&
+                cn(
+                  CATEGORY_ACCENT_CLASS[category],
+                  "scale-105 ring-2 ring-current",
+                ),
+            )}
           >
             <span
               aria-hidden="true"

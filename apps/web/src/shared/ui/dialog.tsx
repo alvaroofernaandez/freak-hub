@@ -1,7 +1,7 @@
 "use client";
 
-import type { KeyboardEvent, ReactNode } from "react";
-import { useEffect, useRef } from "react";
+import * as RadixDialog from "@radix-ui/react-dialog";
+import { type ReactNode, useEffect, useRef } from "react";
 import { cn } from "@/shared/lib/cn";
 
 type DialogProps = {
@@ -10,37 +10,23 @@ type DialogProps = {
   /** id of the element (usually an <h2>) inside `children` that names the dialog. */
   titleId: string;
   children: ReactNode;
-  /** Tailwind width cap for the panel, e.g. "max-w-[560px]". Defaults to the #26 modal's width. */
+  /** Tailwind width cap for the panel, e.g. "max-w-[560px]". */
   maxWidthClassName?: string;
   /** Extra classes for the panel, merged (last wins) over the default padding/gap. */
   panelClassName?: string;
 };
 
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  );
-}
-
 /**
- * Generic accessible dialog: fixed backdrop, centered panel, focus moved in on
- * open, Tab/Shift+Tab trapped inside, Escape closes and returns focus to
- * whatever had focus when the dialog opened. Extracted from
- * AddCategoryModalHost (add-category-modal.tsx, #26) so it can be reused
- * for any centered modal in the app instead of re-implementing this logic
- * per feature (#30).
+ * Every centered modal in the app. Built on Radix so focus trapping, the
+ * portal, scroll locking, `aria-modal` and outside-click dismissal come from
+ * one well-tested implementation instead of being hand-rolled per feature.
  *
- * Hand-built rather than the native `<dialog>` + showModal(), for the same
- * reasons #26 documented: jsdom (this repo's test environment) has no
- * showModal() implementation, and a native `<dialog>`'s ::backdrop can't dim
- * page content the way some callers (e.g. the add-category modal) need.
+ * The overlay is deliberately heavy (ground-deep at 85%): a modal should read
+ * as the screen behind it being switched off, not tinted.
  *
- * Title and any close affordance are left to the caller via `children` —
- * different dialogs style their header differently — but the caller must
- * render the title element with `id={titleId}` so `aria-labelledby` resolves.
+ * Title and any close affordance stay with the caller via `children`, but the
+ * caller must render the title element with `id={titleId}` so
+ * `aria-labelledby` resolves.
  */
 export function Dialog({
   isOpen,
@@ -50,81 +36,49 @@ export function Dialog({
   maxWidthClassName = "max-w-[640px]",
   panelClassName,
 }: DialogProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
+  // This dialog is controlled from the outside and has no RadixDialog.Trigger,
+  // so Radix has no way to know what opened it. Remember it here and restore
+  // focus on close, or a keyboard user is dropped back at the top of the page.
+  const openerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
-
-    // Captured before we move focus below, so it's still whatever triggered
-    // the open (e.g. the button that was just clicked).
-    triggerRef.current =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-
-    const dialog = dialogRef.current;
-    if (dialog) {
-      getFocusableElements(dialog)[0]?.focus();
+    if (isOpen) {
+      openerRef.current = document.activeElement as HTMLElement | null;
     }
-
-    return () => {
-      triggerRef.current?.focus();
-      triggerRef.current = null;
-    };
   }, [isOpen]);
 
-  if (!isOpen) {
-    return null;
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onClose();
-      return;
-    }
-
-    if (event.key !== "Tab") return;
-
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-
-    const focusable = getFocusableElements(dialog);
-    if (focusable.length === 0) return;
-
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: "oklch(0.05 0.01 272 / 0.55)" }}
+    <RadixDialog.Root
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onKeyDown={handleKeyDown}
-        className={cn(
-          "mx-4 flex w-full flex-col gap-5 rounded-2xl border border-border bg-surface-raised p-[30px]",
-          maxWidthClassName,
-          panelClassName,
-        )}
-        style={{ boxShadow: "0 24px 60px -20px oklch(0.05 0.01 272 / 0.6)" }}
-      >
-        {children}
-      </div>
-    </div>
+      <RadixDialog.Portal>
+        <RadixDialog.Overlay
+          data-dialog-overlay
+          className="fixed inset-0 z-50 bg-ground-deep/85 data-[state=open]:animate-dialog-overlay-in motion-reduce:animate-none"
+        />
+        <RadixDialog.Content
+          aria-labelledby={titleId}
+          // Radix does not set this itself; WAI-ARIA asks for it on a modal.
+          aria-modal="true"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            openerRef.current?.focus();
+          }}
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-5 rounded-2xl border border-border bg-surface p-6 shadow-2xl",
+            "data-[state=open]:animate-dialog-panel-in motion-reduce:animate-none",
+            maxWidthClassName,
+            panelClassName,
+          )}
+        >
+          {children}
+        </RadixDialog.Content>
+      </RadixDialog.Portal>
+    </RadixDialog.Root>
   );
 }

@@ -1,16 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { WorkCard } from "@/features/library/ui/work-card";
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   type CategoryId,
 } from "@/shared/ui/category-stripe";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Select } from "@/shared/ui/select";
 
 type TopSectionProps = {
-  works: MockWork[];
+  works: Work[];
 };
 
 /** The profile's best-rated works, filterable by category (docs/screens.md, ADR-0010). */
@@ -30,23 +32,21 @@ export function TopSection({ works }: TopSectionProps) {
 
   return (
     <div className="space-y-6">
-      <label className="flex items-center gap-2 text-sm text-ink-muted">
+      <div className="flex items-center gap-2 text-sm text-ink-muted">
         Categoría
-        <select
+        <Select
+          label="Categoría"
           value={category}
-          onChange={(event) =>
-            setCategory(event.target.value as CategoryId | "all")
-          }
-          className="rounded-lg border border-border bg-surface px-3 py-1.5 text-ink"
-        >
-          <option value="all">Todas</option>
-          {categoriesWithRatedWorks.map((id) => (
-            <option key={id} value={id}>
-              {CATEGORY_LABELS[id]}
-            </option>
-          ))}
-        </select>
-      </label>
+          onValueChange={(value) => setCategory(value as CategoryId | "all")}
+          options={[
+            { value: "all", label: "Todas" },
+            ...categoriesWithRatedWorks.map((id) => ({
+              value: id,
+              label: CATEGORY_LABELS[id],
+            })),
+          ]}
+        />
+      </div>
 
       {top.length > 0 ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
@@ -55,7 +55,10 @@ export function TopSection({ works }: TopSectionProps) {
           ))}
         </div>
       ) : (
-        <p className="text-sm text-ink-muted">Sin obras valoradas todavía.</p>
+        <EmptyState
+          title="Sin obras valoradas todavía"
+          description="Aquí aparecerán tus obras mejor valoradas."
+        />
       )}
     </div>
   );
