@@ -1,18 +1,27 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
+import {
+  MOCK_PENDING_RECOMMENDATIONS,
+  MOCK_RECENT_ACTIVITY,
+} from "@/features/home/lib/mock-home";
+import { HomeDashboard } from "@/features/home/ui/home-dashboard";
+import { MOCK_WORKS } from "@/features/library/lib/mock-works";
 import type { Member } from "@/shared/api/types";
 import { ApiError, apiFetch } from "@/shared/lib/api-client";
 
 export const metadata: Metadata = { title: "Inicio" };
 
 /**
- * Smoke screen for the whole stack: it proves the Clerk session reaches the Go
- * API and that the API resolved it to a row in Postgres. Replace it with the
- * real dashboard when the first domain feature lands.
+ * Personal panel: what's in progress, pending recommendations, recent
+ * activity (docs/screens.md#inicio) — still backed by mock data
+ * (docs/roadmap.md). The API status block below is the real smoke test for
+ * the stack and stays wired to the actual endpoint.
  */
 export default async function HomePage() {
   const { getToken } = await auth();
   const token = await getToken();
+  const user = await currentUser();
+  const displayName = user?.fullName ?? user?.username ?? "";
 
   let profile: Member | null = null;
   let error: string | null = null;
@@ -26,18 +35,21 @@ export default async function HomePage() {
         : "No se pudo contactar con la API";
   }
 
+  const inProgressWorks = MOCK_WORKS.filter(
+    (work) => work.status === "in_progress",
+  );
+
   return (
-    <section className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold">Tu biblioteca</h1>
-        <p className="text-content-muted">
-          Todavía no hay nada que registrar. Las colecciones, la lista de
-          pendientes y las recomendaciones llegarán en las siguientes entregas.
-        </p>
-      </div>
+    <section className="space-y-8">
+      <HomeDashboard
+        displayName={displayName}
+        inProgressWorks={inProgressWorks}
+        recommendations={MOCK_PENDING_RECOMMENDATIONS}
+        activity={MOCK_RECENT_ACTIVITY}
+      />
 
       <div className="rounded-xl border border-border bg-surface-raised p-5">
-        <h2 className="font-mono text-xs uppercase tracking-widest text-content-muted">
+        <h2 className="font-mono text-xs uppercase tracking-widest text-ink-muted">
           Estado de la conexión con la API
         </h2>
         {profile ? (
@@ -46,7 +58,7 @@ export default async function HomePage() {
             <span className="font-mono">@{profile.username}</span>.
           </p>
         ) : (
-          <p className="mt-2 text-sm text-content-muted">
+          <p className="mt-2 text-sm text-ink-muted">
             Sin respuesta de la API ({error}). Arranca el backend con{" "}
             <code className="font-mono">pnpm api:dev</code>.
           </p>

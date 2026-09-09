@@ -1,23 +1,40 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
- * Provisional design tokens.
+ * Design tokens, per ADR-0008 and docs/design.md.
  *
- * The visual direction is not decided yet (see docs/design.md). These values
- * exist so the auth flow is legible and accessible today, and are meant to be
- * replaced wholesale once the direction is chosen. Do not build a component
- * library on top of them.
+ * Dark by default, neutral hue 272, six category colors. These are the exact
+ * values already used and accepted in the high-fidelity desktop mockup
+ * (docs/design/high-fidelity-desktop.html). Light theme is not implemented
+ * yet: there is no theme-switch mechanism (that lands with /ajustes).
  * ------------------------------------------------------------------------- */
 @theme {
-  --color-surface: oklch(0.16 0.02 275);
-  --color-surface-raised: oklch(0.21 0.025 275);
-  --color-border: oklch(0.32 0.03 275);
-  --color-content: oklch(0.95 0.01 275);
-  --color-content-muted: oklch(0.72 0.02 275);
-  --color-accent: oklch(0.72 0.18 300);
-  --color-accent-content: oklch(0.15 0.03 300);
+  --color-ground: oklch(0.130 0.020 272);
+  --color-ground-deep: oklch(0.095 0.018 272);
+  --color-surface: oklch(0.185 0.024 272);
+  --color-surface-raised: oklch(0.240 0.028 272);
+  --color-border: oklch(0.340 0.032 272);
+  --color-border-soft: oklch(0.270 0.028 272);
+  --color-ink: oklch(0.960 0.008 272);
+  --color-ink-muted: oklch(0.700 0.020 272);
+  --color-ink-faint: oklch(0.480 0.020 272);
 
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-accent: oklch(0.780 0.150 78);
+  --color-accent-ink: oklch(0.180 0.030 78);
+
+  --color-cat-anime: var(--color-accent);
+  --color-cat-manga: oklch(0.760 0.160 32);
+  --color-cat-games: oklch(0.800 0.170 150);
+  --color-cat-films: oklch(0.780 0.130 196);
+  --color-cat-board: oklch(0.800 0.120 226);
+  --color-cat-tcg: oklch(0.760 0.180 300);
+
+  --color-danger: oklch(0.660 0.190 22);
+  --color-success: var(--color-cat-games);
+  --color-warning: var(--color-accent);
+
+  --font-sans: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bungee), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
@@ -27,8 +44,8 @@
   }
 
   body {
-    background-color: var(--color-surface);
-    color: var(--color-content);
+    background-color: var(--color-ground);
+    color: var(--color-ink);
     font-family: var(--font-sans);
   }
 
