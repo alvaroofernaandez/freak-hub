@@ -16,7 +16,8 @@
       "!apps/api",
       "!packages/contracts/generated",
       "!docs/design/high-fidelity-desktop.html",
-      "!docs/wireframes/low-fidelity-wireframes.html"
+      "!docs/wireframes/low-fidelity-wireframes.html",
+      "!**/.agents"
     ]
   },
   "formatter": {
