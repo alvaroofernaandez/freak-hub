@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { MOCK_WORKS, worksByCategory } from "@/features/library/lib/mock-works";
+import { worksByCategory } from "@/features/library/lib/work";
 import { CategoryWorksBrowser } from "@/features/library/ui/category-works-browser";
 import { SetActiveCategory } from "@/shared/ui/active-category";
 import {
@@ -24,7 +24,11 @@ export async function generateMetadata({
   return { title: isCategoryId(categoria) ? CATEGORY_LABELS[categoria] : "" };
 }
 
-/** A category's own library listing, filterable client-side (docs/screens.md). */
+/**
+ * A category's own library listing, filterable client-side (docs/screens.md).
+ * There is no library endpoint yet (docs/roadmap.md), so every category is
+ * empty for now; `CategoryWorksBrowser` renders the honest empty state.
+ */
 export default async function CategoryLibraryPage({
   params,
 }: CategoryLibraryPageProps) {
@@ -32,16 +36,15 @@ export default async function CategoryLibraryPage({
 
   if (!isCategoryId(categoria)) {
     notFound();
-    return;
   }
 
-  const works = worksByCategory(MOCK_WORKS, categoria);
+  const works = worksByCategory([], categoria);
 
   return (
     <section className="space-y-6">
       <SetActiveCategory category={categoria} />
       <h1 className="text-3xl font-semibold">{CATEGORY_LABELS[categoria]}</h1>
-      <CategoryWorksBrowser works={works} />
+      <CategoryWorksBrowser works={works} category={categoria} />
     </section>
   );
 }

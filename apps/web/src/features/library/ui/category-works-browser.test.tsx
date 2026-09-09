@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { CategoryWorksBrowser } from "./category-works-browser";
 
-const WORKS: MockWork[] = [
+const WORKS: Work[] = [
   {
     id: "1",
     title: "Terminada y favorita",
@@ -33,7 +33,7 @@ const WORKS: MockWork[] = [
 
 describe("CategoryWorksBrowser", () => {
   it("renders every work by default", () => {
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
     for (const work of WORKS) {
       expect(screen.getByText(work.title)).toBeInTheDocument();
@@ -41,16 +41,16 @@ describe("CategoryWorksBrowser", () => {
   });
 
   it("renders the six status filters plus favourite and owned as pressable chips", () => {
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
     const expectedChips = [
-      "☆ Wishlist",
-      "○ Pendiente",
-      "◐ En curso",
-      "● Terminado",
-      "✕ Abandonado",
-      "❚❚ En pausa",
-      "☆ Favoritos",
+      "Wishlist",
+      "Pendiente",
+      "En curso",
+      "Terminado",
+      "Abandonado",
+      "En pausa",
+      "Favoritos",
       "En propiedad",
     ];
 
@@ -62,9 +62,9 @@ describe("CategoryWorksBrowser", () => {
 
   it("filters by status when a status chip is pressed", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    const chip = screen.getByRole("button", { name: "◐ En curso" });
+    const chip = screen.getByRole("button", { name: "En curso" });
     await user.click(chip);
 
     expect(chip).toHaveAttribute("aria-pressed", "true");
@@ -75,9 +75,9 @@ describe("CategoryWorksBrowser", () => {
 
   it("un-presses a status chip clicked twice, showing every status again", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    const chip = screen.getByRole("button", { name: "◐ En curso" });
+    const chip = screen.getByRole("button", { name: "En curso" });
     await user.click(chip);
     await user.click(chip);
 
@@ -89,10 +89,10 @@ describe("CategoryWorksBrowser", () => {
 
   it("pressing one status chip releases the previously pressed one", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    const inProgress = screen.getByRole("button", { name: "◐ En curso" });
-    const wishlist = screen.getByRole("button", { name: "☆ Wishlist" });
+    const inProgress = screen.getByRole("button", { name: "En curso" });
+    const wishlist = screen.getByRole("button", { name: "Wishlist" });
 
     await user.click(inProgress);
     await user.click(wishlist);
@@ -104,9 +104,9 @@ describe("CategoryWorksBrowser", () => {
 
   it("filters by favourite only when the favourite chip is pressed", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    const chip = screen.getByRole("button", { name: "☆ Favoritos" });
+    const chip = screen.getByRole("button", { name: "Favoritos" });
     await user.click(chip);
 
     expect(chip).toHaveAttribute("aria-pressed", "true");
@@ -116,7 +116,7 @@ describe("CategoryWorksBrowser", () => {
 
   it("filters by owned only when the owned chip is pressed", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
     const chip = screen.getByRole("button", { name: "En propiedad" });
     await user.click(chip);
@@ -129,9 +129,9 @@ describe("CategoryWorksBrowser", () => {
 
   it("shows an empty state when no work matches the filters", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    await user.click(screen.getByRole("button", { name: "✕ Abandonado" }));
+    await user.click(screen.getByRole("button", { name: "Abandonado" }));
 
     expect(
       screen.getByText(/no hay obras con estos filtros/i),
@@ -140,7 +140,7 @@ describe("CategoryWorksBrowser", () => {
 
   it("filters by a text search matching the title", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
     const search = screen.getByRole("searchbox", { name: /buscar/i });
     await user.type(search, "wishlist");
@@ -152,7 +152,7 @@ describe("CategoryWorksBrowser", () => {
 
   it("search is case-insensitive", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
     const search = screen.getByRole("searchbox", { name: /buscar/i });
     await user.type(search, "TERMINADA");
@@ -162,20 +162,19 @@ describe("CategoryWorksBrowser", () => {
   });
 
   it("offers a sort selector defaulting to Recientes", () => {
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
+    // A Radix trigger shows the label, not the underlying value.
     const sort = screen.getByRole("combobox", { name: /ordenar/i });
-    expect(sort).toHaveValue("recent");
+    expect(sort).toHaveTextContent("Recientes");
   });
 
   it("sorts alphabetically by title when Alfabético is selected", async () => {
     const user = userEvent.setup();
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /ordenar/i }),
-      "alphabetical",
-    );
+    await user.click(screen.getByRole("combobox", { name: /ordenar/i }));
+    await user.click(await screen.findByRole("option", { name: "Alfabético" }));
 
     const titles = screen
       .getAllByTestId("work-card-title")
@@ -189,17 +188,15 @@ describe("CategoryWorksBrowser", () => {
 
   it("sorts by rating, highest first, when Valoración is selected", async () => {
     const user = userEvent.setup();
-    const rated: MockWork[] = [
+    const rated: Work[] = [
       { ...WORKS[0], id: "a", title: "Ocho", rating: 8 },
       { ...WORKS[0], id: "b", title: "Diez", rating: 10 },
       { ...WORKS[0], id: "c", title: "Sin nota", rating: undefined },
     ];
-    render(<CategoryWorksBrowser works={rated} />);
+    render(<CategoryWorksBrowser works={rated} category="anime" />);
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: /ordenar/i }),
-      "rating",
-    );
+    await user.click(screen.getByRole("combobox", { name: /ordenar/i }));
+    await user.click(await screen.findByRole("option", { name: "Valoración" }));
 
     const titles = screen
       .getAllByTestId("work-card-title")
@@ -208,10 +205,29 @@ describe("CategoryWorksBrowser", () => {
   });
 
   it("renders works in a six-column grid on desktop", () => {
-    render(<CategoryWorksBrowser works={WORKS} />);
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
     expect(screen.getByTestId("category-works-grid")).toHaveClass(
       "lg:grid-cols-6",
     );
+  });
+
+  it("shows an empty state instead of the filter bar when the category has no works at all", () => {
+    render(<CategoryWorksBrowser works={[]} category="anime" />);
+
+    expect(
+      screen.getByText(/aún no has añadido ninguna obra/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("searchbox", { name: /buscar/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("links the empty state's action to the category's add-search page", () => {
+    render(<CategoryWorksBrowser works={[]} category="tcg" />);
+
+    expect(
+      screen.getByRole("link", { name: /añadir una obra/i }),
+    ).toHaveAttribute("href", "/anadir/tcg");
   });
 });

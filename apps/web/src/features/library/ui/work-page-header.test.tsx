@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { WorkPageHeader } from "./work-page-header";
 
-const BASE_WORK: MockWork = {
+const BASE_WORK: Work = {
   id: "anime-fma",
   title: "Fullmetal Alchemist: Brotherhood",
   category: "anime",
@@ -11,7 +11,7 @@ const BASE_WORK: MockWork = {
   isFavourite: false,
 };
 
-const BOARDGAME_WORK: MockWork = {
+const BOARDGAME_WORK: Work = {
   id: "board-wingspan",
   title: "Wingspan",
   category: "boardgame",
@@ -25,6 +25,20 @@ const BOARDGAME_WORK: MockWork = {
 };
 
 describe("WorkPageHeader", () => {
+  it("shows how far along the work is when it has progress", () => {
+    render(<WorkPageHeader work={{ ...BASE_WORK, progress: 40 }} />);
+
+    expect(
+      screen.getByRole("progressbar", { name: /progreso/i }),
+    ).toHaveAttribute("aria-valuenow", "40");
+  });
+
+  it("shows no progress bar when the work has no progress recorded", () => {
+    render(<WorkPageHeader work={{ ...BASE_WORK, progress: undefined }} />);
+
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
   it("shows a cover placeholder", () => {
     render(<WorkPageHeader work={BASE_WORK} />);
 

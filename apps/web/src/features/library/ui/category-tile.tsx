@@ -1,10 +1,14 @@
+import Image from "next/image";
 import Link from "next/link";
-import { cn } from "@/shared/lib/cn";
+import { ArrowRight } from "reicon-react";
 import {
-  CATEGORY_COLOR_CLASS,
-  CATEGORY_LABELS,
-  type CategoryId,
-} from "@/shared/ui/category-stripe";
+  CATEGORY_ART,
+  CATEGORY_TEXT_CLASS,
+  cornerGlow,
+} from "@/features/library/lib/category-art";
+import { cn } from "@/shared/lib/cn";
+import { CATEGORY_LABELS, type CategoryId } from "@/shared/ui/category-stripe";
+import { interactiveCardClasses } from "@/shared/ui/interactive-card";
 
 type CategoryTileProps = {
   category: CategoryId;
@@ -12,39 +16,93 @@ type CategoryTileProps = {
   href: string;
 };
 
+/** Only for assistive tech: the tile shows the bare figure. */
 function pluralizeWorks(count: number): string {
   return count === 1 ? "1 obra" : `${count} obras`;
 }
 
-/** The lobby's entry point into one category (docs/screens.md#lobby-de-biblioteca). */
+/**
+ * The lobby's entry point into one category (docs/screens.md#lobby-de-biblioteca).
+ *
+ * Each category is a character in the roster (docs/design.md#el-concepto):
+ * its name carries its own colour and its character leans in from the right
+ * edge. The artwork is decoration, so it fades out well before the text and
+ * never competes with the count.
+ */
 export function CategoryTile({ category, count, href }: CategoryTileProps) {
+  const art = CATEGORY_ART[category];
+
   return (
     <Link
       href={href}
       data-testid="category-tile"
-      className="relative flex h-[132px] flex-col justify-between rounded-[14px] border border-border bg-surface p-4 transition-opacity hover:opacity-90 md:h-[150px] md:p-5 lg:h-[172px] lg:p-6"
+      className={cn(
+        "group relative flex h-[190px] flex-col justify-between overflow-hidden rounded-2xl border border-border bg-surface p-5 md:h-[210px] lg:h-[230px] lg:p-6",
+        interactiveCardClasses(category),
+      )}
     >
       <div
-        data-testid="category-tile-icon"
-        className={cn(
-          "h-[22px] w-[22px] rounded-[6px] md:h-6 md:w-6 lg:h-[26px] lg:w-[26px] lg:rounded-[7px]",
-          CATEGORY_COLOR_CLASS[category],
-        )}
+        aria-hidden="true"
+        data-testid="category-tile-glow"
+        style={{ backgroundImage: cornerGlow(category) }}
+        className="pointer-events-none absolute inset-0 opacity-80 transition-opacity duration-150 group-hover:opacity-100 motion-reduce:transition-none"
       />
-      <div>
-        <p className="text-[15px] font-bold text-ink md:text-[17px] lg:text-[19px]">
+
+      {/* A hairline of light along the top edge, so the card reads as a raised
+          surface catching the same light as the corner. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-ink/15 to-transparent"
+      />
+
+      {art ? (
+        <div
+          aria-hidden="true"
+          data-testid="category-tile-art"
+          data-art={art}
+          className={cn(
+            "pointer-events-none absolute right-0 bottom-0 top-3 w-[52%]",
+            // Fades before it reaches the name, so the art never fights the text.
+            "[mask-image:linear-gradient(to_right,transparent,black_28%)]",
+          )}
+        >
+          <Image
+            src={art}
+            alt=""
+            fill
+            sizes="(min-width: 640px) 22vw, 45vw"
+            className="object-contain object-bottom-right"
+          />
+        </div>
+      ) : null}
+
+      <div className="relative z-10 flex justify-end">
+        <ArrowRight
+          size={16}
+          aria-hidden="true"
+          className="text-ink-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100 motion-reduce:transition-none"
+        />
+      </div>
+
+      <div className="relative z-10 flex max-w-[62%] items-baseline gap-2.5">
+        <p
+          data-testid="category-tile-name"
+          className={cn(
+            "font-display text-xl leading-tight lg:text-2xl",
+            CATEGORY_TEXT_CLASS[category],
+          )}
+        >
           {CATEGORY_LABELS[category]}
         </p>
-        <p className="mt-[3px] font-mono text-[11px] text-ink-muted md:text-xs lg:mt-1">
-          {pluralizeWorks(count)}
-        </p>
+        <span
+          data-testid="category-tile-count"
+          aria-hidden="true"
+          className="font-mono text-sm text-ink-muted lg:text-base"
+        >
+          {count}
+        </span>
+        <span className="sr-only">{pluralizeWorks(count)}</span>
       </div>
-      <span
-        aria-hidden="true"
-        className="absolute hidden text-[15px] text-ink-faint md:bottom-4 md:right-5 md:block lg:bottom-5 lg:right-6 lg:text-base"
-      >
-        →
-      </span>
     </Link>
   );
 }

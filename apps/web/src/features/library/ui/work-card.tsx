@@ -1,10 +1,13 @@
 import Link from "next/link";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import { Star } from "reicon-react";
+import type { Work } from "@/features/library/lib/work";
 import { CoverPlaceholder } from "@/features/library/ui/cover-placeholder";
+import { cn } from "@/shared/lib/cn";
+import { interactiveCardClasses } from "@/shared/ui/interactive-card";
 import { StatusBadge } from "@/shared/ui/status-badge";
 
 type WorkCardProps = {
-  work: MockWork;
+  work: Work;
 };
 
 /**
@@ -19,7 +22,10 @@ export function WorkCard({ work }: WorkCardProps) {
   return (
     <Link
       href={`/obras/${work.id}`}
-      className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface"
+      className={cn(
+        "flex flex-col overflow-hidden rounded-xl border border-border bg-surface",
+        interactiveCardClasses(work.category),
+      )}
     >
       <div className="relative">
         <CoverPlaceholder
@@ -32,7 +38,7 @@ export function WorkCard({ work }: WorkCardProps) {
             aria-label="Favorito"
             className="absolute right-2 top-2 text-lg"
           >
-            ★
+            <Star size={18} weight="Filled" />
           </span>
         ) : null}
       </div>

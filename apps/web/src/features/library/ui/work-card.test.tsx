@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { WorkCard } from "./work-card";
 
-const BASE_WORK: MockWork = {
+const BASE_WORK: Work = {
   id: "anime-fma",
   title: "Fullmetal Alchemist: Brotherhood",
   category: "anime",

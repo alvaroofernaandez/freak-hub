@@ -1,13 +1,14 @@
-import type { MockWork } from "@/features/library/lib/mock-works";
+import type { Work } from "@/features/library/lib/work";
 import { CoverPlaceholder } from "@/features/library/ui/cover-placeholder";
 import { cn } from "@/shared/lib/cn";
 import {
   CATEGORY_ACCENT_CLASS,
   CATEGORY_LABELS,
 } from "@/shared/ui/category-stripe";
+import { ProgressBar } from "@/shared/ui/progress-bar";
 
 type WorkPageHeaderProps = {
-  work: MockWork;
+  work: Work;
 };
 
 /**
@@ -16,7 +17,7 @@ type WorkPageHeaderProps = {
  * today (docs/design/high-fidelity-desktop.html §4); other categories will
  * reuse this once their own metadata lands.
  */
-function metadataLine(work: MockWork): string | null {
+function metadataLine(work: Work): string | null {
   const parts = [
     work.year ? String(work.year) : null,
     work.duration ?? null,
@@ -61,8 +62,14 @@ export function WorkPageHeader({ work }: WorkPageHeaderProps) {
             {metadata}
           </p>
         ) : null}
+        {work.progress !== undefined ? (
+          <ProgressBar
+            value={work.progress}
+            label={`Progreso de ${work.title}`}
+          />
+        ) : null}
         {work.source ? (
-          <p className="font-mono text-[10px] text-ink-faint lg:text-[11px]">
+          <p className="font-mono text-[10px] text-ink-muted lg:text-[11px]">
             Fuente: {work.source}
           </p>
         ) : null}

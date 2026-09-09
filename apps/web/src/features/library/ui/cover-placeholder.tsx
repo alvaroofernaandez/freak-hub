@@ -22,7 +22,7 @@ export function CoverPlaceholder({ className, testId }: CoverPlaceholderProps) {
           "repeating-linear-gradient(45deg, var(--color-ground-deep), var(--color-ground-deep) 6px, var(--color-surface-raised) 6px, var(--color-surface-raised) 12px)",
       }}
       className={cn(
-        "flex flex-none items-center justify-center rounded-xl font-mono text-[11px] text-ink-faint",
+        "flex flex-none items-center justify-center rounded-xl font-mono text-[11px] text-ink-muted",
         className,
       )}
     >
