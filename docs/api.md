@@ -41,9 +41,10 @@ documento explica las decisiones que hay detrás.
 | `not_found` | 404 | Ruta inexistente |
 | `internal_error` | 500 | Fallo nuestro. El detalle va al log, nunca al cliente |
 | `invalid_cursor` | 400 | El cursor de paginación no decodifica. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
+| `invalid_limit` | 400 | El `limit` de paginación está fuera de rango. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
 
-`invalid_cursor` entra en vigor con el primer endpoint paginado: está decidido,
-pero todavía no lo devuelve ninguna ruta.
+`invalid_cursor` e `invalid_limit` entran en vigor con el primer endpoint
+paginado: están decididos, pero todavía no los devuelve ninguna ruta.
 
 ## Cómo evolucionar el contrato sin romper nada
 
@@ -74,7 +75,7 @@ Todo listado devuelve un objeto, nunca un array desnudo:
 | Orden | `(created_at DESC, id DESC)`. `created_at` sola no es única y haría el recorrido no determinista |
 | Cursor | Opaco. Base64 de `created_at` e `id`; para el cliente es una cadena sin estructura |
 | Total | No se devuelve. Contar exige recorrer la tabla y ninguna pantalla lo necesita |
-| `limit` fuera de rango | `400 invalid_payload`. No se recorta en silencio |
+| `limit` fuera de rango | `400 invalid_limit`. No se recorta en silencio |
 | Cursor corrupto | `400 invalid_cursor` |
 
 > **Estado.** El criterio está fijado; la implementación llega con el primer
