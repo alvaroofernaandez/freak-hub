@@ -1,5 +1,5 @@
-import { UserButton } from "@clerk/nextjs";
 import { currentUser } from "@clerk/nextjs/server";
+import { UserMenu } from "@/features/members/ui/user-menu";
 import {
   ActiveCategoryProvider,
   CategoryStripeHost,
@@ -31,18 +31,20 @@ export default async function AppLayout({
         <AddCategoryModalDimmer>
           <Navbar
             userSlot={
-              <div className="flex items-center gap-4">
-                {user?.username ? (
-                  <span className="hidden text-sm text-ink-muted sm:inline">
-                    @{user.username}
-                  </span>
-                ) : null}
-                <UserButton />
-              </div>
+              user?.username ? (
+                <UserMenu
+                  displayName={user.fullName ?? user.username}
+                  username={user.username}
+                  avatarUrl={user.imageUrl}
+                />
+              ) : null
             }
           />
           <CategoryStripeHost />
-          <main className="mx-auto w-full max-w-5xl flex-1 px-6 pt-10 pb-24 md:pb-10">
+          <main
+            id="contenido"
+            className="mx-auto w-full max-w-5xl flex-1 px-6 pt-10 pb-24 md:pb-10"
+          >
             {children}
           </main>
         </AddCategoryModalDimmer>

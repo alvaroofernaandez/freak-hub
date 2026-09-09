@@ -8,7 +8,11 @@ import {
 } from "./add-category-modal";
 import { Navbar } from "./navbar";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const pathname = vi.fn(() => "/inicio");
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => pathname(),
+}));
 
 function renderWithAddCategoryModal() {
   return render(
@@ -20,6 +24,103 @@ function renderWithAddCategoryModal() {
 }
 
 describe("Navbar", () => {
+  it("gives every top-level link an icon, not just a word", () => {
+    render(<Navbar />);
+
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+
+    for (const link of navLinks) {
+      const anchor = within(topNav).getByRole("link", { name: link.label });
+      expect(anchor.querySelector("svg")).not.toBeNull();
+    }
+  });
+
+  it("gives the mobile bottom bar icons too, where they matter most", () => {
+    render(<Navbar />);
+
+    const bottomNav = screen.getByRole("navigation", {
+      name: /navegación inferior/i,
+    });
+
+    for (const link of within(bottomNav).getAllByRole("link")) {
+      expect(link.querySelector("svg")).not.toBeNull();
+    }
+  });
+
+  it("lets a keyboard user skip the whole navigation", () => {
+    render(<Navbar />);
+
+    expect(
+      screen.getByRole("link", { name: /saltar al contenido/i }),
+    ).toHaveAttribute("href", "#contenido");
+  });
+
+  it("marks the section you are looking at, for sighted and assistive users alike", () => {
+    pathname.mockReturnValue("/miembros");
+    render(<Navbar />);
+
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+    const group = within(topNav).getByRole("link", { name: "Grupo" });
+    const home = within(topNav).getByRole("link", { name: "Inicio" });
+
+    expect(group).toHaveAttribute("aria-current", "page");
+    expect(home).not.toHaveAttribute("aria-current");
+  });
+
+  it("keeps the section marked while you are deeper inside it", () => {
+    pathname.mockReturnValue("/miembros/alvaro");
+    render(<Navbar />);
+
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+    expect(within(topNav).getByRole("link", { name: "Grupo" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it("answers the pointer on every navigation link, wordmark included", () => {
+    render(<Navbar />);
+
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+
+    for (const link of within(topNav).getAllByRole("link")) {
+      expect(link.className).toMatch(/hover:/);
+    }
+  });
+
+  it("answers the pointer on the mobile bottom bar too", () => {
+    render(<Navbar />);
+
+    const bottomNav = screen.getByRole("navigation", {
+      name: /navegación inferior/i,
+    });
+
+    for (const link of within(bottomNav).getAllByRole("link")) {
+      expect(link.className).toMatch(/hover:/);
+    }
+  });
+
+  it("keeps the header pinned to the top while the page scrolls", () => {
+    render(<Navbar />);
+
+    const header = screen.getByRole("banner");
+
+    expect(header).toHaveClass("sticky");
+    expect(header).toHaveClass("top-0");
+    // Sticky sits below the modal layer (z-50) so dialogs still cover the header.
+    expect(header).toHaveClass("z-30");
+    // A translucent header would let scrolled content bleed through it.
+    expect(header).toHaveClass("bg-ground");
+  });
+
   it("links the wordmark to /inicio with the display font", () => {
     render(<Navbar />);
 
