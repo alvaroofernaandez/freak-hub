@@ -34,7 +34,7 @@ exige una segunda consulta sobre toda la tabla y ninguna pantalla del producto l
 necesita.
 
 **Parámetros.** `?limit=` (por defecto **25**, mínimo 1, máximo **100**) y
-`?cursor=`. Un `limit` fuera de rango es `400 invalid_payload`; no se recorta en
+`?cursor=`. Un `limit` fuera de rango es `400 invalid_limit`; no se recorta en
 silencio, porque fallar ruidosamente es la regla del proyecto.
 
 **Orden estable.** `(created_at DESC, id DESC)`. `created_at` por sí sola no es
@@ -89,10 +89,10 @@ solo puede crecer.
 
 **Mitigación**
 
-El keyset solo es correcto si el orden es estable y el índice existe. Ambas cosas
-son condición de aceptación de la migración que crea `library_entries`
-([data-model.md](../data-model.md)): el índice se crea **con** la tabla, no
-después.
+El keyset solo es correcto si el orden es estable y el índice existe. Esto es
+coherente con la convención de [data-model.md](../data-model.md) —los índices se
+crean con la migración que los necesita—, así que el índice debe entrar **con**
+la migración que cree `library_entries`, no después.
 
 **Descartado**
 
