@@ -1,9 +1,19 @@
 "use client";
 
 import * as RadixCheckbox from "@radix-ui/react-checkbox";
+import { AnimatePresence, m } from "motion/react";
 import { useId } from "react";
 import { Check } from "reicon-react";
 import { cn } from "@/shared/lib/cn";
+import { EXIT_RATIO } from "@/shared/motion/tokens";
+
+/**
+ * The checkbox is used dozens of times per session (section visibility,
+ * filters), so its own motion stays shorter than the shared `fast` token:
+ * 120ms in, 90ms out. The frequency gate (ADR-0012) applies to it directly.
+ */
+const ENTER_TRANSITION = { duration: 0.12 };
+const EXIT_TRANSITION = { duration: 0.12 * EXIT_RATIO };
 
 type CheckboxProps = {
   checked: boolean;
@@ -44,9 +54,20 @@ export function Checkbox({
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
-        <RadixCheckbox.Indicator className="flex">
-          <Check size={12} strokeWidth={2.5} aria-hidden="true" />
-        </RadixCheckbox.Indicator>
+        <AnimatePresence>
+          {checked ? (
+            <RadixCheckbox.Indicator asChild forceMount>
+              <m.span
+                className="flex"
+                initial={{ opacity: 0, scale: 0.6 }}
+                animate={{ opacity: 1, scale: 1, transition: ENTER_TRANSITION }}
+                exit={{ opacity: 0, scale: 0.6, transition: EXIT_TRANSITION }}
+              >
+                <Check size={12} strokeWidth={2.5} aria-hidden="true" />
+              </m.span>
+            </RadixCheckbox.Indicator>
+          ) : null}
+        </AnimatePresence>
       </RadixCheckbox.Root>
       <label
         htmlFor={id}

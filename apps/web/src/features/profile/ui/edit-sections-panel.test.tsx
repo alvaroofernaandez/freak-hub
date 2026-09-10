@@ -44,6 +44,19 @@ describe("EditSectionsPanel", () => {
     expect(moveSection(SECTION_ORDER, "top", "top")).toEqual(SECTION_ORDER);
   });
 
+  it("gives keyboard drag instructions in neutral Spanish, not dnd-kit's English default", () => {
+    render(
+      <EditSectionsPanel
+        visibleSections={SECTION_ORDER}
+        defaultSection="library"
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/pulsa la barra espaciadora/i)).toBeInTheDocument();
+    expect(screen.queryByText(/press space/i)).not.toBeInTheDocument();
+  });
+
   it("gives every row a drag handle a screen reader can name", () => {
     render(
       <EditSectionsPanel
