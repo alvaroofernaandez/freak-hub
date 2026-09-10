@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { navLinks } from "@/shared/lib/nav-links";
 import {
   AddCategoryModalHost,
@@ -14,6 +14,14 @@ vi.mock("next/navigation", () => ({
   usePathname: () => pathname(),
 }));
 
+const offlineNoticeVisible = vi.fn(() => false);
+vi.mock("@/shared/lib/use-offline-notice-visible", () => ({
+  useOfflineNoticeVisible: () => ({
+    online: !offlineNoticeVisible(),
+    visible: offlineNoticeVisible(),
+  }),
+}));
+
 function renderWithAddCategoryModal() {
   return render(
     <AddCategoryModalProvider>
@@ -24,6 +32,10 @@ function renderWithAddCategoryModal() {
 }
 
 describe("Navbar", () => {
+  afterEach(() => {
+    offlineNoticeVisible.mockReturnValue(false);
+  });
+
   it("gives every top-level link an icon, not just a word", () => {
     render(<Navbar />);
 
@@ -119,6 +131,17 @@ describe("Navbar", () => {
     expect(header).toHaveClass("z-30");
     // A translucent header would let scrolled content bleed through it.
     expect(header).toHaveClass("bg-ground");
+  });
+
+  it("sticks below the offline banner instead of overlapping it while the banner is visible", () => {
+    offlineNoticeVisible.mockReturnValue(true);
+    render(<Navbar />);
+
+    const header = screen.getByRole("banner");
+
+    expect(header).toHaveClass("sticky");
+    expect(header).toHaveClass("top-9");
+    expect(header).not.toHaveClass("top-0");
   });
 
   it("links the wordmark to /inicio with the display font", () => {

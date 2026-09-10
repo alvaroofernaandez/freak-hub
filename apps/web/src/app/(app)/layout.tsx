@@ -16,9 +16,9 @@ import { Navbar } from "@/shared/ui/navbar";
  * session here, so this layout only renders chrome.
  *
  * AddCategoryModalDimmer wraps the navbar, stripe and page content (not
- * AddCategoryModalHost) so the whole screen dims to opacity .32 and goes
- * aria-hidden behind the "add a work" modal while it's open, per
- * docs/design/high-fidelity-desktop.html §5 (issue #26).
+ * AddCategoryModalHost) so all of it goes aria-hidden and out of pointer reach
+ * behind the "add a work" modal while it's open (issue #26). The dimming
+ * itself is the Dialog overlay's job (docs/design.md#los-modales).
  */
 export default async function AppLayout({
   children,
