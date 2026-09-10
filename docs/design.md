@@ -207,20 +207,30 @@ El lobby de biblioteca pasa de tres columnas a **dos**, con tarjetas altas
 
 | Pieza | Decisión |
 | :--- | :--- |
-| Esquina | Resplandor radial del color de la categoría desde la esquina superior izquierda, cubriendo toda la tarjeta y apagándose al 62 % |
+| Escenario | Charco de luz radial del color de la categoría en el suelo, bajo el personaje (anclado al borde inferior, al 82 % del ancho), que se apaga antes de llegar al nombre |
 | Nombre | En el color de su categoría, en Bungee |
-| Recuento | Solo la cifra, en JetBrains Mono, junto al nombre. La palabra «obras» vive en un `sr-only` para el lector de pantalla |
+| Recuento | Solo la cifra, en JetBrains Mono, en una ficha arriba a la izquierda. La palabra «obras» vive en un `sr-only`, que se lee después del nombre |
 | Personaje | Recortado, **pegado a la esquina inferior derecha**, al 52 % del ancho |
 | Fundido | `mask-image` de izquierda a derecha: la imagen se desvanece antes de llegar al texto |
+| Al señalarla | El personaje crece un 4 % desde su esquina (nunca se despega del borde), el escenario pasa del 70 % al 100 % y el borde toma el color de la categoría. 220 ms con `--ease-out-quint`; sin escala bajo `prefers-reduced-motion` |
 
-El resplandor de esquina **sustituyó al punto de color** que había antes: con
-el título ya escrito en el color de la categoría, el punto repetía la misma
-información en el mismo sitio sin añadir nada.
+El escenario **sustituyó al resplandor de esquina**, que a su vez había
+sustituido a un punto de color. En la esquina superior izquierda la luz no
+tocaba ni al personaje ni al nombre: sobre la superficie oscura se leía como
+una mancha en un rincón vacío. Bajo el personaje, la luz lo separa del fondo,
+como en una pantalla de selección.
 
 Se construye con `radial-gradient` y `color-mix` en línea, no con utilidades
 `from-*`/`to-*`: un degradado lineal en una caja cuadrada deja **bordes duros
-visibles** en la esquina, que es justo lo que no se quiere. La función vive en
-`features/library/lib/category-art.ts`.
+visibles**, que es justo lo que no se quiere. La función vive en
+`shared/ui/category-art.ts`.
+
+**Una sola tarjeta, dos pantallas.** `CategoryCard`
+(`shared/ui/category-card.tsx`) es la del lobby (un enlace, tamaño `roster`)
+y la del selector de «Añadir» (un botón, tamaño `compact`, sin recuento y con
+`Plus` en lugar de la flecha). Elegir qué añadir es elegir un personaje del
+mismo roster, no rellenar un campo. En el selector, la elegida se marca con un
+anillo del color de su categoría durante los 180 ms previos a navegar.
 
 **Los personajes se anclan a la esquina inferior derecha.** Si una figura no
 cabe, el recorte cae sobre el borde de la tarjeta, donde se lee como que la
@@ -290,15 +300,46 @@ Todos pasan por el mismo `Dialog`, así que todos se comportan igual:
 
 | Comportamiento | Detalle |
 | :--- | :--- |
-| Fondo | `--ground-deep` al 85 %: la pantalla de detrás se lee como apagada, no teñida |
+| Fondo | `--ground-deep` al 55 % con un desenfoque de 6 px: la pantalla de detrás se aparta sin apagarse, y lo que hay detrás (a menudo las mismas tarjetas) queda desenfocado en vez de competir |
 | Cerrar | Clic fuera, `Escape`, o el botón de cancelar |
 | Foco | Atrapado dentro mientras está abierto; al cerrar vuelve a lo que lo abrió |
 | Desplazamiento | Bloqueado detrás del modal |
-| Entrada | 150 ms: fundido del fondo y fundido con escala de 0.98 del panel |
+| Entrada | 150 ms con `--ease-out-quint`: fundido del fondo y fundido con escala de 0.98 del panel |
+| Salida | 75 % de la entrada (~110 ms), con Motion: el panel ya no desaparece de golpe al cerrarse. Ver [Movimiento](#movimiento) |
+
+Solo el fondo del `Dialog` oscurece. El selector de «Añadir» bajaba además la
+opacidad de la aplicación al 32 %, y las dos capas juntas dejaban la pantalla
+en negro.
 
 El `Dialog` es controlado desde fuera y no usa `Dialog.Trigger`, así que Radix
 no puede saber qué lo abrió: el componente recuerda el elemento activo al
 abrirse y le devuelve el foco al cerrarse.
+
+### Componentes de Cult UI, adaptados a mano
+
+Cuatro interacciones se adoptan de [Cult UI](https://github.com/nolly-studio/cult-ui)
+(MIT), copiadas y adaptadas a mano en vez de instaladas con su CLI
+([ADR-0013](decisions/0013-componentes-de-cult-ui.md), que documenta el
+porqué y lo descartado). Cada fichero adaptado lleva un comentario con su
+ruta de origen en el repositorio de Cult UI.
+
+| Componente | Qué | Dónde | Qué cambia del original |
+| :--- | :--- | :--- | :--- |
+| `AnimatedNumber` (`shared/ui/animated-number.tsx`) | Una cifra que rueda hasta su nuevo valor en vez de saltar | Ficha de recuento de `CategoryCard`, estadísticas de `ActivitySection` (perfil) | Muelle críticamente amortiguado (`bounce: 0`) en vez del original, subamortiguado y con rebote visible; arranca ya en el valor real (sin contar desde 0 al montar); movimiento reducido lo deja instantáneo; la cifra visible es `aria-hidden`, con el valor real aparte para lectores de pantalla; formato en `es-ES` |
+| `Drawer` (`shared/ui/drawer.tsx`), usado por `AddCategoryModalHost` | Hoja inferior para «Añadir» en móvil | Bajo el punto de corte `sm` (640 px); a partir de ahí, el mismo contenido en el `Dialog` de siempre | Construido sobre `vaul` (que a su vez usa `@radix-ui/react-dialog`, igual que `Dialog`): foco atrapado, `Escape` y superposición iguales a los del modal. `react-use-measure`, que el original de `family-drawer` traía para animar `height`, no se instala: no hay ninguna altura que medir |
+| `InvitePopover` (`features/invitations/ui/invite-popover.tsx`) | El botón «Invitar» se transforma en un panel con el campo de email, en vez de abrir un modal centrado | Cabecera de `/miembros` (sustituye a `InviteMemberDialog`) | Construido sobre `@radix-ui/react-popover` (`modal`): el original no gestionaba `Escape` ni el foco. El disparador no lleva `aria-hidden`/`tabIndex` manuales: `Popover.Root modal` ya oculta el resto de la página para lectores de pantalla, y marcar como oculto el propio disparador mientras aún conserva el foco (justo al abrirse) es una violación de ARIA. El panel se queda abierto tras un envío correcto — igual que hacía `InviteMemberDialog` — con el campo de email vacío y una confirmación junto al formulario, lista para la siguiente invitación; no se cierra solo |
+| Contenido de pestaña con dirección (`SectionTabs`, `features/profile/ui/section-tabs.tsx`) | El contenido de la pestaña activa entra desde el lado hacia el que se navegó | Pestañas del perfil (`library`/`activity`/`top`/`recommendations`) | Desplazamiento de 300 px a ±24 px de entrada / ±12 px de salida; sin `filter: blur`; muelle con rebote sustituido por la curva `--ease-out-quint` sin rebote; ya no bloquea el clic mientras anima (`isAnimating` del original desaparece); no anima `height` |
+
+**La regla del punto de corte «Añadir».** Por debajo de `sm` (640 px) el
+selector de categoría es una hoja inferior; a partir de ahí, un modal
+centrado. La decisión se toma en el cliente
+(`shared/lib/use-media-query.ts`, `useMediaQuery`), porque `matchMedia` no
+existe en el servidor. El componente que la consulta
+(`AddCategoryModalHost`) ya está siempre montado en el shell de la
+aplicación, así que el valor por defecto (`true`, hoja ancha → `Dialog`) es
+lo que se ve hasta que el efecto resuelve la consulta real; como el
+contenido del selector solo es visible una vez abierto, ese instante por
+defecto nunca llega a pintarse.
 
 ## Iconografía: un solo set
 
@@ -334,6 +375,8 @@ para texto normal):
 | `--ink-faint` | 3.07 | 2.85 | **2.52** |
 | `--accent` | 9.88 | 9.16 | 8.09 |
 | `--danger` | 5.91 | 5.48 | 4.84 |
+| `--success` | 11.48 | 10.64 | 9.40 |
+| `--warning` | 9.88 | 9.16 | 8.09 |
 
 `--ink-faint` **no alcanza el mínimo en ningún fondo**, ni siquiera el 3:1 de
 texto grande sobre `surface-raised`. Hoy **no se usa como color de texto en
@@ -341,9 +384,80 @@ ningún componente**: queda disponible solo para bordes y fondos. Cualquier
 texto, por secundario que sea (fechas, contadores, textos de ayuda, marcadores
 de posición, glifos visibles como ✕ o →), usa `--ink-muted` como mínimo.
 
+`--success` y `--warning` (docs/states.md, `InlineMessage` y la familia de
+`shared/ui/state`) superan el mínimo AA de 4.5:1 en los tres fondos —
+`--warning` es literalmente `var(--color-accent)`, ya medido en la fila de
+arriba. Ninguno necesita una entrada propia en
+`apps/web/src/app/token-contrast.test.ts`: ese test guarda un token que
+**falla** el mínimo (`--ink-faint`), y ni `--success` ni `--warning` están en
+ese caso.
+
 Lo vigila `apps/web/src/app/token-contrast.test.ts`: la suite falla si alguien
 vuelve a pintar texto con él. jsdom no aplica la hoja de estilos, así que el
 test escanea el código fuente en vez de renderizar.
+
+## Movimiento
+
+Extiende [ADR-0012](decisions/0012-animaciones-con-motion.md), que decide la
+herramienta (Motion) y el motivo. Esto es el vocabulario: los valores exactos
+y en qué casos se usa cada uno.
+
+### Quién anima qué
+
+| Herramienta | Casos |
+| :--- | :--- |
+| CSS | Pulsación, hover, cambios de color, entradas al montar (una lista, una tarjeta, una ruta nueva) |
+| Motion | Salidas, presencia (algo que aparece o desaparece tras una interacción), maquetación (`layout`, `layoutId`) |
+
+La razón no es de gusto: Motion pinta en el servidor el estado inicial de una
+animación, así que una entrada montada con Motion se vería invisible hasta la
+hidratación, o para siempre si falla el JavaScript. Un `@keyframes` con
+`animation-fill-mode: backwards` corre desde el primer pintado y no esconde
+nada. Las salidas no tienen ese problema porque solo ocurren tras la
+hidratación, cuando React ya controla el desmontaje.
+
+### Tokens
+
+Viven en `shared/motion/tokens.ts`. Ningún componente escribe sus propios
+valores.
+
+| Token | Valor | Uso |
+| :--- | :--- | :--- |
+| `EASE_OUT_QUINT` | `cubic-bezier(0.22, 1, 0.36, 1)`, igual que `--ease-out-quint` en `globals.css` | La curva de toda llegada |
+| `DURATION.fast` | 150 ms | Popovers, diálogos |
+| `DURATION.base` | 220 ms | Contenido general |
+| `DURATION.layout` | 350 ms | Animaciones de maquetación |
+| `EXIT_RATIO` | 0.75 | Toda salida dura el 75 % de su entrada: `duraciónEntrada * EXIT_RATIO` |
+| `LAYOUT_SPRING` | muelle, `duration: 0.35`, `bounce: 0` | Maquetación sin rebote (indicador de pestaña, reflujo de la rejilla) |
+| `staggerIndex(i)` / `--i` | tope en 7 (8 elementos) × 40 ms | Cascada de una lista al montar, vía la clase `.stagger-in` |
+
+Las entradas al montar usan `--animate-rise` (opacidad + 6 px de
+desplazamiento, 220 ms) y, para rutas completas, `--animate-route-in`
+(180 ms) en `app/(app)/template.tsx`, que Next.js remonta en cada navegación
+del lado del cliente.
+
+### La frecuencia importa
+
+Lo que se usa docenas de veces por sesión, o se dispara con el teclado, dura
+120 ms o menos, o no anima. Por eso la casilla de verificación entra en 120 ms
+y sale en 90 ms en vez de usar `DURATION.fast`: es el control más repetido del
+panel de preferencias. Nada de animaciones en bucle salvo el esqueleto de
+carga (`animate-pulse`), y nada de rebote ni elástico en ningún caso.
+
+### Movimiento reducido
+
+`MotionConfig reducedMotion="user"` en la raíz (`shared/motion/motion-provider.tsx`)
+lee la preferencia del sistema una sola vez: si pide menos movimiento, Motion
+anula desplazamientos, escalas y maquetación, y conserva los fundidos. Las
+entradas en CSS siguen la misma regla a mano, bajo
+`@media (prefers-reduced-motion: reduce)`: pierden el desplazamiento y se
+quedan en un fundido simple, nunca en nada instantáneo ni en contenido oculto.
+Ese bloque se declara **sin capa** (`@layer`) y después de los
+`@keyframes rise` / `route-in` de movimiento completo: en CSS Cascade Layers
+una regla sin capa gana siempre a una con capa, sin importar el orden de
+aparición, así que si el override viviera dentro de `@layer base` (como
+ocurría antes) las versiones sin capa de arriba ganarían y el movimiento
+reducido nunca se aplicaría.
 
 ## Registro de decisiones
 
@@ -381,6 +495,25 @@ test escanea el código fuente en vez de renderizar.
 - **2026-09-10** · `<UserButton>` de Clerk sustituido por `UserMenu` propio.
   Motivo: era la única superficie de la aplicación fuera del sistema de
   diseño. Clerk queda como `signOut()`, sin interfaz visible.
+- **2026-09-10** · El resplandor de la tarjeta de categoría pasa de la esquina
+  superior izquierda a un escenario bajo el personaje, que crece un 4 % al
+  señalarla. Supera al resplandor de esquina: en un rincón vacío se leía como
+  una mancha.
+- **2026-09-10** · Una sola `CategoryCard` para el lobby y el selector de
+  «Añadir». Sustituye a `CategoryTile` y a las casillas con un cuadrado de
+  color del selector.
+- **2026-09-10** · El recuento sube a una ficha arriba a la izquierda. Pegado
+  al nombre se leía como una nota al pie.
+- **2026-09-10** · El fondo de los modales baja de `--ground-deep` al 85 % a
+  55 % con desenfoque de 6 px, y el selector deja de atenuar la aplicación por
+  su cuenta. Supera a «apagada, no teñida»: con las dos capas la pantalla
+  quedaba en negro y se perdía el contexto.
+- **2026-09-10** · Curva `--ease-out-quint` para las llegadas (modales y
+  tarjetas). El `ease-out` de serie era demasiado débil para notarse.
+- **2026-09-10** · La elevación de las tarjetas pulsables transiciona `scale`
+  y solo se aplica con `motion-safe:`. En Tailwind 4 `scale-*` escribe la
+  propiedad `scale`, no `transform`: la transición no la animaba (saltaba de
+  golpe) y `motion-reduce:transform-none` no la anulaba.
 - **2026-09-09** · La rejilla de miembros pasa a
   `repeat(auto-fill, minmax(260px, 1fr))`: dos columnas fijas dejaban la ficha
   a media anchura cuando el grupo es pequeño.
@@ -388,3 +521,198 @@ test escanea el código fuente en vez de renderizar.
   `--accent` al 40 %. El color no va solo: la etiqueta de texto lo acompaña.
 - **2026-09-09** · La moldura se extrae a componente compartido y pasa a
   separar secciones, no solo a decorar estados vacíos.
+- **2026-09-10** · Sistema de movimiento con Motion (ADR-0012). Vocabulario
+  único en `shared/motion/tokens.ts`: curva, duraciones, salidas al 75 % de la
+  entrada, muelle de maquetación sin rebote y cascada de listas con tope de 8
+  elementos. Ver [Movimiento](#movimiento).
+- **2026-09-10** · El `Dialog` anima también su salida (Motion,
+  `AnimatePresence` + `forceMount`), no solo su entrada. El panel y el fondo
+  dejan de desaparecer de golpe al cerrarse.
+- **2026-09-10** · Los popovers (`UserMenu`, `Select`) entran y salen desde el
+  origen de transformación que da Radix (`--radix-*-content-transform-origin`),
+  para que visiblemente se despleguen desde el control que los abrió.
+- **2026-09-10** · La barra de progreso deja de animar `width`. `width` es una
+  propiedad de maquetación: cada fotograma forzaba un reflujo. Pasa a un
+  relleno a ancho completo que transiciona `scale` con origen a la izquierda.
+  *Superseded* por la entrada siguiente.
+- **2026-09-10** · El relleno de la barra de progreso pasa de transicionar
+  `scale` a revelarse con `clip-path: inset(...)`. Motivo: `scale` en el eje X
+  deforma las esquinas redondeadas del propio relleno (una elipse, no un
+  círculo, en porcentajes bajos); `clip-path` recorta una caja a ancho
+  completo sin tocar su `border-radius`, así que el relleno es siempre un
+  rectángulo redondeado de verdad. Supera a la entrada anterior.
+- **2026-09-10** · El indicador de la pestaña activa (`SectionTabs`) pasa de un
+  borde estático a un elemento con `layoutId`, que se desliza entre pestañas
+  con el muelle de maquetación en vez de saltar.
+- **2026-09-10** · Las listas y rejillas que ya tienen datos al montar (lobby
+  de biblioteca, miembros, actividad, inicio, obras de una categoría, estado
+  vacío) entran con una cascada CSS (`--animate-rise` + `--i`), nunca con
+  Motion: son contenido de servidor en el primer pintado.
+- **2026-09-10** · La rejilla de obras de una categoría reordena y filtra con
+  `layout` de Motion y `AnimatePresence mode="popLayout"`: lo que deja de
+  coincidir con el filtro se desvanece en vez de desaparecer de golpe, y el
+  resto de la rejilla fluye a su nueva posición.
+- **2026-09-10** · El indicador de arrastre de `EditSectionsPanel` pasa de
+  `shadow-lg` (demasiado ancha, combinada con borde) a una sombra de ≤ 8 px de
+  desenfoque y una elevación de `scale`, que no interfiere con el
+  `transform`/`transition` propios de dnd-kit porque son propiedades CSS
+  independientes.
+- **2026-09-10** · Las etiquetas de los botones de envío («Enviar
+  invitación», «Guardar cambios») funden con su versión pendiente
+  («Enviando…», «Guardando…») en vez de sustituirla de golpe, mediante
+  `shared/ui/pending-label.tsx`. Una copia invisible en flujo normal reserva
+  el ancho, así el botón nunca cambia de tamaño al fundir.
+- **2026-09-10** · Los overrides de `@keyframes rise` y `route-in` bajo
+  `prefers-reduced-motion: reduce` pasan a declararse sin `@layer` (antes
+  vivían dentro de `@layer base`). En CSS Cascade Layers una regla sin capa
+  gana siempre a una con capa, sin importar el orden: con el override dentro
+  de una capa, el movimiento reducido nunca llegaba a aplicarse.
+- **2026-09-10** · El control «+1» de la tarjeta de «Sigue donde lo dejaste»
+  (`HomeDashboard`) desaparece. Parecía pulsable (borde, relleno) pero no
+  tenía `onClick` ni acción de actualizar progreso detrás: una afordancia
+  falsa. La tarjeta conserva la barra de progreso, que además pasa a
+  `shared/ui/progress-bar.tsx` (el mismo componente accesible del resto de la
+  app) en lugar de una `<div>` con `width` sin semántica de `progressbar`.
+- **2026-09-10** · `--animate-rise` deja de animar `filter: blur(4px)`.
+  Motivo: las seis tarjetas de categoría del lobby y otras entradas en lista
+  incluyen `next/image`; desenfocar múltiples imágenes ráster a la vez arriesga
+  a saltos de fotogramas (jank) en dispositivos modestos, y la opacidad más el
+  desplazamiento de 6 px ya comunican la entrada sin ese coste.
+- **2026-09-10** · El `layoutId` del indicador de `SectionTabs` se acota por
+  instancia con `LayoutGroup` (`id` de `useId()`). El literal compartido
+  `"section-tab-indicator"` hacía que dos `SectionTabs` en la misma página
+  (perfil propio y de un amigo, por ejemplo) intentaran fundir sus
+  indicadores entre sí en vez de deslizarse cada uno por su cuenta.
+- **2026-09-10** · El intercambio de etiqueta pendiente/inactiva de
+  `PendingLabel` pasa a anunciarse con un `<output>` accesible, montado solo
+  mientras `pending` es verdadero. El cambio era puramente visual: nada le
+  decía a un lector de pantalla que el botón había entrado en estado
+  pendiente. No se deja montado y vacío en reposo porque varios formularios
+  que usan `PendingLabel` ya tienen su propia región de resultado
+  (`<output>`, con rol `status` implícito) y un segundo `status` permanente
+  colisiona con esa consulta.
+- **2026-09-10** · Se adoptan cuatro componentes de Cult UI, copiados y
+  adaptados a mano ([ADR-0013](decisions/0013-componentes-de-cult-ui.md)):
+  `AnimatedNumber` (cifras que ruedan), `Drawer` (hoja inferior para
+  «Añadir» en móvil), `InvitePopover` (el botón «Invitar» se transforma en
+  panel) y el contenido de pestaña con dirección de `SectionTabs`. Ver
+  [Componentes de Cult UI, adaptados a mano](#componentes-de-cult-ui-adaptados-a-mano).
+- **2026-09-10** · `InviteMemberDialog` se retira, sustituido por
+  `InvitePopover`. Un solo campo de email no necesitaba un modal centrado
+  completo; un panel anclado al botón que lo abre es más directo, y en
+  pantallas estrechas sigue cabiendo entero (`collisionPadding` de Radix).
+- **2026-09-10** · `InvitePopover` deja de poner `aria-hidden`/`tabIndex`
+  manuales en el disparador «Invitar» mientras el panel está abierto.
+  *Supersedes* la fila de la tabla de arriba tal y como estaba escrita antes
+  de esta fecha: el disparador sigue siendo el elemento con foco durante el
+  primer fotograma tras abrir (antes de que el foco automático entre en el
+  campo de email), y ocultar de `aria-hidden` el elemento que tiene el foco
+  es una violación de ARIA que varios lectores de pantalla no recuperan bien.
+  `Popover.Root modal` ya llama a `hideOthers` sobre todo lo que queda fuera
+  del panel portado, así que el atributo manual era redundante además de
+  inseguro.
+- **2026-09-10** · `InvitePopover` deja de cerrarse solo 1.4 s después de un
+  envío correcto. *Supersedes* el comportamiento introducido al migrar desde
+  `InviteMemberDialog`: ese temporizador reintrodujo justo el problema que la
+  migración pretendía evitar (cerrar en éxito encarece la segunda invitación
+  a un reabrir completo). El panel ahora se mantiene abierto, limpia el campo
+  de email y muestra la confirmación junto al formulario, lista para la
+  siguiente invitación.
+- **2026-09-10** · `SectionTabs` conecta cada pestaña con su panel
+  (`aria-controls`/`id` únicos por instancia, `aria-labelledby` en el panel) y
+  gana tabindex progresivo (Flecha izquierda/derecha, Inicio, Fin), siguiendo
+  el patrón de pestañas del WAI-ARIA APG. Antes, `role="tab"` y `role="tabpanel"`
+  no estaban asociados entre sí y cada pestaña era su propia parada de
+  tabulación, en vez de una sola con flechas para moverse entre el resto.
+- **2026-09-10** · La región que anuncia `PendingLabel` a lectores de
+  pantalla se monta siempre (con `aria-live="polite"`, sin `role="status"`) y
+  cambia de texto, en vez de insertarse y desmontarse con `pending`.
+  *Supersedes* la entrada anterior sobre este mismo componente: una región
+  `aria-live` insertada en el DOM después del primer pintado con frecuencia no
+  se anuncia (el navegador necesita verla ya presente para empezar a
+  vigilarla), y usar `role="status"` seguía colisionando con la región de
+  resultado propia de los formularios que usan `PendingLabel`.
+- **2026-09-10** · Tres tokens nuevos, `--danger-soft`, `--success-soft` y
+  `--warning-soft`, derivados con `color-mix(in oklch, <color> 15%,
+  transparent)` en `globals.css`. Sustituyen al patrón `bg-danger/15` que ya
+  se usaba suelto en `InvitePopover`: un token por color en vez de repetir el
+  porcentaje de opacidad en cada sitio que lo necesita.
+- **2026-09-10** · Familia de componentes de estado en `shared/ui/state/`
+  (docs/states.md): `StateSurface` (base interna, no se usa directamente),
+  `ErrorState`, `ResourceUnavailableState`, `SessionExpiredState`,
+  `AccountPendingState`, `InlineMessage`, `SupportReference`, `RetryButton`.
+  Una familia pequeña, no un componente universal — la misma razón que ya
+  llevó a preferir varios componentes de estado en vez de uno con decenas de
+  props condicionales (ADR-0014 §4 lo descarta explícitamente). Reutilizan
+  los tokens de tipografía, espaciado y color existentes: ningún token nuevo
+  aparte de los `-soft` de arriba.
+- **2026-09-10** · `OfflineNotice` (`shared/ui/offline-notice.tsx`, montado
+  en `app/layout.tsx` sobre todo el shell): aviso persistente y no
+  bloqueante de conexión, con `useOnlineStatus` (`useSyncExternalStore`
+  sobre los eventos `online`/`offline`). Entra y sale con un desplazamiento
+  de 6 px y una opacidad de 180 ms (`AnimatePresence`); nunca lleva `initial`
+  en el primer pintado del servidor porque solo se monta por un cambio de
+  estado del cliente, no en la carga inicial. No hay canal de toast (ADR-
+  0014 §5): esto es lo que hay, no un tercero nuevo.
+- **2026-09-10** · Límites y mensajes propios del contrato de errores
+  (`shared/errors/`) fuera de `globals.css`: `problem.ts` (`ApiProblem`,
+  `ProblemCode`, derivado del tipo generado del contrato, nunca escrito a
+  mano), `normalize-error.ts` (`normalizeError`, la única entrada que
+  interpreta un fallo), `messages.ts` (copia por `code`, exhaustiva por
+  tipo) y `report-error.ts`. Documentado en detalle en
+  [docs/states.md](states.md), no aquí: este archivo es de diseño visual, no
+  del contrato de errores.
+- **2026-09-10** · `OfflineNotice` y la cabecera dejan de disputarse el mismo
+  `top: 0`. `useOfflineNoticeVisible` (`shared/lib/`) centraliza la lógica de
+  «¿el aviso está en pantalla ahora?» que antes solo conocía `OfflineNotice`;
+  `Navbar` la lee y cambia su propio `top-0` por `top-9` mientras el aviso
+  está visible, en vez de que ambos se claven en `y=0` y el aviso (`z-50`)
+  tape la cabecera (`z-30`). El aviso pasa a una altura fija de 36 px
+  (`h-9`, `truncate`) para que ese desplazamiento sea siempre exacto, sin
+  medir el DOM.
+- **2026-09-10** · `RetryButton` gana `retryAfterSeconds`: con un
+  `Retry-After` real del backend (429/503), el botón nace deshabilitado y lo
+  explica una vez («Podrás reintentarlo en unos segundos», región
+  `aria-live="polite"` con texto fijo, no un contador que se re-anuncia cada
+  segundo) hasta que el plazo pasa. Antes `retryAfter` se calculaba y se
+  tiraba: el backend pedía esperar y la web dejaba reintentar al instante.
+- **2026-09-10** · Timeout distinto para lectura y escritura en `apiFetch`:
+  `MUTATION_TIMEOUT_MS` (35 s) para cualquier `POST`/`PATCH`/subida, por
+  encima del propio límite de 30 s del middleware `Timeout` de la API, sin
+  tocar el `DEFAULT_TIMEOUT_MS` (10 s) de una lectura. Antes una foto de 5 MB
+  en una conexión lenta podía agotar el plazo de 10 s aunque el servidor
+  siguiera dispuesto a aceptarla.
+- **2026-09-10** · `shared/ui/form-field.tsx`: el envoltorio de campo que
+  comparten `invitation-form.tsx`, `invite-popover.tsx` y
+  `edit-profile-dialog.tsx` — etiqueta, campo (render-prop, para no adivinar
+  props de un `<input type=file>` frente a uno de texto), ayuda opcional y
+  error opcional, con `aria-invalid`/`aria-describedby` calculados una sola
+  vez. El error de campo usa `role="alert"`: aparece siempre como resultado
+  directo de un envío.
+- **2026-09-10** · `shared/ui/status-mark.tsx`: la pareja icono + palabra que
+  `StatusBadge` (entradas de biblioteca) e `InvitationStatusBadge`
+  (invitaciones) duplicaban por separado. Cada dominio conserva su propio
+  catálogo de iconos, etiquetas y tamaño; solo la forma compartida (marca
+  oculta a lectores de pantalla más palabra visible) vive en un solo sitio.
+- **2026-09-10** · `EmptyState` gana `size`: `"section"` (por defecto, con
+  moldura, para una categoría o página entera sin nada) e `"inline"` (sin
+  moldura ni el `py-14`, para un resultado — una búsqueda o un filtro sin
+  coincidencias — que vive dentro de una sección que ya tiene su propia
+  cabecera). No se fusiona con `StateSurface`: ADR-0014 §4 descarta
+  explícitamente un componente universal para esto.
+- **2026-09-10** · El aviso de «no hay invitaciones pendientes»
+  (`MembersDirectory`) deja el contorno discontinuo y pasa al `EmptyState`
+  del sistema. Ese contorno no está asignado a este caso en ningún sitio de
+  este documento — sí lo está, deliberadamente, a una fila de invitación
+  pendiente (`pending-invitation-row.tsx`, «lo pendiente se lee como
+  provisional») — así que aplicarlo también a un estado vacío habría sido
+  una coincidencia visual, no una decisión.
+- **2026-09-10** · Botón destructivo-secundario para la única decisión
+  irreversible que introduce esta fase (descartar cambios sin guardar en
+  `EditProfileDialog`): borde `border-danger/40`, texto `text-danger`,
+  `hover:bg-danger-soft`. Mismo tratamiento de borde que el resto de botones
+  secundarios de la aplicación, con el color cambiado al token de peligro en
+  vez de inventar un tercer estilo de botón.
+- **2026-09-10** · Ayuda de la foto de perfil corregida a «JPEG, PNG, WEBP o
+  GIF, hasta 5 MB» — el texto anterior («JPG, PNG o WebP») omitía GIF, que
+  `apps/api/internal/users.AllowedAvatarContentTypes` sí admite.

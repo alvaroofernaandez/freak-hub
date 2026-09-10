@@ -21,3 +21,6 @@ qué se decidió algo vale tanto como la decisión.
 | [0009](0009-arquitectura-de-informacion.md) | Pantallas y navegación: lobby propio, inicio como panel personal | Aceptada |
 | [0010](0010-estadisticas-personales-de-perfil.md) | Estadísticas personales y secciones configurables en el perfil | Aceptada |
 | [0011](0011-paginacion-por-cursor.md) | Paginación por cursor, con un sobre de página común | Aceptada |
+| [0012](0012-animaciones-con-motion.md) | Animaciones con Motion; la pulsación sigue en CSS | Aceptada |
+| [0013](0013-componentes-de-cult-ui.md) | Componentes de Cult UI, copiados y adaptados a mano | Aceptada |
+| [0014](0014-sistema-de-estados-y-errores.md) | Sistema de estados y contrato de errores de extremo a extremo | Aceptada |

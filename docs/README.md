@@ -11,6 +11,7 @@ un documento.
 | [architecture.md](architecture.md) | Cómo encajan la web, la API y la base de datos |
 | [auth.md](auth.md) | Clerk, sesiones, invitaciones y el perímetro de seguridad |
 | [api.md](api.md) | El contrato HTTP y cómo evolucionarlo |
+| [states.md](states.md) | Estados, errores y cómo la web consume el contrato (ADR-0014) |
 | [data-model.md](data-model.md) | Esquema, migraciones y convenciones de SQL |
 | [catalogs.md](catalogs.md) | Las APIs externas de anime, cine, juegos y TCG |
 | [development.md](development.md) | Cómo levantar el proyecto y trabajar día a día |
