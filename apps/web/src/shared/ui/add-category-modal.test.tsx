@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AddCategoryModalDimmer,
   AddCategoryModalHost,
@@ -11,6 +11,23 @@ import { CATEGORY_LABELS, CATEGORY_ORDER } from "./category-stripe";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
+/**
+ * `AddCategoryModalHost` picks `Dialog` or `Drawer` via `useMediaQuery`
+ * (`(min-width: 640px)`). Every test in this file that doesn't call this
+ * gets no `matchMedia` at all (jsdom doesn't implement it), so the hook
+ * falls back to its `initial` default of `true` — the wide/`Dialog` path,
+ * matching this suite's pre-existing behaviour. Tests that care about the
+ * narrow/`Drawer` path call this explicitly.
+ */
+function mockViewport(isWide: boolean) {
+  window.matchMedia = vi.fn().mockReturnValue({
+    matches: isWide,
+    media: "(min-width: 640px)",
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }) as unknown as typeof window.matchMedia;
+}
 
 function OpenTrigger() {
   const { open } = useAddCategoryModal();
@@ -38,6 +55,46 @@ describe("AddCategoryModal", () => {
     push.mockClear();
   });
 
+  afterEach(() => {
+    // `mockViewport` replaces `window.matchMedia` for the whole module-level
+    // `window`, which otherwise leaks into later tests that rely on jsdom's
+    // default (no `matchMedia` at all).
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it("renders as a centered Dialog at sm and above", async () => {
+    mockViewport(true);
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(screen.getByRole("button", { name: "Añadir" }));
+
+    expect(
+      screen.getByRole("dialog", { name: "¿Qué quieres añadir?" }),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector("[data-vaul-drawer]"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders as a bottom Drawer below sm, with the same content", async () => {
+    mockViewport(false);
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(screen.getByRole("button", { name: "Añadir" }));
+
+    const drawer = document.querySelector("[data-vaul-drawer]");
+    expect(drawer).not.toBeNull();
+    // A drag handle marks this as the drawer, not the dialog.
+    expect(document.querySelector("[data-vaul-handle]")).not.toBeNull();
+
+    const region = screen.getByRole("dialog", { name: "¿Qué quieres añadir?" });
+    expect(within(region).getAllByTestId("category-card")).toHaveLength(
+      CATEGORY_ORDER.length,
+    );
+  });
+
   it("flashes the chosen category before navigating, instead of leaving instantly", async () => {
     const user = userEvent.setup();
     renderModal();
@@ -47,10 +104,24 @@ describe("AddCategoryModal", () => {
     await user.click(anime);
 
     // The confirmation is visible first, and the route change waits for it.
-    expect(anime).toHaveAttribute("data-confirming");
+    expect(anime).toHaveAttribute("data-selected");
     expect(push).not.toHaveBeenCalled();
 
     await waitFor(() => expect(push).toHaveBeenCalledWith("/anadir/anime"));
+  });
+
+  it("cancels the pending navigation when closed during the confirmation flash", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await user.click(screen.getByRole("button", { name: "Añadir" }));
+
+    await user.click(screen.getByRole("button", { name: CATEGORY_LABELS.tcg }));
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Outlast the flash: a dismissed picker must not navigate a beat later.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("is not rendered until something opens it", () => {
@@ -70,7 +141,7 @@ describe("AddCategoryModal", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the six categories in a 3-column grid, without a work count", async () => {
+  it("offers the six categories as the lobby's own character cards, without a work count", async () => {
     const user = userEvent.setup();
     renderModal();
 
@@ -78,8 +149,15 @@ describe("AddCategoryModal", () => {
 
     const dialog = screen.getByRole("dialog");
     const grid = within(dialog).getByTestId("add-category-modal-grid");
-    expect(grid).toHaveClass("grid-cols-3");
+    // Two columns fit a phone; three once there is room for them.
+    expect(grid).toHaveClass("grid-cols-2", "sm:grid-cols-3");
 
+    expect(within(grid).getAllByTestId("category-card")).toHaveLength(
+      CATEGORY_ORDER.length,
+    );
+    expect(within(grid).getAllByTestId("category-card-art")).toHaveLength(
+      CATEGORY_ORDER.length,
+    );
     for (const category of CATEGORY_ORDER) {
       expect(
         within(dialog).getByRole("button", { name: CATEGORY_LABELS[category] }),
@@ -97,7 +175,11 @@ describe("AddCategoryModal", () => {
 
     // Navigation waits for the confirmation flash (#43).
     await waitFor(() => expect(push).toHaveBeenCalledWith("/anadir/tcg"));
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // The panel exits through Motion instead of vanishing on the same tick
+    // it closes (ADR-0012), so this is a second, separate wait.
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
   });
 
   it("closes with the visible close button", async () => {
@@ -175,13 +257,15 @@ describe("AddCategoryModal", () => {
     expect(background).not.toHaveAttribute("aria-hidden");
   });
 
-  it("dims the background while open", async () => {
+  it("leaves the dimming to the overlay, so the page behind stays legible", async () => {
     const user = userEvent.setup();
     renderModal();
     const background = screen.getByTestId("add-category-modal-dimmer");
 
     await user.click(screen.getByRole("button", { name: "Añadir" }));
 
-    expect(background).toHaveClass("opacity-[.32]");
+    // Fading the shell as well stacked on top of the overlay and blacked the
+    // page out completely.
+    expect(background.className).not.toMatch(/opacity-/);
   });
 });

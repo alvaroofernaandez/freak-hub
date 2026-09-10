@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -42,7 +42,7 @@ describe("Dialog", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it("dims the page behind it, hard enough to read as switched off", async () => {
+  it("dims the page behind it without blacking it out, and puts it out of focus", async () => {
     render(
       <Dialog isOpen onClose={() => {}} titleId="t">
         <h2 id="t">Título</h2>
@@ -50,7 +50,11 @@ describe("Dialog", () => {
     );
 
     const overlay = document.querySelector("[data-dialog-overlay]");
-    expect(overlay?.className).toMatch(/bg-ground-deep\/[89]\d/);
+    // Light enough that the page stays recognisable: at 85% it read as the
+    // screen being switched off, and you lost track of where you were.
+    expect(overlay?.className).toMatch(/bg-ground-deep\/[4-6]\d/);
+    // Blurred, so cards behind never compete with the ones in the panel.
+    expect(overlay?.className).toMatch(/backdrop-blur/);
   });
 
   it("renders nothing while closed", () => {
@@ -96,9 +100,28 @@ describe("Dialog", () => {
 
     await user.keyboard("{Escape}");
 
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // The panel exits through Motion rather than vanishing on the same
+    // tick as the close (see the exit-animation test below), so waiting is
+    // load-bearing here, not incidental.
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
     // Radix restores focus on the close transition, not synchronously.
     await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("keeps the dialog mounted through its exit animation, instead of removing it the instant it starts closing", () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Abrir" }));
+
+    const overlay = document.querySelector("[data-dialog-overlay]") as Element;
+    // Radix's outside-dismiss detection listens for `pointerdown`, not
+    // `click`.
+    fireEvent.pointerDown(overlay, { button: 0, pointerId: 1 });
+
+    // Synchronous check, no `await`: the exit animation runs on a later
+    // tick, so the dialog must still be here right after the close starts.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("traps Tab so it cycles from the last focusable element back to the first", async () => {

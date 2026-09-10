@@ -2,17 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { createContext, useCallback, useContext, useId, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { X } from "reicon-react";
 import { cn } from "@/shared/lib/cn";
-import {
-  CATEGORY_ACCENT_CLASS,
-  CATEGORY_COLOR_CLASS,
-  CATEGORY_LABELS,
-  CATEGORY_ORDER,
-  type CategoryId,
-} from "./category-stripe";
+import { useMediaQuery } from "@/shared/lib/use-media-query";
+import { CategoryCard } from "./category-card";
+import { CATEGORY_ORDER, type CategoryId } from "./category-stripe";
 import { Dialog } from "./dialog";
+import { Drawer } from "./drawer";
+
+/** Tailwind's `sm` breakpoint: `Dialog` at and above it, `Drawer` below. */
+const WIDE_VIEWPORT_QUERY = "(min-width: 640px)";
 
 type AddCategoryModalContextValue = {
   isOpen: boolean;
@@ -62,8 +70,11 @@ type AddCategoryModalDimmerProps = { children: ReactNode };
 
 /**
  * Wraps everything that sits behind the modal (navbar, category stripe,
- * page content) so it dims to opacity .32 and disappears from assistive
- * tech while the modal is open, matching the mockup's overlay treatment.
+ * page content) so it drops out of assistive tech and out of pointer reach
+ * while the modal is open.
+ *
+ * The dimming itself belongs to the `Dialog` overlay. Fading this wrapper as
+ * well stacked a second dim on top of the overlay and blacked the page out.
  */
 export function AddCategoryModalDimmer({
   children,
@@ -76,7 +87,7 @@ export function AddCategoryModalDimmer({
       aria-hidden={isOpen ? true : undefined}
       className={cn(
         "flex min-h-dvh flex-1 flex-col",
-        isOpen && "pointer-events-none opacity-[.32]",
+        isOpen && "pointer-events-none",
       )}
     >
       {children}
@@ -87,19 +98,108 @@ export function AddCategoryModalDimmer({
 /** Long enough to read as confirmation, short enough not to feel like lag. */
 const CONFIRM_FLASH_MS = 180;
 
+type AddCategoryModalBodyProps = {
+  titleId: string;
+  dismiss: () => void;
+  confirming: CategoryId | null;
+  selectCategory: (category: CategoryId) => void;
+};
+
 /**
- * The modal itself (docs/design/high-fidelity-desktop.html §5 · AÑADIR —
- * ELEGIR CATEGORÍA): the category grid, wrapped in the generic `Dialog`
- * (dialog.tsx, #30) for its backdrop/focus-trap/Escape behavior. Rendered
- * once in the app shell; mounts only while open.
+ * The picker's content: title, close control and the roster grid. Shared
+ * between `Dialog` (sm and above) and `Drawer` (below sm, ADR-0013) — one
+ * content component, two containers, so a breakpoint change is the only
+ * difference between them (docs/design.md).
+ */
+function AddCategoryModalBody({
+  titleId,
+  dismiss,
+  confirming,
+  selectCategory,
+}: AddCategoryModalBodyProps) {
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4">
+        <h2 id={titleId} className="text-[19px] font-bold text-ink">
+          ¿Qué quieres añadir?
+        </h2>
+        <button
+          type="button"
+          aria-label="Cerrar"
+          onClick={dismiss}
+          className={cn(
+            "-mr-2.5 inline-flex size-11 items-center justify-center rounded-lg text-ink-muted",
+            "transition-[color,background-color,transform] duration-150 ease-out-quint hover:bg-surface-raised hover:text-ink",
+            "motion-reduce:transition-none",
+          )}
+        >
+          <X size={18} aria-hidden="true" />
+        </button>
+      </div>
+      <div
+        data-testid="add-category-modal-grid"
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+      >
+        {CATEGORY_ORDER.map((category) => (
+          <CategoryCard
+            key={category}
+            category={category}
+            size="compact"
+            selected={confirming === category}
+            onSelect={() => selectCategory(category)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The modal itself: the same roster of character cards as the library lobby,
+ * wrapped in `Dialog` (dialog.tsx, #30) at `sm` and above, or in `Drawer`
+ * (drawer.tsx, ADR-0013) below it — a bottom sheet sits in the thumb zone on
+ * a phone, where a centered dialog does not. Rendered once in the app shell;
+ * its containers mount their content only while open.
  */
 export function AddCategoryModalHost() {
   const { isOpen, close } = useAddCategoryModal();
   const router = useRouter();
   const titleId = useId();
   const [confirming, setConfirming] = useState<CategoryId | null>(null);
+  const pendingNavigation = useRef<number | null>(null);
+  // Defaults to `true` (the `Dialog` path) so environments without
+  // `matchMedia` — this component mounts unconditionally in the app shell,
+  // so that includes every test that never touches this behaviour — keep
+  // today's Dialog-only behaviour instead of silently switching to Drawer.
+  const isWideViewport = useMediaQuery(WIDE_VIEWPORT_QUERY, true);
+
+  // The host stays mounted in the app shell, so a pending flash outlives the
+  // dialog unless it is cancelled: dismissing the picker mid-flash must not
+  // navigate a beat later.
+  const dismiss = useCallback(() => {
+    if (pendingNavigation.current !== null) {
+      window.clearTimeout(pendingNavigation.current);
+      pendingNavigation.current = null;
+    }
+    setConfirming(null);
+    close();
+  }, [close]);
+
+  useEffect(
+    () => () => {
+      if (pendingNavigation.current !== null) {
+        window.clearTimeout(pendingNavigation.current);
+      }
+    },
+    [],
+  );
 
   function selectCategory(category: CategoryId) {
+    // A second tap during the flash would queue a second navigation.
+    if (confirming) {
+      return;
+    }
+
     const skipFlash =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -113,60 +213,39 @@ export function AddCategoryModalHost() {
     // Show which category was chosen before the route changes: picking one is
     // rare enough to deserve the beat, and it confirms the tap was registered.
     setConfirming(category);
-    window.setTimeout(() => {
+    pendingNavigation.current = window.setTimeout(() => {
+      pendingNavigation.current = null;
       router.push(`/anadir/${category}`);
       close();
       setConfirming(null);
     }, CONFIRM_FLASH_MS);
   }
 
-  return (
-    <Dialog isOpen={isOpen} onClose={close} titleId={titleId}>
-      <div className="flex items-baseline justify-between">
-        <h2 id={titleId} className="text-[19px] font-bold text-ink">
-          ¿Qué quieres añadir?
-        </h2>
-        <button
-          type="button"
-          aria-label="Cerrar"
-          onClick={close}
-          className="text-[15px] text-ink-muted transition-opacity hover:opacity-80"
-        >
-          <X size={16} aria-hidden="true" />
-        </button>
-      </div>
-      <div
-        data-testid="add-category-modal-grid"
-        className="grid grid-cols-3 gap-[14px]"
+  const body = (
+    <AddCategoryModalBody
+      titleId={titleId}
+      dismiss={dismiss}
+      confirming={confirming}
+      selectCategory={selectCategory}
+    />
+  );
+
+  if (isWideViewport) {
+    return (
+      <Dialog
+        isOpen={isOpen}
+        onClose={dismiss}
+        titleId={titleId}
+        maxWidthClassName="max-w-[720px]"
       >
-        {CATEGORY_ORDER.map((category) => (
-          <button
-            key={category}
-            type="button"
-            onClick={() => selectCategory(category)}
-            data-confirming={confirming === category || undefined}
-            className={cn(
-              "flex flex-col items-center gap-2.5 rounded-[10px] border border-border bg-surface px-3 py-[22px] text-center text-[13px] font-semibold text-ink",
-              "transition-[transform,box-shadow,opacity] duration-150 ease-out hover:opacity-90",
-              "motion-reduce:transition-none",
-              confirming === category &&
-                cn(
-                  CATEGORY_ACCENT_CLASS[category],
-                  "scale-105 ring-2 ring-current",
-                ),
-            )}
-          >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "h-5 w-5 rounded-[6px]",
-                CATEGORY_COLOR_CLASS[category],
-              )}
-            />
-            {CATEGORY_LABELS[category]}
-          </button>
-        ))}
-      </div>
-    </Dialog>
+        {body}
+      </Dialog>
+    );
+  }
+
+  return (
+    <Drawer isOpen={isOpen} onClose={dismiss} titleId={titleId}>
+      {body}
+    </Drawer>
   );
 }

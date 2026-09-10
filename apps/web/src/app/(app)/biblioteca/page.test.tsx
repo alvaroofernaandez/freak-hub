@@ -23,4 +23,16 @@ describe("LibraryLobbyPage", () => {
       expect(link).toHaveTextContent("0");
     }
   });
+
+  it("cascades the cards in as they mount, each a beat after the last", () => {
+    render(<LibraryLobbyPage />);
+
+    CATEGORY_ORDER.forEach((category, index) => {
+      const link = screen.getByRole("link", {
+        name: new RegExp(CATEGORY_LABELS[category]),
+      });
+      expect(link).toHaveClass("stagger-in");
+      expect(link.style.getPropertyValue("--i")).toBe(String(index));
+    });
+  });
 });
