@@ -6,3 +6,12 @@ packages:
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+overrides:
+  # GHSA-2883-xcg3-v3hh: js-yaml < 4.3.2 lets empty merge sources bypass
+  # maxTotalMergeKeys and burn CPU. openapi-typescript 7.13.0 resolves
+  # @redocly/openapi-core 1.34.19, which pins js-yaml to exactly 4.3.1, so no
+  # update can move it; 1.34.20 changes nothing but that pin. The selector
+  # targets only 1.34.19, so this stops applying on its own once
+  # openapi-typescript resolves a different openapi-core. Delete it then.
+  "@redocly/openapi-core@1.34.19": "1.34.20"
