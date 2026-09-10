@@ -28,6 +28,7 @@ vi.mock("@/shared/lib/api-client", async () => {
 });
 
 const { default: ProfilePage } = await import("./page");
+const { ApiError } = await import("@/shared/lib/api-client");
 
 const ROSTER: MemberPage = {
   items: [
@@ -126,11 +127,28 @@ describe("ProfilePage", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it("calls notFound when the roster cannot be loaded, instead of inventing a profile", async () => {
-    apiFetch.mockRejectedValue(new Error("boom"));
+  it("shows a recoverable error state when the roster fails to load, instead of a false 404", async () => {
+    // A roster fetch failing (network hiccup, 500) says nothing about
+    // whether "gon" is actually in the group — treating it as notFound()
+    // would misreport a real member as missing.
+    apiFetch.mockRejectedValue(new ApiError("boom", 500, "internal_error"));
 
-    await renderProfile("gon");
+    render(await renderProfile("gon"));
 
-    expect(notFound).toHaveBeenCalled();
+    expect(notFound).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Reintentar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the session-expired state for a 401, instead of a false 404", async () => {
+    apiFetch.mockRejectedValue(new ApiError("no token", 401, "invalid_token"));
+
+    render(await renderProfile("gon"));
+
+    expect(notFound).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("link", { name: "Iniciar sesión" }),
+    ).toHaveAttribute("href", "/entrar?redirect_url=%2Fmiembros%2Fgon");
   });
 });

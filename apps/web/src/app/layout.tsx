@@ -2,6 +2,8 @@ import { esES } from "@clerk/localizations";
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { Bungee, JetBrains_Mono, Sora } from "next/font/google";
+import { MotionProvider } from "@/shared/motion/motion-provider";
+import { OfflineNotice } from "@/shared/ui/offline-notice";
 import "./globals.css";
 
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora" });
@@ -40,7 +42,14 @@ export default function RootLayout({
     >
       <body className="min-h-dvh antialiased">
         {/* Core 3 requires the provider inside <body>, not wrapping <html>. */}
-        <ClerkProvider localization={esES}>{children}</ClerkProvider>
+        <ClerkProvider localization={esES}>
+          <MotionProvider>
+            <div className="sticky top-0 z-50">
+              <OfflineNotice />
+            </div>
+            {children}
+          </MotionProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

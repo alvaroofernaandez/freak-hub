@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { Plus } from "reicon-react";
 import { cn } from "@/shared/lib/cn";
 import { bottomNavLinks, navLinks } from "@/shared/lib/nav-links";
+import { useOfflineNoticeVisible } from "@/shared/lib/use-offline-notice-visible";
 import { useAddCategoryModal } from "./add-category-modal";
 
 type NavbarProps = {
@@ -17,6 +18,7 @@ type NavbarProps = {
 export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
   const { open: openAddCategoryModal } = useAddCategoryModal();
   const pathname = usePathname();
+  const { visible: offlineNoticeVisible } = useOfflineNoticeVisible();
 
   /** A section stays current while you are anywhere inside it. */
   function isCurrent(href: string): boolean {
@@ -24,7 +26,15 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-ground">
+    <header
+      className={cn(
+        "sticky z-30 border-b border-border bg-ground",
+        // OfflineNotice is sticky at top-0 with a higher z-index: while it
+        // is on screen, the header sticks right below it instead of both
+        // pinning to the same y=0 and overlapping (docs/states.md).
+        offlineNoticeVisible ? "top-9" : "top-0",
+      )}
+    >
       {/*
        * Tabbing into the page should not mean walking through every nav item
        * first. Hidden until focused, which is the only time it is useful.

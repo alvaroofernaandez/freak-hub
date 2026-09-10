@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiFetch } from "./api-client";
+import {
+  ApiAbortError,
+  ApiError,
+  ApiNetworkError,
+  ApiProblemError,
+  ApiTimeoutError,
+  apiFetch,
+  MUTATION_TIMEOUT_MS,
+} from "./api-client";
 
 const BASE_URL = "http://api.test";
 
@@ -79,5 +87,83 @@ describe("apiFetch", () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
 
     await expect(apiFetch("/me")).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("throws an ApiProblemError carrying the parsed Problem, including the correlation id", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "invitation_already_sent",
+          message: "Ya hay una invitación pendiente para ese correo.",
+          correlation_id: "abc123",
+          retryable: false,
+        }),
+        {
+          status: 409,
+          headers: {
+            "content-type": "application/problem+json",
+            "x-request-id": "abc123",
+          },
+        },
+      ),
+    );
+
+    const error = await apiFetch("/invitations").catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toBeInstanceOf(ApiProblemError);
+    const problemError = error as ApiProblemError;
+    expect(problemError.status).toBe(409);
+    expect(problemError.code).toBe("invitation_already_sent");
+    expect(problemError.problem.code).toBe("invitation_already_sent");
+    expect(problemError.problem.correlationId).toBe("abc123");
+  });
+
+  it("throws an ApiNetworkError when fetch itself fails (no response at all)", async () => {
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(apiFetch("/me")).rejects.toBeInstanceOf(ApiNetworkError);
+  });
+
+  it("throws an ApiTimeoutError when the request exceeds the configured timeout", async () => {
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => {
+          const error = new Error("This operation was aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    });
+
+    await expect(apiFetch("/me", { timeoutMs: 5 })).rejects.toBeInstanceOf(
+      ApiTimeoutError,
+    );
+  });
+
+  it("throws an ApiAbortError, distinct from a timeout, when the caller's own signal is aborted", async () => {
+    const controller = new AbortController();
+    fetchMock.mockImplementation((_url: string, init: RequestInit) => {
+      return new Promise((_resolve, reject) => {
+        init.signal?.addEventListener("abort", () => {
+          const error = new Error("This operation was aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    });
+
+    const promise = apiFetch("/me", { signal: controller.signal });
+    controller.abort();
+
+    await expect(promise).rejects.toBeInstanceOf(ApiAbortError);
+  });
+
+  it("exposes a longer timeout for mutations and uploads than the read default", () => {
+    // The API's own Timeout middleware allows up to 30s for a mutation; a
+    // caller that passes MUTATION_TIMEOUT_MS should never time out before
+    // the server itself would (docs/states.md).
+    expect(MUTATION_TIMEOUT_MS).toBe(35_000);
+    expect(MUTATION_TIMEOUT_MS).toBeGreaterThan(10_000);
   });
 });
