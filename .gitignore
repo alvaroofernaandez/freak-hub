@@ -34,6 +34,8 @@ coverage/
 playwright-report/
 test-results/
 .golangci-cache/
+# TypeScript's incremental cache: rewritten on every typecheck, never source.
+*.tsbuildinfo
 
 # --- Agent & editor ---------------------------------------------------------
 .atl/
