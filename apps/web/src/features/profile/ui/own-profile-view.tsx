@@ -153,7 +153,7 @@ export function OwnProfileView({
         order={preferences.order}
         defaultSection={preferences.defaultSection}
         sections={{
-          library: <LibrarySection works={[]} />,
+          library: <LibrarySection works={[]} canAdd />,
           activity: <ActivitySection stats={activityStatsByCategory([])} />,
           top: <TopSection works={[]} />,
           recommendations: (

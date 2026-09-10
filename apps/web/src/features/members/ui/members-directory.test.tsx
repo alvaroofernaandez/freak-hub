@@ -73,6 +73,23 @@ describe("MembersDirectory", () => {
     ).toHaveAttribute("href", "/miembros/francisco");
   });
 
+  it("cascades member rows and pending invitations in, each a beat after the last", () => {
+    render(<MembersDirectory members={MEMBERS} invitations={INVITATIONS} />);
+
+    const first = screen
+      .getByRole("link", { name: /álvaro fernández/i })
+      .closest("[data-testid='member-row-slot']") as HTMLElement;
+    const second = screen
+      .getByRole("link", { name: /francisco bermejo/i })
+      .closest("[data-testid='member-row-slot']") as HTMLElement;
+    expect(first).toHaveClass("stagger-in");
+    expect(first.style.getPropertyValue("--i")).toBe("0");
+    expect(second.style.getPropertyValue("--i")).toBe("1");
+
+    const invitationRow = screen.getByText("amigo@correo.com").closest("li");
+    expect(invitationRow).toHaveClass("stagger-in");
+  });
+
   it("lists who has been invited but has not walked in yet", () => {
     render(<MembersDirectory members={MEMBERS} invitations={INVITATIONS} />);
 
@@ -80,11 +97,11 @@ describe("MembersDirectory", () => {
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
   });
 
-  it("says so plainly when nobody is waiting to join", () => {
+  it("says so plainly when nobody is waiting to join, via the system's empty state (not a bespoke dashed box)", () => {
     render(<MembersDirectory members={MEMBERS} invitations={[]} />);
 
     expect(
-      screen.getByText(/no hay invitaciones pendientes/i),
+      screen.getByRole("heading", { name: /no hay invitaciones pendientes/i }),
     ).toBeInTheDocument();
   });
 
@@ -110,5 +127,58 @@ describe("MembersDirectory", () => {
     expect(
       screen.getByRole("heading", { name: /todavía no hay nadie/i }),
     ).toBeInTheDocument();
+  });
+
+  it("shows a retryable section error for invitations, instead of hiding the section, when one is given", () => {
+    render(
+      <MembersDirectory
+        members={MEMBERS}
+        invitations={null}
+        invitationsError={{
+          kind: "service_unavailable",
+          severity: "critical",
+          scope: "section",
+          code: "upstream_unavailable",
+          retryable: true,
+          copy: {
+            title: "No se han podido cargar las invitaciones",
+            description: "Vuelve a intentarlo.",
+          },
+          recovery: { kind: "retry" },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Invitaciones" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "No se han podido cargar las invitaciones",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reintentar" }),
+    ).toBeInTheDocument();
+  });
+
+  it("notes there are more members than shown, instead of truncating silently", () => {
+    render(
+      <MembersDirectory members={MEMBERS} invitations={[]} membersHasMore />,
+    );
+
+    expect(screen.getByText(/hay más miembros/i)).toBeInTheDocument();
+  });
+
+  it("notes there are more invitations than shown, instead of truncating silently", () => {
+    render(
+      <MembersDirectory
+        members={MEMBERS}
+        invitations={INVITATIONS}
+        invitationsHasMore
+      />,
+    );
+
+    expect(screen.getByText(/hay más invitaciones/i)).toBeInTheDocument();
   });
 });

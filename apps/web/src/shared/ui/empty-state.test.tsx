@@ -45,4 +45,22 @@ describe("EmptyState", () => {
       "true",
     );
   });
+
+  it("eases into view on mount, like any other content that lands on the page", () => {
+    const { container } = render(<EmptyState title="Sin actividad" />);
+
+    expect(container.firstElementChild).toHaveClass("animate-rise");
+  });
+
+  it("defaults to the full section treatment, with the moulding", () => {
+    render(<EmptyState title="Sin actividad" />);
+
+    expect(screen.getByTestId("moulding")).toBeInTheDocument();
+  });
+
+  it("drops the moulding and the heavy padding for size='inline', for a result that sits inside other content", () => {
+    render(<EmptyState title="Sin resultados" size="inline" />);
+
+    expect(screen.queryByTestId("moulding")).not.toBeInTheDocument();
+  });
 });

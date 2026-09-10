@@ -148,6 +148,15 @@ describe("ActivityFeed", () => {
     expect(items[1]).toHaveTextContent("Killua Zoldyck");
   });
 
+  it("cascades entries in, each a beat after the last", () => {
+    render(<ActivityFeed events={EVENTS} />);
+    const items = screen.getAllByRole("listitem");
+
+    expect(items[0]).toHaveClass("stagger-in");
+    expect(items[0].style.getPropertyValue("--i")).toBe("0");
+    expect(items[1].style.getPropertyValue("--i")).toBe("1");
+  });
+
   it("shows an empty state when there are no events yet", () => {
     render(<ActivityFeed events={[]} />);
 

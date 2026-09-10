@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Work } from "@/features/library/lib/work";
@@ -127,15 +127,66 @@ describe("CategoryWorksBrowser", () => {
     expect(screen.queryByText("Wishlist, no tenida")).not.toBeInTheDocument();
   });
 
-  it("shows an empty state when no work matches the filters", async () => {
+  it("shows a filter-specific empty state, keeping the active filter and offering to clear it", async () => {
     const user = userEvent.setup();
     render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    await user.click(screen.getByRole("button", { name: "Abandonado" }));
+    const chip = screen.getByRole("button", { name: "Abandonado" });
+    await user.click(chip);
 
     expect(
       screen.getByText(/no hay obras con estos filtros/i),
     ).toBeInTheDocument();
+    // The filter itself stays visible and pressed — it is not silently reset.
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: /quitar filtros/i }));
+
+    expect(chip).toHaveAttribute("aria-pressed", "false");
+    for (const work of WORKS) {
+      expect(screen.getByText(work.title)).toBeInTheDocument();
+    }
+  });
+
+  it("shows a search-specific empty state naming the term, and offers to clear only the search", async () => {
+    const user = userEvent.setup();
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
+
+    const search = screen.getByRole("searchbox", { name: /buscar/i });
+    await user.type(search, "no-existe-nada-así");
+
+    const empty = await screen.findByText(/no-existe-nada-así/);
+    expect(empty).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /limpiar búsqueda/i }));
+
+    expect(search).toHaveValue("");
+    for (const work of WORKS) {
+      expect(screen.getByText(work.title)).toBeInTheDocument();
+    }
+  });
+
+  it("prioritizes the search-specific empty state when both a search and a filter match nothing", async () => {
+    const user = userEvent.setup();
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
+
+    await user.click(screen.getByRole("button", { name: "Abandonado" }));
+    await user.type(screen.getByRole("searchbox", { name: /buscar/i }), "algo");
+
+    expect(await screen.findByText(/algo/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/no hay obras con estos filtros/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("politely announces the settled result count after filtering, without spamming every keystroke", async () => {
+    const user = userEvent.setup();
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
+
+    await user.click(screen.getByRole("button", { name: "En curso" }));
+
+    const announcement = await screen.findByRole("status");
+    await waitFor(() => expect(announcement).toHaveTextContent(/1 resultado/i));
   });
 
   it("filters by a text search matching the title", async () => {
@@ -209,6 +260,33 @@ describe("CategoryWorksBrowser", () => {
 
     expect(screen.getByTestId("category-works-grid")).toHaveClass(
       "lg:grid-cols-6",
+    );
+  });
+
+  it("cascades cards in, each a beat after the last", () => {
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
+
+    const cards = screen
+      .getAllByTestId("work-card-title")
+      .map((title) => title.closest(".stagger-in") as HTMLElement);
+
+    for (const card of cards) {
+      expect(card).toHaveClass("stagger-in");
+    }
+    expect(cards[0].style.getPropertyValue("--i")).toBe("0");
+    expect(cards[1].style.getPropertyValue("--i")).toBe("1");
+  });
+
+  it("removes a filtered-out card, instead of leaving it forever", async () => {
+    const user = userEvent.setup();
+    render(<CategoryWorksBrowser works={WORKS} category="anime" />);
+
+    await user.click(screen.getByRole("button", { name: "En curso" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Terminada y favorita"),
+      ).not.toBeInTheDocument(),
     );
   });
 

@@ -20,11 +20,14 @@ describe("ActivitySection", () => {
     expect(screen.getAllByTestId("activity-row")).toHaveLength(6);
   });
 
-  it("shows the completed and in-progress counts", () => {
+  it("shows the completed and in-progress counts, rolling via AnimatedNumber", () => {
     render(<ActivitySection stats={STATS} />);
 
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
+    // AnimatedNumber exposes the true value through a `.sr-only` node,
+    // separate from the `aria-hidden` rolling figure — this asserts the
+    // figures are real `AnimatedNumber`s, not bare `{count}` text.
+    expect(screen.getByText("3", { selector: ".sr-only" })).toBeInTheDocument();
+    expect(screen.getByText("1", { selector: ".sr-only" })).toBeInTheDocument();
   });
 
   it("narrows to a single category when selected", async () => {

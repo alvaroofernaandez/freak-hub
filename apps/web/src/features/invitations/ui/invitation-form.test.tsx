@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { InvitationFormState } from "@/features/invitations/actions/create-invitation";
@@ -35,7 +35,9 @@ describe("InvitationForm", () => {
       screen.getByRole("button", { name: /enviar invitación/i }),
     );
 
-    const message = await screen.findByRole("status");
+    // Interrupts on purpose: it only appears as the direct result of the
+    // submit that just happened (docs/states.md, InlineMessage).
+    const message = await screen.findByRole("alert");
     expect(message).toHaveClass("text-danger");
     expect(message).not.toHaveClass("text-red-400");
   });
@@ -77,8 +79,46 @@ describe("InvitationForm", () => {
       screen.getByRole("button", { name: /enviar invitación/i }),
     );
 
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "Ya hay una invitación pendiente para ese correo.",
     );
+  });
+
+  it("ties a field error to the email field, focuses it, and skips the form-level message", async () => {
+    createInvitation.mockResolvedValue({
+      status: "error",
+      message: "Escribe un correo válido.",
+      fieldErrors: [{ field: "email", message: "Escribe un correo válido." }],
+    });
+
+    render(<InvitationForm />);
+    const field = screen.getByLabelText(/correo/i);
+    await userEvent.type(field, "amigo@correo.com");
+    await userEvent.click(
+      screen.getByRole("button", { name: /enviar invitación/i }),
+    );
+
+    const error = await screen.findByRole("alert");
+    expect(error).toHaveTextContent("Escribe un correo válido.");
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field.getAttribute("aria-describedby")).toContain(error.id);
+    await waitFor(() => expect(field).toHaveFocus());
+  });
+
+  it("keeps what was typed after a failed submit", async () => {
+    createInvitation.mockResolvedValue({
+      status: "error",
+      message: "No se ha podido enviar la invitación.",
+    });
+
+    render(<InvitationForm />);
+    const field = screen.getByLabelText(/correo/i);
+    await userEvent.type(field, "amigo@correo.com");
+    await userEvent.click(
+      screen.getByRole("button", { name: /enviar invitación/i }),
+    );
+    await screen.findByRole("alert");
+
+    expect(field).toHaveValue("amigo@correo.com");
   });
 });

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { IconComponent } from "reicon-react";
 import { Check, Clock, Pause, Play, Star, X } from "reicon-react";
+import { StatusMark } from "./status-mark";
 
 /**
  * No contract type exists for LibraryEntry yet (Work is not implemented), so
@@ -66,20 +67,15 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   }, [status]);
 
   return (
-    <span
-      data-testid="status-badge"
-      className="inline-flex items-center gap-1.5 text-sm text-ink"
-    >
-      <span
-        data-testid="status-badge-icon"
-        aria-hidden="true"
-        data-pop={popped || undefined}
-        onAnimationEnd={() => setPopped(false)}
-        className="inline-flex data-[pop]:animate-status-pop motion-reduce:animate-none"
-      >
-        <Icon size={16} />
-      </span>
-      {label}
-    </span>
+    <StatusMark
+      Icon={Icon}
+      label={label}
+      testId="status-badge"
+      className="text-sm text-ink"
+      iconTestId="status-badge-icon"
+      iconClassName="data-[pop]:animate-status-pop motion-reduce:animate-none"
+      iconDataPop={popped}
+      onIconAnimationEnd={() => setPopped(false)}
+    />
   );
 }

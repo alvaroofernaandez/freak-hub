@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { Star } from "reicon-react";
 import type {
   ActivityEntry,
@@ -6,8 +7,10 @@ import type {
 } from "@/features/home/lib/home-content";
 import type { Work } from "@/features/library/lib/work";
 import { cn } from "@/shared/lib/cn";
+import { staggerStyle } from "@/shared/motion/tokens";
 import { CATEGORY_COLOR_CLASS } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { ProgressBar } from "@/shared/ui/progress-bar";
 import { StatusBadge } from "@/shared/ui/status-badge";
 
 type HomeDashboardProps = {
@@ -44,14 +47,24 @@ export function HomeDashboard({
             data-testid="continue-rail"
             className="flex gap-3 overflow-x-auto pb-1 md:gap-4 lg:gap-5"
           >
-            {inProgressWorks.map((work) => (
-              <ContinueCard key={work.id} work={work} />
+            {inProgressWorks.map((work, index) => (
+              <ContinueCard key={work.id} work={work} index={index} />
             ))}
           </div>
         ) : (
-          <p className="text-sm text-ink-muted">
-            Nada en curso todavía. Añade algo desde tu biblioteca.
-          </p>
+          <EmptyState
+            size="inline"
+            title="Nada en curso todavía"
+            description="Empieza algo desde tu biblioteca para verlo aquí."
+            action={
+              <Link
+                href="/biblioteca"
+                className="rounded-lg border border-border px-3.5 py-2 text-sm text-ink-muted transition-colors duration-150 hover:text-ink"
+              >
+                Ir a tu biblioteca
+              </Link>
+            }
+          />
         )}
       </section>
 
@@ -80,6 +93,7 @@ export function HomeDashboard({
           </ul>
         ) : (
           <EmptyState
+            size="inline"
             title="Sin recomendaciones pendientes"
             description="Nadie te ha recomendado nada todavía."
           />
@@ -96,6 +110,7 @@ export function HomeDashboard({
           </ul>
         ) : (
           <EmptyState
+            size="inline"
             title="Sin actividad reciente"
             description="Todavía no ha pasado nada en el grupo."
           />
@@ -107,16 +122,18 @@ export function HomeDashboard({
 
 type ContinueCardProps = {
   work: Work;
+  index: number;
 };
 
 /** A card in the "sigue donde lo dejaste" rail: cover, title, progress and a quick +1. */
-function ContinueCard({ work }: ContinueCardProps) {
+function ContinueCard({ work, index }: ContinueCardProps) {
   const progress = work.progress ?? 0;
 
   return (
     <div
       data-testid="continue-card"
-      className="flex w-[210px] flex-none flex-col gap-2 md:w-[230px] lg:w-[280px]"
+      className="stagger-in flex w-[210px] flex-none flex-col gap-2 md:w-[230px] lg:w-[280px]"
+      style={staggerStyle(index) as CSSProperties}
     >
       <Link
         href={`/obras/${work.id}`}
@@ -143,17 +160,7 @@ function ContinueCard({ work }: ContinueCardProps) {
         </span>
       </Link>
       <StatusBadge status={work.status} />
-      <div className="h-[5px] overflow-hidden rounded-full bg-border-soft">
-        <div
-          className="h-full rounded-full bg-accent"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      <div className="flex justify-end">
-        <span className="rounded-md border border-border px-3 py-1 text-xs font-semibold text-ink">
-          +1
-        </span>
-      </div>
+      <ProgressBar value={progress} label={`Progreso de ${work.title}`} />
     </div>
   );
 }
