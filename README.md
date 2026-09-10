@@ -306,6 +306,7 @@ make -C apps/api migrate-up
 # 3. Las dos aplicaciones, en dos terminales
 pnpm dev                                # web → localhost:3000
 pnpm api:dev                            # api → localhost:8080
+                                        # (o api:watch, que recompila al guardar)
 
 # 4. Comprobación
 curl -s localhost:8080/healthz          # {"status":"ok"}

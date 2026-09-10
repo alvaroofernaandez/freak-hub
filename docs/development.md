@@ -38,6 +38,7 @@ make -C apps/api migrate-up
 # 6. Las dos aplicaciones, en dos terminales
 pnpm dev                              # web  → http://localhost:3000
 pnpm api:dev                          # api  → http://localhost:8080
+# o `pnpm api:watch`: la API se recompila al guardar (instala air con `make -C apps/api tools`)
 ```
 
 Comprobación rápida de que todo está vivo:
@@ -84,7 +85,7 @@ pnpm lint                 # Biome sobre todo el repo
 pnpm lint:fix             # Biome con autofix
 pnpm contracts:generate   # regenera los tipos desde openapi.yaml
 
-pnpm api:dev · api:test · api:lint
+pnpm api:dev · api:watch · api:test · api:lint
 pnpm infra:up · infra:down · infra:reset
 ```
 

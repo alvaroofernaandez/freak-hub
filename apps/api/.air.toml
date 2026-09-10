@@ -1,0 +1,23 @@
+# Live reload for local development: `make -C apps/api watch`.
+# Rebuilds and restarts the API whenever a Go file changes. Environment
+# variables are inherited from the shell that launches air.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/api ./cmd/api"
+  entrypoint = ["./tmp/api"]
+  include_ext = ["go"]
+  exclude_dir = ["bin", "tmp", "db"]
+  exclude_regex = ["_test\\.go$"]
+  delay = 300
+  stop_on_error = true
+  # SIGINT first so the server drains in-flight requests before the restart.
+  # air stops waiting as soon as the process exits, so matching the API's own
+  # 15s shutdown budget (cmd/api/main.go) only costs time when a request is
+  # actually still running.
+  send_interrupt = true
+  kill_delay = "15s"
+
+[misc]
+  clean_on_exit = true
