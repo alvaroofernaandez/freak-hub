@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/auth"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/upstream"
 )
 
 type stubVerifier struct {
@@ -157,6 +159,22 @@ func TestMiddlewareAcceptsLowercaseBearerScheme(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.True(t, *called)
+}
+
+func TestMiddlewareAnswers503WhenTheVerifierReportsUpstreamUnavailable(t *testing.T) {
+	t.Parallel()
+
+	verifier := &stubVerifier{err: fmt.Errorf("clerk jwks fetch: %w", upstream.ErrUnavailable)}
+	handler, called, _ := protected(t, verifier)
+	request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	request.Header.Set("Authorization", "Bearer whatever")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	assert.Equal(t, "upstream_unavailable", errorCode(t, recorder))
+	assert.False(t, *called)
 }
 
 func TestIdentityFromReportsMissingIdentity(t *testing.T) {

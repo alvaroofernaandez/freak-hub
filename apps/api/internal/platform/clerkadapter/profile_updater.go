@@ -38,7 +38,7 @@ func (u *ProfileUpdater) UpdateProfile(ctx context.Context, clerkUserID string, 
 			return users.ClerkProfile{}, users.ErrUsernameTaken
 		}
 
-		return users.ClerkProfile{}, fmt.Errorf("update clerk user %s: %w", clerkUserID, err)
+		return users.ClerkProfile{}, classifyUpstream(fmt.Sprintf("update clerk user %s", clerkUserID), err)
 	}
 
 	return toClerkProfile(clerkUserID, updated), nil

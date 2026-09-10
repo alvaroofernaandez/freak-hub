@@ -30,7 +30,7 @@ func NewAvatarUploader(client *user.Client) *AvatarUploader {
 func (a *AvatarUploader) UploadAvatar(ctx context.Context, clerkUserID string, file users.AvatarFile, _ string, _ int64) (users.ClerkProfile, error) {
 	updated, err := a.client.UpdateProfileImage(ctx, clerkUserID, &user.UpdateProfileImageParams{File: file})
 	if err != nil {
-		return users.ClerkProfile{}, fmt.Errorf("upload clerk avatar %s: %w", clerkUserID, err)
+		return users.ClerkProfile{}, classifyUpstream(fmt.Sprintf("upload clerk avatar %s", clerkUserID), err)
 	}
 
 	return toClerkProfile(clerkUserID, updated), nil

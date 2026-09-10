@@ -96,21 +96,28 @@ func (u clerkUser) displayName() string {
 func (h *ClerkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBody))
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeBadRequest, "No se pudo leer el cuerpo.")
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			httpx.WriteProblem(w, r, http.StatusRequestEntityTooLarge, httpx.CodePayloadTooLarge,
+				"El cuerpo de la petición es demasiado grande.")
+			return
+		}
+
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload, "No se pudo leer el cuerpo.")
 		return
 	}
 
 	// Authenticate before parsing: an unsigned delivery is not our traffic.
 	if err := h.signature.Verify(payload, r.Header); err != nil {
 		slog.WarnContext(r.Context(), "rejected clerk webhook", slog.Any("error", err))
-		httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeUnauthorized, "Firma no válida.")
+		httpx.WriteProblem(w, r, http.StatusUnauthorized, httpx.CodeUnauthorized, "Firma no válida.")
 
 		return
 	}
 
 	var event envelope
 	if err := json.Unmarshal(payload, &event); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidPayload, "El evento no es JSON válido.")
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload, "El evento no es JSON válido.")
 		return
 	}
 
@@ -129,7 +136,7 @@ func (h *ClerkHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *ClerkHandler) handleUserUpserted(w http.ResponseWriter, r *http.Request, data json.RawMessage) {
 	var payload clerkUser
 	if err := json.Unmarshal(data, &payload); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidPayload, "Datos de usuario no válidos.")
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload, "Datos de usuario no válidos.")
 		return
 	}
 
@@ -147,7 +154,7 @@ func (h *ClerkHandler) handleUserUpserted(w http.ResponseWriter, r *http.Request
 			// Clerk sent something we cannot project. Retrying will not help,
 			// so answer 422 rather than letting it loop forever on a 5xx.
 			slog.WarnContext(r.Context(), "unprocessable clerk user event", slog.Any("error", err))
-			httpx.WriteError(w, http.StatusUnprocessableEntity, httpx.CodeInvalidPayload,
+			httpx.WriteProblem(w, r, http.StatusUnprocessableEntity, httpx.CodeInvalidPayload,
 				"El usuario de Clerk no tiene los datos mínimos.")
 
 			return
@@ -175,7 +182,7 @@ func (h *ClerkHandler) handleUserDeleted(w http.ResponseWriter, r *http.Request,
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(data, &payload); err != nil || payload.ID == "" {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidPayload, "Datos de usuario no válidos.")
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload, "Datos de usuario no válidos.")
 		return
 	}
 
@@ -193,6 +200,6 @@ func writeRetryable(w http.ResponseWriter, r *http.Request, operation string, er
 	slog.ErrorContext(r.Context(), "webhook failed",
 		slog.String("operation", operation), slog.Any("error", err))
 
-	httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal,
+	httpx.WriteProblem(w, r, http.StatusInternalServerError, httpx.CodeInternal,
 		"No se pudo procesar el evento.")
 }

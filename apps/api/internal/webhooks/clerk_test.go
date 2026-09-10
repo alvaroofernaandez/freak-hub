@@ -3,9 +3,11 @@ package webhooks_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,6 +19,17 @@ import (
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users/usersmem"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/webhooks"
 )
+
+func decodeCode(t *testing.T, recorder *httptest.ResponseRecorder) string {
+	t.Helper()
+
+	var body struct {
+		Code string `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+
+	return body.Code
+}
 
 type stubSignature struct{ err error }
 
@@ -92,6 +105,19 @@ func TestWebhookRejectsAMalformedBody(t *testing.T) {
 	recorder := h.post(t, "{not json")
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, 0, h.usersRepo.Count())
+}
+
+func TestWebhookRejectsABodyOverTheLimitAs413(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+
+	huge := strings.Repeat("a", (1<<20)+1)
+	recorder := h.post(t, `{"type":"user.created","data":{"id":"`+huge+`"}}`)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	assert.Equal(t, "payload_too_large", decodeCode(t, recorder))
 	assert.Equal(t, 0, h.usersRepo.Count())
 }
 

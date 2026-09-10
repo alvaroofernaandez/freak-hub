@@ -33,11 +33,16 @@ func NewRouter(deps Deps) http.Handler {
 	handlers := &handlers{users: deps.Users, invitations: deps.Invitations}
 
 	router := chi.NewRouter()
-	router.Use(middleware.RequestID)
+	// Our own correlation id (httpx.RequestIDMiddleware) replaces
+	// middleware.RequestID: chi's default generator embeds the hostname,
+	// which must never leave the machine (ADR-0014).
+	router.Use(httpx.RequestIDMiddleware)
 	// middleware.RealIP is deliberately absent: it rewrites RemoteAddr from
 	// spoofable headers (GHSA-3fxj-6jh8-hvhx). Nothing here needs the client IP,
 	// and a lie in the logs is worse than no value at all.
-	router.Use(middleware.Recoverer)
+	// Our own Recoverer replaces middleware.Recoverer: it answers a Problem
+	// 500 instead of an empty body (ADR-0014).
+	router.Use(httpx.Recoverer)
 	router.Use(middleware.Timeout(30 * time.Second))
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   deps.AllowedOrigins,
@@ -47,11 +52,11 @@ func NewRouter(deps Deps) http.Handler {
 		MaxAge:           300,
 	}))
 
-	router.NotFound(func(w http.ResponseWriter, _ *http.Request) {
-		httpx.WriteError(w, http.StatusNotFound, httpx.CodeNotFound, "Ruta no encontrada.")
+	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteProblem(w, r, http.StatusNotFound, httpx.CodeNotFound, "Ruta no encontrada.")
 	})
-	router.MethodNotAllowed(func(w http.ResponseWriter, _ *http.Request) {
-		httpx.WriteError(w, http.StatusMethodNotAllowed, httpx.CodeBadRequest, "Método no permitido.")
+	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteProblem(w, r, http.StatusMethodNotAllowed, httpx.CodeMethodNotAllowed, "Método no permitido.")
 	})
 
 	router.Get("/healthz", handlers.health)
