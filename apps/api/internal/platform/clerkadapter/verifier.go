@@ -7,7 +7,6 @@ package clerkadapter
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
@@ -42,7 +41,7 @@ func (v *Verifier) Verify(ctx context.Context, token string) (auth.Identity, err
 
 	claims, err := jwt.Verify(ctx, params)
 	if err != nil {
-		return auth.Identity{}, fmt.Errorf("verify clerk session token: %w", err)
+		return auth.Identity{}, classifyUpstream("verify clerk session token", err)
 	}
 
 	if claims.Subject == "" {

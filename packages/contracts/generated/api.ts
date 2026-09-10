@@ -160,6 +160,11 @@ export interface paths {
          *     `user.created`, `user.updated` and `user.deleted`; every other event is
          *     acknowledged and ignored. Deliveries are at-least-once, so the handler
          *     is idempotent.
+         *
+         *     A `500` here is deliberate, not a bug: Clerk retries a `5xx` delivery,
+         *     which is exactly what we want when the failure is ours (the database
+         *     being down, for instance). Only the body shape changed with
+         *     ADR-0014 — the retry semantics did not.
          */
         post: operations["receiveClerkWebhook"];
         delete?: never;
@@ -173,17 +178,53 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
-         * @description The single error envelope of the whole API. Branch on `code`; `message`
-         *     is Spanish prose meant for people and may be reworded at any time.
+         * @description The single error envelope of the whole API (ADR-0014), served as
+         *     `application/problem+json` and shaped after Problem Details (RFC
+         *     9457). Branch on `code`, never on `title` or `detail`, which are
+         *     human prose and may be reworded at any time. `message` duplicates
+         *     `detail` and is deprecated: it exists only so a client written before
+         *     ADR-0014 keeps working unmodified.
          */
         Error: {
             /**
+             * @description A URI identifying the problem type, `urn:freak-hub:problem:<code>`.
+             * @example urn:freak-hub:problem:invitation_already_sent
+             */
+            type: string;
+            /** @description A short, human-readable summary that does not change between occurrences of the same code. */
+            title: string;
+            /** @description The HTTP status of this response, repeated in the body per RFC 9457. */
+            status: number;
+            /** @description Prose specific to this occurrence, in Spanish. */
+            detail?: string;
+            /** @description The request path that produced this error (never the query string). */
+            instance?: string;
+            /**
+             * @description The stable, machine-readable identifier. This is what a client
+             *     branches on. internal/api's contract parity test fails the build
+             *     if this enum and the Go registry (httpx.Codes) ever disagree.
              * @example invitation_already_sent
              * @example invalid_token
              * @example not_found
+             * @enum {string}
              */
-            code: string;
+            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
+            /**
+             * @deprecated
+             * @description Same text as `detail`. Kept only for backward compatibility with clients written before ADR-0014.
+             */
             message: string;
+            /** @description Opaque request identifier, also returned on the `X-Request-ID` header. Include it when reporting an issue. */
+            correlation_id: string;
+            /** @description Whether retrying the exact same request has a reasonable chance of succeeding (429, 502, 503, 504-shaped conditions). */
+            retryable?: boolean;
+            /** @description Suggested delay in seconds before retrying. Present only when `retryable` is true and the delay is actually known. */
+            retry_after?: number;
+            /** @description Present only when the error unambiguously blames one or more request fields. */
+            field_errors?: {
+                field: string;
+                code: string;
+            }[];
         };
         Member: {
             /** Format: uuid */
@@ -256,16 +297,66 @@ export interface components {
         /** @description The session is missing, malformed or expired */
         Unauthorized: {
             headers: {
+                "X-Request-ID": components["headers"]["RequestID"];
                 [name: string]: unknown;
             };
             content: {
-                "application/json": components["schemas"]["Error"];
+                "application/problem+json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The request body is larger than the endpoint accepts */
+        PayloadTooLarge: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Error"];
+            };
+        };
+        /** @description A failure on our side. The detail is always generic. */
+        InternalError: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Clerk is rate limiting us or unreachable. Retryable. */
+        ServiceUnavailable: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestID"];
+                /** @description Present when the delay before retrying is known. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Error"];
+            };
+        };
+        /** @description The request did not finish inside the server's deadline. Retryable. */
+        Timeout: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Error"];
             };
         };
     };
     parameters: never;
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description The opaque correlation id for this request. Also present as
+         *     `correlation_id` on an error body. Include it when reporting an
+         *     issue.
+         */
+        RequestID: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -321,9 +412,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     updateCurrentMember: {
@@ -352,6 +446,15 @@ export interface operations {
                     "application/json": components["schemas"]["Member"];
                 };
             };
+            /** @description The body is not valid JSON or carries unknown fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             /**
              * @description The session is valid but no member row exists yet, which happens
@@ -362,7 +465,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             /** @description The requested username is already taken */
@@ -371,18 +474,22 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
+            413: components["responses"]["PayloadTooLarge"];
             /** @description The body carries no changes, or a field fails validation */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     uploadCurrentMemberAvatar: {
@@ -410,13 +517,13 @@ export interface operations {
                     "application/json": components["schemas"]["Member"];
                 };
             };
-            /** @description The request carries no file */
+            /** @description The request carries no file, or the multipart body is malformed */
             400: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
@@ -429,7 +536,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             /** @description The image is larger than 5 MB */
@@ -438,7 +545,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             /** @description The image is not JPEG, PNG, WEBP or GIF */
@@ -447,9 +554,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     listMembers: {
@@ -481,10 +591,13 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     listMyInvitations: {
@@ -508,6 +621,21 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            /**
+             * @description The session is valid but no member row exists yet, which happens
+             *     while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     createInvitation: {
@@ -541,28 +669,44 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
+            /**
+             * @description The session is valid but no member row exists yet, which happens
+             *     while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
             /** @description An invitation is already pending, or the email is already a member */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
+            413: components["responses"]["PayloadTooLarge"];
             /** @description The email is not valid */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     listGroupInvitations: {
@@ -594,10 +738,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];
+            /**
+             * @description The session is valid but no member row exists yet, which happens
+             *     while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
         };
     };
     receiveClerkWebhook: {
@@ -634,22 +793,30 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
             };
             /** @description The Svix signature does not check out */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
             };
+            413: components["responses"]["PayloadTooLarge"];
             /** @description The event is well formed but cannot be projected */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
             };
+            500: components["responses"]["InternalError"];
         };
     };
 }

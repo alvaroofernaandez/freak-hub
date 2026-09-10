@@ -22,6 +22,7 @@ import (
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/config"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/clerkadapter"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/postgres"
 	svixadapter "github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/svix"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users"
@@ -149,7 +150,11 @@ func setUpLogger(cfg config.Config) {
 		handler = slog.NewJSONHandler(os.Stdout, options)
 	}
 
-	slog.SetDefault(slog.New(handler))
+	// Every log line written with a request's context (slog.*Context, used
+	// throughout internal/api, internal/auth and internal/webhooks) gets
+	// request_id for free, so it can be correlated with the same id the
+	// client got on X-Request-ID and in the Problem body (ADR-0014).
+	slog.SetDefault(slog.New(httpx.NewRequestIDLogHandler(handler)))
 }
 
 // signUpURL is where Clerk sends an invitee after they click the email.

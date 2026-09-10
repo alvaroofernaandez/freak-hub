@@ -1,9 +1,12 @@
 package httpx_test
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,20 +41,47 @@ func TestWriteJSONSendsNoBodyForNoContent(t *testing.T) {
 	assert.Empty(t, recorder.Body.String())
 }
 
-func TestWriteErrorUsesTheSharedEnvelope(t *testing.T) {
+func TestDecodeJSONRejectsABodyOverTheLimit(t *testing.T) {
 	t.Parallel()
 
+	huge := bytes.Repeat([]byte("a"), (1<<20)+1)
+	body := `{"name":"` + string(huge) + `"}`
+
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	recorder := httptest.NewRecorder()
 
-	httpx.WriteError(recorder, http.StatusNotFound, "invitation_not_found", "no existe")
-
-	assert.Equal(t, http.StatusNotFound, recorder.Code)
-
-	var body struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
+	var target struct {
+		Name string `json:"name"`
 	}
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
-	assert.Equal(t, "invitation_not_found", body.Code)
-	assert.Equal(t, "no existe", body.Message)
+	err := httpx.DecodeJSON(recorder, request, &target)
+
+	require.Error(t, err)
+	var maxErr *http.MaxBytesError
+	assert.True(t, errors.As(err, &maxErr), "expected a *http.MaxBytesError, got %T: %v", err, err)
+}
+
+func TestDecodeJSONRejectsMalformedJSONWithoutClaimingItIsTooLarge(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("{not json"))
+	recorder := httptest.NewRecorder()
+
+	var target map[string]any
+	err := httpx.DecodeJSON(recorder, request, &target)
+
+	require.Error(t, err)
+	var maxErr *http.MaxBytesError
+	assert.False(t, errors.As(err, &maxErr))
+}
+
+func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"unknown":"x"}`))
+	recorder := httptest.NewRecorder()
+
+	var target struct{}
+	err := httpx.DecodeJSON(recorder, request, &target)
+
+	assert.Error(t, err)
 }

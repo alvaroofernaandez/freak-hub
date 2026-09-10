@@ -9,11 +9,13 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/upstream"
 )
 
 // Identity is the authenticated caller, as asserted by Clerk.
@@ -41,7 +43,7 @@ func Middleware(verifier Verifier) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token, ok := bearerToken(r.Header.Get("Authorization"))
 			if !ok {
-				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeMissingToken,
+				httpx.WriteProblem(w, r, http.StatusUnauthorized, httpx.CodeMissingToken,
 					"Falta el token de sesión.")
 				return
 			}
@@ -51,7 +53,22 @@ func Middleware(verifier Verifier) func(http.Handler) http.Handler {
 				// Log the cause for us; tell the caller nothing beyond "no".
 				slog.WarnContext(r.Context(), "rejected session token",
 					slog.String("path", r.URL.Path), slog.Any("error", err))
-				httpx.WriteError(w, http.StatusUnauthorized, httpx.CodeInvalidToken,
+
+				if errors.Is(err, upstream.ErrUnavailable) {
+					// Clerk itself is down or rate limiting us: this is not a
+					// verdict on the token, so it must not read as one.
+					opts := []httpx.ProblemOption{}
+					if after, ok := upstream.RetryAfterFrom(err); ok {
+						opts = append(opts, httpx.WithRetryAfterSeconds(int(after.Seconds())))
+					}
+
+					httpx.WriteProblem(w, r, http.StatusServiceUnavailable, httpx.CodeUpstreamUnavailable,
+						"Un servicio externo no está disponible. Puedes reintentarlo en unos segundos.", opts...)
+
+					return
+				}
+
+				httpx.WriteProblem(w, r, http.StatusUnauthorized, httpx.CodeInvalidToken,
 					"La sesión no es válida o ha caducado.")
 				return
 			}

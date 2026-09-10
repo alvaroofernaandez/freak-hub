@@ -1,5 +1,7 @@
-// Package httpx holds the transport helpers shared by every handler: one JSON
-// writer and one error envelope, so clients only ever have to parse one shape.
+// Package httpx holds the transport helpers shared by every handler: the
+// JSON writer for success responses, and the Problem envelope (ADR-0014,
+// see problem.go) every error response uses, so clients only ever have to
+// parse one error shape.
 package httpx
 
 import (
@@ -7,34 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 )
-
-// ErrorCode is the stable, machine-readable half of an error response. Clients
-// branch on this; the message is for humans and may change wording freely.
-type ErrorCode string
-
-// The error codes the API answers with. Clients branch on these.
-const (
-	CodeBadRequest      ErrorCode = "bad_request"
-	CodeUnauthorized    ErrorCode = "unauthorized"
-	CodeForbidden       ErrorCode = "forbidden"
-	CodeNotFound        ErrorCode = "not_found"
-	CodeConflict        ErrorCode = "conflict"
-	CodeInternal        ErrorCode = "internal_error"
-	CodeInvalidPayload  ErrorCode = "invalid_payload"
-	CodeMissingToken    ErrorCode = "missing_token"
-	CodeInvalidToken    ErrorCode = "invalid_token"
-	CodeUnknownIdentity ErrorCode = "unknown_identity"
-	// CodeInvalidLimit and CodeInvalidCursor are the pagination error codes
-	// ADR-0011 defines for every listing endpoint.
-	CodeInvalidLimit  ErrorCode = "invalid_limit"
-	CodeInvalidCursor ErrorCode = "invalid_cursor"
-)
-
-// ErrorBody is the single error envelope the whole API answers with.
-type ErrorBody struct {
-	Code    ErrorCode `json:"code"`
-	Message string    `json:"message"`
-}
 
 // WriteJSON writes a JSON response, omitting the body for 204 responses.
 func WriteJSON(w http.ResponseWriter, status int, payload any) {
@@ -52,15 +26,16 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 	}
 }
 
-// WriteError answers with the shared error envelope.
-func WriteError(w http.ResponseWriter, status int, code ErrorCode, message string) {
-	WriteJSON(w, status, ErrorBody{Code: code, Message: message})
-}
-
-// DecodeJSON reads a JSON request body, rejecting unknown fields so a typo in a
-// client payload fails loudly instead of being silently ignored.
-func DecodeJSON(r *http.Request, target any) error {
-	decoder := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
+// DecodeJSON reads a JSON request body, capped at 1 MiB, rejecting unknown
+// fields so a typo in a client payload fails loudly instead of being
+// silently ignored.
+//
+// w must be the request's real ResponseWriter, not nil: http.MaxBytesReader
+// needs it to mark the connection for closing once the limit is exceeded,
+// and without a real writer a caller cannot reliably get back
+// *http.MaxBytesError to distinguish "body too large" from "body malformed".
+func DecodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 
 	return decoder.Decode(target)

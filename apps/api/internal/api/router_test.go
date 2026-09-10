@@ -199,6 +199,21 @@ func decode[T any](t *testing.T, recorder *httptest.ResponseRecorder) T {
 	return payload
 }
 
+// errorCode reads just the `code` field of a Problem body. The Problem
+// envelope (ADR-0014) mixes types (status is a number, code/message/etc.
+// are strings), so decode[map[string]string] no longer works for an error
+// response the way it still does for the plain-string /healthz body above.
+func errorCode(t *testing.T, recorder *httptest.ResponseRecorder) string {
+	t.Helper()
+
+	var body struct {
+		Code string `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "body: %s", recorder.Body.String())
+
+	return body.Code
+}
+
 func TestHealthzIsPublic(t *testing.T) {
 	t.Parallel()
 
@@ -236,7 +251,7 @@ func TestMeIs404WhenTheSessionHasNoLocalMemberYet(t *testing.T) {
 	recorder := newSuite(t).do(t, http.MethodGet, "/v1/me", "valid-user_unknown", nil)
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
-	assert.Equal(t, "unknown_identity", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "unknown_identity", errorCode(t, recorder))
 }
 
 func TestCreateInvitationRequiresASession(t *testing.T) {
@@ -297,7 +312,7 @@ func TestCreateInvitationIsAConflictWhenOneIsPending(t *testing.T) {
 	recorder := s.do(t, http.MethodPost, "/v1/invitations", "valid-user_123", payload)
 
 	assert.Equal(t, http.StatusConflict, recorder.Code)
-	assert.Equal(t, "invitation_already_sent", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "invitation_already_sent", errorCode(t, recorder))
 }
 
 func TestCreateInvitationRejectsAnUnknownField(t *testing.T) {
@@ -432,7 +447,7 @@ func TestListGroupInvitationsRejectsAnInvalidLimit(t *testing.T) {
 	recorder := s.do(t, http.MethodGet, "/v1/invitations/group?limit=0", "valid-user_1", nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	assert.Equal(t, "invalid_limit", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "invalid_limit", errorCode(t, recorder))
 }
 
 func TestListGroupInvitationsRejectsAnInvalidCursor(t *testing.T) {
@@ -444,7 +459,7 @@ func TestListGroupInvitationsRejectsAnInvalidCursor(t *testing.T) {
 	recorder := s.do(t, http.MethodGet, "/v1/invitations/group?cursor=not-a-valid-cursor", "valid-user_1", nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	assert.Equal(t, "invalid_cursor", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "invalid_cursor", errorCode(t, recorder))
 }
 
 type memberPageBody struct {
@@ -512,7 +527,7 @@ func TestListMembersRejectsAnInvalidLimit(t *testing.T) {
 	recorder := s.do(t, http.MethodGet, "/v1/members?limit=0", "valid-user_1", nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	assert.Equal(t, "invalid_limit", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "invalid_limit", errorCode(t, recorder))
 }
 
 func TestListMembersRejectsAnInvalidCursor(t *testing.T) {
@@ -524,7 +539,7 @@ func TestListMembersRejectsAnInvalidCursor(t *testing.T) {
 	recorder := s.do(t, http.MethodGet, "/v1/members?cursor=not-a-valid-cursor", "valid-user_1", nil)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	assert.Equal(t, "invalid_cursor", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "invalid_cursor", errorCode(t, recorder))
 }
 
 func TestPatchMeRequiresASession(t *testing.T) {
@@ -542,7 +557,7 @@ func TestPatchMeIs404WhenTheSessionHasNoLocalMemberYet(t *testing.T) {
 		map[string]string{"username": "nuevo"})
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
-	assert.Equal(t, "unknown_identity", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "unknown_identity", errorCode(t, recorder))
 }
 
 func TestPatchMeRejectsAnUnknownField(t *testing.T) {
@@ -555,7 +570,7 @@ func TestPatchMeRejectsAnUnknownField(t *testing.T) {
 		map[string]string{"clerk_user_id": "user_999", "username": "nuevo"})
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	assert.Equal(t, "invalid_payload", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
 }
 
 func TestPatchMeRejectsAUsernameThatIsTooShort(t *testing.T) {
@@ -567,7 +582,7 @@ func TestPatchMeRejectsAUsernameThatIsTooShort(t *testing.T) {
 	recorder := s.do(t, http.MethodPatch, "/v1/me", "valid-user_123", map[string]string{"username": "ab"})
 
 	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
-	assert.Equal(t, "username_invalid_length", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "username_invalid_length", errorCode(t, recorder))
 }
 
 func TestPatchMeRejectsANumericOnlyUsername(t *testing.T) {
@@ -579,7 +594,7 @@ func TestPatchMeRejectsANumericOnlyUsername(t *testing.T) {
 	recorder := s.do(t, http.MethodPatch, "/v1/me", "valid-user_123", map[string]string{"username": "12345"})
 
 	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
-	assert.Equal(t, "username_numeric_only", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "username_numeric_only", errorCode(t, recorder))
 }
 
 func TestPatchMeReturns409WhenTheUsernameIsTaken(t *testing.T) {
@@ -592,7 +607,7 @@ func TestPatchMeReturns409WhenTheUsernameIsTaken(t *testing.T) {
 	recorder := s.do(t, http.MethodPatch, "/v1/me", "valid-user_123", map[string]string{"username": "tomado"})
 
 	assert.Equal(t, http.StatusConflict, recorder.Code)
-	assert.Equal(t, "username_taken", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "username_taken", errorCode(t, recorder))
 }
 
 func TestPatchMeUpdatesTheDisplayNameAndUsername(t *testing.T) {
@@ -651,7 +666,7 @@ func TestUploadAvatarRejectsAnUnsupportedContentType(t *testing.T) {
 		[]byte("this is plain text, not an image"), "text/plain")
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, recorder.Code)
-	assert.Equal(t, "avatar_unsupported_type", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "avatar_unsupported_type", errorCode(t, recorder))
 	assert.False(t, s.avatarUploader.Called)
 }
 
@@ -698,7 +713,7 @@ func TestUploadAvatarIgnoresADeclaredContentTypeThatDoesNotMatchTheBytes(t *test
 		[]byte("this is plain text, not an image"), "image/png")
 
 	assert.Equal(t, http.StatusUnsupportedMediaType, recorder.Code)
-	assert.Equal(t, "avatar_unsupported_type", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "avatar_unsupported_type", errorCode(t, recorder))
 	assert.False(t, s.avatarUploader.Called)
 }
 
@@ -726,7 +741,7 @@ func TestUnknownRouteIsJSON(t *testing.T) {
 	recorder := newSuite(t).do(t, http.MethodGet, "/v1/nope", "valid-user_123", nil)
 
 	assert.Equal(t, http.StatusNotFound, recorder.Code)
-	assert.Equal(t, "not_found", decode[map[string]string](t, recorder)["code"])
+	assert.Equal(t, "not_found", errorCode(t, recorder))
 }
 
 func TestCORSAllowsTheConfiguredOrigin(t *testing.T) {

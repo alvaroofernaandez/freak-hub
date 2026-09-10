@@ -15,6 +15,35 @@ info:
     endpoints are the health check and the Clerk webhook, and the latter
     authenticates with a Svix signature instead.
 
+    ## Errors
+
+    Every error response, without exception, is served as
+    `application/problem+json` and shaped like `#/components/schemas/Error`
+    (Problem Details, RFC 9457 — see
+    [ADR-0014](../../docs/decisions/0014-sistema-de-estados-y-errores.md)).
+    `code` is the stable, machine-readable identifier to branch on; `message`
+    duplicates `detail` and exists only for backward compatibility with
+    clients that predate this envelope.
+
+    Every response, success or error, carries an `X-Request-ID` header — an
+    opaque correlation id, also echoed in an error body's `correlation_id`.
+    Include it when reporting an issue: it is what ties a response back to
+    its server-side log line.
+
+    Any endpoint below `/v1` and the webhook can also answer:
+
+    - `405 Method Not Allowed` (`method_not_allowed`) for a verb the route
+      does not support. Not repeated on every operation below — it applies
+      uniformly.
+    - `500 Internal Server Error` (`internal_error`) for a failure on our
+      side. The detail is always generic; the real cause only ever reaches
+      the server log, keyed by `correlation_id`.
+    - `503 Service Unavailable` (`upstream_unavailable`, retryable) when
+      Clerk itself is rate limiting us or unreachable — every `/v1` route
+      verifies the session against Clerk's JWKS before anything else runs.
+    - `504 Gateway Timeout` (`request_timeout`, retryable) when a request
+      does not finish inside the server's own deadline.
+
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -70,9 +99,15 @@ paths:
             The session is valid but no member row exists yet, which happens
             while the `user.created` webhook is still in flight.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
     patch:
       operationId: updateCurrentMember
@@ -109,6 +144,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Member"
+        "400":
+          description: The body is not valid JSON or carries unknown fields
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -116,21 +157,29 @@ paths:
             The session is valid but no member row exists yet, which happens
             while the `user.created` webhook is still in flight.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
           description: The requested username is already taken
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "422":
           description: The body carries no changes, or a field fails validation
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
   /v1/me/avatar:
     post:
@@ -165,9 +214,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/Member"
         "400":
-          description: The request carries no file
+          description: The request carries no file, or the multipart body is malformed
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
@@ -177,21 +226,27 @@ paths:
             The session is valid but no member row exists yet, which happens
             while the `user.created` webhook is still in flight.
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "413":
           description: The image is larger than 5 MB
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "415":
           description: The image is not JPEG, PNG, WEBP or GIF
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
   /v1/members:
     get:
@@ -226,11 +281,17 @@ paths:
         "400":
           description: The limit or the cursor is not valid
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
   /v1/invitations:
     get:
@@ -252,6 +313,20 @@ paths:
                       $ref: "#/components/schemas/Invitation"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: |
+            The session is valid but no member row exists yet, which happens
+            while the `user.created` webhook is still in flight.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
     post:
       operationId: createInvitation
@@ -282,23 +357,39 @@ paths:
         "400":
           description: The body is malformed or carries unknown fields
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: |
+            The session is valid but no member row exists yet, which happens
+            while the `user.created` webhook is still in flight.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "409":
           description: An invitation is already pending, or the email is already a member
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "422":
           description: The email is not valid
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
   /v1/invitations/group:
     get:
@@ -337,11 +428,25 @@ paths:
         "400":
           description: The limit or the cursor is not valid
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: |
+            The session is valid but no member row exists yet, which happens
+            while the `user.created` webhook is still in flight.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+        "504":
+          $ref: "#/components/responses/Timeout"
 
   /webhooks/clerk:
     post:
@@ -353,6 +458,11 @@ paths:
         `user.created`, `user.updated` and `user.deleted`; every other event is
         acknowledged and ignored. Deliveries are at-least-once, so the handler
         is idempotent.
+
+        A `500` here is deliberate, not a bug: Clerk retries a `5xx` delivery,
+        which is exactly what we want when the failure is ours (the database
+        being down, for instance). Only the body shape changed with
+        ADR-0014 — the retry semantics did not.
       security: []
       parameters:
         - in: header
@@ -382,10 +492,26 @@ paths:
           description: Processed, or deliberately ignored
         "400":
           description: The payload is not valid JSON
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           description: The Svix signature does not check out
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "422":
           description: The event is well formed but cannot be projected
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
 components:
   securitySchemes:
@@ -395,27 +521,153 @@ components:
       bearerFormat: JWT
       description: Clerk session token, obtained in the browser with `getToken()`.
 
+  headers:
+    RequestID:
+      description: |
+        The opaque correlation id for this request. Also present as
+        `correlation_id` on an error body. Include it when reporting an
+        issue.
+      schema:
+        type: string
+
   responses:
     Unauthorized:
       description: The session is missing, malformed or expired
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
       content:
-        application/json:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    PayloadTooLarge:
+      description: The request body is larger than the endpoint accepts
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    InternalError:
+      description: A failure on our side. The detail is always generic.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    ServiceUnavailable:
+      description: Clerk is rate limiting us or unreachable. Retryable.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+        Retry-After:
+          description: Present when the delay before retrying is known.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+    Timeout:
+      description: The request did not finish inside the server's deadline. Retryable.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/problem+json:
           schema:
             $ref: "#/components/schemas/Error"
 
   schemas:
     Error:
       type: object
-      required: [code, message]
       description: |
-        The single error envelope of the whole API. Branch on `code`; `message`
-        is Spanish prose meant for people and may be reworded at any time.
+        The single error envelope of the whole API (ADR-0014), served as
+        `application/problem+json` and shaped after Problem Details (RFC
+        9457). Branch on `code`, never on `title` or `detail`, which are
+        human prose and may be reworded at any time. `message` duplicates
+        `detail` and is deprecated: it exists only so a client written before
+        ADR-0014 keeps working unmodified.
+      required: [type, title, status, code, message, correlation_id]
       properties:
+        type:
+          type: string
+          description: A URI identifying the problem type, `urn:freak-hub:problem:<code>`.
+          examples: ["urn:freak-hub:problem:invitation_already_sent"]
+        title:
+          type: string
+          description: A short, human-readable summary that does not change between occurrences of the same code.
+        status:
+          type: integer
+          description: The HTTP status of this response, repeated in the body per RFC 9457.
+        detail:
+          type: string
+          description: Prose specific to this occurrence, in Spanish.
+        instance:
+          type: string
+          description: The request path that produced this error (never the query string).
         code:
           type: string
+          description: |
+            The stable, machine-readable identifier. This is what a client
+            branches on. internal/api's contract parity test fails the build
+            if this enum and the Go registry (httpx.Codes) ever disagree.
           examples: [invitation_already_sent, invalid_token, not_found]
+          enum:
+            - missing_token
+            - invalid_token
+            - unauthorized
+            - unknown_identity
+            - invalid_payload
+            - not_found
+            - internal_error
+            - invalid_limit
+            - invalid_cursor
+            - no_profile_changes
+            - name_too_long
+            - username_invalid_length
+            - username_numeric_only
+            - username_taken
+            - avatar_too_large
+            - avatar_unsupported_type
+            - invalid_email
+            - invitation_already_sent
+            - already_member
+            - method_not_allowed
+            - payload_too_large
+            - request_timeout
+            - upstream_unavailable
         message:
           type: string
+          deprecated: true
+          description: Same text as `detail`. Kept only for backward compatibility with clients written before ADR-0014.
+        correlation_id:
+          type: string
+          description: Opaque request identifier, also returned on the `X-Request-ID` header. Include it when reporting an issue.
+        retryable:
+          type: boolean
+          description: Whether retrying the exact same request has a reasonable chance of succeeding (429, 502, 503, 504-shaped conditions).
+        retry_after:
+          type: integer
+          description: Suggested delay in seconds before retrying. Present only when `retryable` is true and the delay is actually known.
+        field_errors:
+          type: array
+          description: Present only when the error unambiguously blames one or more request fields.
+          items:
+            type: object
+            required: [field, code]
+            properties:
+              field:
+                type: string
+              code:
+                type: string
 
     Member:
       type: object

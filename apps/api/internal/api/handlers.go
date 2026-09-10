@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"io"
-	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"strings"
@@ -50,16 +49,7 @@ func (h *handlers) me(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.users.ByClerkID(r.Context(), identity.ClerkUserID)
 	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			// The session is valid but the user.created webhook has not landed
-			// yet, or was missed. Say so explicitly instead of pretending it is
-			// an auth problem.
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeUnknownIdentity,
-				"La sesión es válida pero todavía no hay ficha de miembro.")
-			return
-		}
-
-		writeInternal(w, r, "load member", err)
+		h.fail(w, r, "load member", err)
 		return
 	}
 
@@ -83,9 +73,7 @@ func (h *handlers) patchMe(w http.ResponseWriter, r *http.Request) {
 	identity, _ := auth.IdentityFrom(r.Context())
 
 	var payload patchMeRequest
-	if err := httpx.DecodeJSON(r, &payload); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidPayload,
-			"El cuerpo de la petición no es válido.")
+	if !decodeJSON(w, r, &payload) {
 		return
 	}
 
@@ -95,39 +83,11 @@ func (h *handlers) patchMe(w http.ResponseWriter, r *http.Request) {
 		Username:  payload.Username,
 	})
 	if err != nil {
-		writeProfileUpdateError(w, r, err)
+		h.fail(w, r, "update profile", err)
 		return
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, toMemberResponse(updated))
-}
-
-// writeProfileUpdateError maps the domain errors UpdateProfile can return
-// onto HTTP, following the same switch-on-errors.Is style as
-// writeInvitationError below.
-func writeProfileUpdateError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, users.ErrNoProfileChanges):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "no_profile_changes",
-			"Indica al menos un campo para actualizar.")
-	case errors.Is(err, users.ErrNameTooLong):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "name_too_long",
-			"El nombre y los apellidos no pueden superar los 100 caracteres.")
-	case errors.Is(err, users.ErrUsernameInvalidLength):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "username_invalid_length",
-			"El nombre de usuario debe tener entre 3 y 24 caracteres.")
-	case errors.Is(err, users.ErrUsernameNumericOnly):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "username_numeric_only",
-			"El nombre de usuario no puede ser solo números.")
-	case errors.Is(err, users.ErrUsernameTaken):
-		httpx.WriteError(w, http.StatusConflict, "username_taken",
-			"Ese nombre de usuario ya está en uso.")
-	case errors.Is(err, users.ErrNotFound):
-		httpx.WriteError(w, http.StatusNotFound, httpx.CodeUnknownIdentity,
-			"La sesión es válida pero todavía no hay ficha de miembro.")
-	default:
-		writeInternal(w, r, "update profile", err)
-	}
 }
 
 // uploadAvatar replaces the current member's profile image. Like patchMe, it
@@ -148,8 +108,15 @@ func (h *handlers) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	// http.MaxBytesReader, so maxUploadBytes here is a hard ceiling, not an
 	// unbounded read.
 	if err := r.ParseMultipartForm(maxUploadBytes); err != nil { //nolint:gosec
-		httpx.WriteError(w, http.StatusRequestEntityTooLarge, "avatar_too_large",
-			"La imagen no puede superar los 5 MB.")
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			httpx.WriteProblem(w, r, http.StatusRequestEntityTooLarge, httpx.CodeAvatarTooLarge,
+				"La imagen no puede superar los 5 MB.")
+			return
+		}
+
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload,
+			"El cuerpo de la petición no es válido.")
 		return
 	}
 	defer func() {
@@ -158,7 +125,7 @@ func (h *handlers) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	files := r.MultipartForm.File["file"]
 	if len(files) == 0 {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidPayload,
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload,
 			"Falta el archivo de la imagen.")
 		return
 	}
@@ -167,7 +134,7 @@ func (h *handlers) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		writeInternal(w, r, "open avatar upload", err)
+		h.fail(w, r, "open avatar upload", err)
 		return
 	}
 	defer func() {
@@ -176,13 +143,13 @@ func (h *handlers) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 
 	contentType, err := sniffContentType(file)
 	if err != nil {
-		writeInternal(w, r, "sniff avatar content type", err)
+		h.fail(w, r, "sniff avatar content type", err)
 		return
 	}
 
 	updated, err := h.users.UploadAvatar(r.Context(), identity.ClerkUserID, file, contentType, fileHeader.Size)
 	if err != nil {
-		writeAvatarUploadError(w, r, err)
+		h.fail(w, r, "upload avatar", err)
 		return
 	}
 
@@ -213,27 +180,11 @@ func sniffContentType(file multipart.File) (string, error) {
 	return contentType, nil
 }
 
-func writeAvatarUploadError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, users.ErrAvatarUnsupportedType):
-		httpx.WriteError(w, http.StatusUnsupportedMediaType, "avatar_unsupported_type",
-			"La imagen debe ser JPEG, PNG, WEBP o GIF.")
-	case errors.Is(err, users.ErrAvatarTooLarge):
-		httpx.WriteError(w, http.StatusRequestEntityTooLarge, "avatar_too_large",
-			"La imagen no puede superar los 5 MB.")
-	case errors.Is(err, users.ErrNotFound):
-		httpx.WriteError(w, http.StatusNotFound, httpx.CodeUnknownIdentity,
-			"La sesión es válida pero todavía no hay ficha de miembro.")
-	default:
-		writeInternal(w, r, "upload avatar", err)
-	}
-}
-
 // listMembers answers the group roster, keyset-paginated per ADR-0011.
 func (h *handlers) listMembers(w http.ResponseWriter, r *http.Request) {
 	limit, err := httpx.ParseLimit(r.URL.Query().Get("limit"), users.DefaultListLimit)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidLimit,
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidLimit,
 			"El parámetro limit no es válido.")
 		return
 	}
@@ -242,7 +193,7 @@ func (h *handlers) listMembers(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("cursor"); raw != "" {
 		decoded, err := httpx.DecodeCursor(raw)
 		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidCursor,
+			httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidCursor,
 				"El parámetro cursor no es válido.")
 			return
 		}
@@ -252,13 +203,7 @@ func (h *handlers) listMembers(w http.ResponseWriter, r *http.Request) {
 
 	members, next, err := h.users.List(r.Context(), after, limit)
 	if err != nil {
-		if errors.Is(err, users.ErrInvalidLimit) {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidLimit,
-				"El parámetro limit debe estar entre 1 y 100.")
-			return
-		}
-
-		writeInternal(w, r, "list members", err)
+		h.fail(w, r, "list members", err)
 		return
 	}
 
@@ -300,9 +245,7 @@ type createInvitationRequest struct {
 
 func (h *handlers) createInvitation(w http.ResponseWriter, r *http.Request) {
 	var payload createInvitationRequest
-	if err := httpx.DecodeJSON(r, &payload); err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidPayload,
-			"El cuerpo de la petición no es válido.")
+	if !decodeJSON(w, r, &payload) {
 		return
 	}
 
@@ -313,7 +256,7 @@ func (h *handlers) createInvitation(w http.ResponseWriter, r *http.Request) {
 
 	invitation, err := h.invitations.Invite(r.Context(), inviter.ID, payload.Email)
 	if err != nil {
-		writeInvitationError(w, r, err)
+		h.fail(w, r, "create invitation", err)
 		return
 	}
 
@@ -328,7 +271,7 @@ func (h *handlers) listInvitations(w http.ResponseWriter, r *http.Request) {
 
 	sent, err := h.invitations.ListMine(r.Context(), inviter.ID)
 	if err != nil {
-		writeInternal(w, r, "list invitations", err)
+		h.fail(w, r, "list invitations", err)
 		return
 	}
 
@@ -382,7 +325,7 @@ func (h *handlers) listGroupInvitations(w http.ResponseWriter, r *http.Request) 
 
 	limit, err := httpx.ParseLimit(r.URL.Query().Get("limit"), invitations.DefaultListLimit)
 	if err != nil {
-		httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidLimit,
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidLimit,
 			"El parámetro limit no es válido.")
 		return
 	}
@@ -391,7 +334,7 @@ func (h *handlers) listGroupInvitations(w http.ResponseWriter, r *http.Request) 
 	if raw := r.URL.Query().Get("cursor"); raw != "" {
 		decoded, err := httpx.DecodeCursor(raw)
 		if err != nil {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidCursor,
+			httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidCursor,
 				"El parámetro cursor no es válido.")
 			return
 		}
@@ -401,13 +344,7 @@ func (h *handlers) listGroupInvitations(w http.ResponseWriter, r *http.Request) 
 
 	entries, next, err := h.invitations.ListGroup(r.Context(), after, limit)
 	if err != nil {
-		if errors.Is(err, invitations.ErrInvalidLimit) {
-			httpx.WriteError(w, http.StatusBadRequest, httpx.CodeInvalidLimit,
-				"El parámetro limit debe estar entre 1 y 100.")
-			return
-		}
-
-		writeInternal(w, r, "list group invitations", err)
+		h.fail(w, r, "list group invitations", err)
 		return
 	}
 
@@ -432,44 +369,9 @@ func (h *handlers) resolveCaller(w http.ResponseWriter, r *http.Request) (users.
 
 	user, err := h.users.ByClerkID(r.Context(), identity.ClerkUserID)
 	if err != nil {
-		if errors.Is(err, users.ErrNotFound) {
-			httpx.WriteError(w, http.StatusNotFound, httpx.CodeUnknownIdentity,
-				"La sesión es válida pero todavía no hay ficha de miembro.")
-			return users.User{}, false
-		}
-
-		writeInternal(w, r, "resolve caller", err)
-
+		h.fail(w, r, "resolve caller", err)
 		return users.User{}, false
 	}
 
 	return user, true
-}
-
-func writeInvitationError(w http.ResponseWriter, r *http.Request, err error) {
-	switch {
-	case errors.Is(err, invitations.ErrInvalidEmail):
-		httpx.WriteError(w, http.StatusUnprocessableEntity, "invalid_email",
-			"El correo no es válido.")
-	case errors.Is(err, invitations.ErrAlreadySent):
-		httpx.WriteError(w, http.StatusConflict, "invitation_already_sent",
-			"Ya hay una invitación pendiente para ese correo.")
-	case errors.Is(err, invitations.ErrAlreadyMember):
-		httpx.WriteError(w, http.StatusConflict, "already_member",
-			"Ese correo ya pertenece a un miembro.")
-	default:
-		writeInternal(w, r, "create invitation", err)
-	}
-}
-
-// writeInternal logs the real cause and returns an opaque message, so an
-// internal failure never leaks infrastructure details to a client.
-func writeInternal(w http.ResponseWriter, r *http.Request, operation string, err error) {
-	slog.ErrorContext(r.Context(), "request failed",
-		slog.String("operation", operation),
-		slog.String("path", r.URL.Path),
-		slog.Any("error", err))
-
-	httpx.WriteError(w, http.StatusInternalServerError, httpx.CodeInternal,
-		"Algo ha fallado por nuestra parte.")
 }

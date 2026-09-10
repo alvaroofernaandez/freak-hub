@@ -2,7 +2,6 @@ package clerkadapter
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/clerk/clerk-sdk-go/v2/invitation"
 )
@@ -33,7 +32,7 @@ func (s *InvitationSender) Send(ctx context.Context, email, redirectURL string) 
 		RedirectURL:    &redirectURL,
 	})
 	if err != nil {
-		return "", fmt.Errorf("create clerk invitation: %w", err)
+		return "", classifyUpstream("create clerk invitation", err)
 	}
 
 	return created.ID, nil
