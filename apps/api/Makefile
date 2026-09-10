@@ -6,6 +6,7 @@ BINARY       ?= bin/api
 PKG          ?= ./...
 GOLANGCI     ?= $(shell $(GO) env GOPATH)/bin/golangci-lint
 SQLC         ?= $(shell $(GO) env GOPATH)/bin/sqlc
+AIR          ?= $(shell $(GO) env GOPATH)/bin/air
 GOOSE_DIR    ?= db/migrations
 
 .DEFAULT_GOAL := help
@@ -18,6 +19,11 @@ help: ## Show this help
 .PHONY: dev
 dev: ## Run the API with live-reloading disabled (plain go run)
 	$(GO) run ./cmd/api
+
+.PHONY: watch
+watch: ## Run the API and rebuild it on every Go change (air, see .air.toml)
+	@test -x $(AIR) || (echo "air missing: make tools" && exit 1)
+	$(AIR) -c .air.toml
 
 .PHONY: build
 build: ## Compile the API binary into bin/
@@ -67,9 +73,10 @@ migrate-new: ## Create a migration: make migrate-new NAME=add_something
 	@echo "created $(GOOSE_DIR)/$$(date -u +%Y%m%d%H%M%S)_$(NAME).sql"
 
 .PHONY: tools
-tools: ## Install the developer tooling (sqlc, golangci-lint)
+tools: ## Install the developer tooling (sqlc, golangci-lint, air)
 	$(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	$(GO) install github.com/air-verse/air@latest
 
 .PHONY: clean
 clean: ## Remove build artefacts

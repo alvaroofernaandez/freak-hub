@@ -82,7 +82,7 @@ documenta antes de escribir componentes.
 pnpm dev · build · test · test:e2e · typecheck · lint · lint:fix
 pnpm contracts:generate
 pnpm infra:up · infra:down · infra:reset
-pnpm api:dev · api:test · api:lint
+pnpm api:dev · api:watch · api:test · api:lint
 pnpm diagrams:check          # cada diagrama Mermaid de la documentación parsea
 pnpm assets:render           # regenera el banner y la imagen social del README
 

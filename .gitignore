@@ -8,6 +8,7 @@ out/
 dist/
 build/
 apps/api/bin/
+apps/api/tmp/
 *.test
 *.out
 

@@ -18,6 +18,7 @@
     "test:e2e": "pnpm --filter @freak-hub/web test:e2e",
     "contracts:generate": "pnpm --filter @freak-hub/contracts generate",
     "api:dev": "make -C apps/api dev",
+    "api:watch": "make -C apps/api watch",
     "api:test": "make -C apps/api test",
     "api:lint": "make -C apps/api lint",
     "infra:up": "docker compose up -d",
