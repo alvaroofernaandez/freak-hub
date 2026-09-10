@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import type { CSSProperties } from "react";
 import { countByCategory } from "@/features/library/lib/work";
-import { CategoryTile } from "@/features/library/ui/category-tile";
+import { staggerStyle } from "@/shared/motion/tokens";
+import { CategoryCard } from "@/shared/ui/category-card";
 import { CATEGORY_ORDER } from "@/shared/ui/category-stripe";
 
 export const metadata: Metadata = { title: "Biblioteca" };
@@ -20,12 +22,14 @@ export default function LibraryLobbyPage() {
         Tu biblioteca
       </h1>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5">
-        {CATEGORY_ORDER.map((category) => (
-          <CategoryTile
+        {CATEGORY_ORDER.map((category, index) => (
+          <CategoryCard
             key={category}
             category={category}
             count={counts[category]}
             href={`/biblioteca/${category}`}
+            className="stagger-in"
+            style={staggerStyle(index) as CSSProperties}
           />
         ))}
       </div>

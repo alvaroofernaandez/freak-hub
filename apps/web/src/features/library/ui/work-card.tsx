@@ -16,7 +16,7 @@ type WorkCardProps = {
  * yet, see docs/roadmap.md), title below it, and status/rating below that.
  * `StatusBadge` is the only carrier of status meaning — category color plays
  * no part here (docs/design.md, same reasoning already applied to
- * `CategoryTile` in #23).
+ * `CategoryCard`, first in #23).
  */
 export function WorkCard({ work }: WorkCardProps) {
   return (
