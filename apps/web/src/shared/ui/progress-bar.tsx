@@ -24,8 +24,16 @@ export function ProgressBar({ value, label }: ProgressBarProps) {
     >
       <div
         data-testid="progress-bar-fill"
-        style={{ width: `${percentage}%` }}
-        className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out motion-reduce:transition-none"
+        // Full-width, revealed with `clip-path` instead of resized or
+        // scaled: `width` is a layout property (forces a reflow every
+        // frame), and `scale` distorts the fill's own rounded corners along
+        // the X axis only. `clip-path: inset(...)` clips a full-size box
+        // without touching its border-radius, so the fill stays a true
+        // rounded rectangle at every percentage (ADR-0012).
+        style={{
+          clipPath: `inset(0 ${100 - percentage}% 0 0 round 9999px)`,
+        }}
+        className="h-full w-full rounded-full bg-accent transition-[clip-path] duration-300 ease-out-quint motion-reduce:transition-none"
       />
     </div>
   );

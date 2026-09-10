@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -93,6 +93,30 @@ describe("UserMenu", () => {
     await waitFor(() =>
       expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
     );
+  });
+
+  it("keeps the menu mounted through its exit animation, instead of removing it the instant it closes", () => {
+    render(
+      <div>
+        <UserMenu {...PROPS} />
+        <button type="button">Fuera</button>
+      </div>,
+    );
+    const trigger = screen.getByRole("button", { name: /álvaro fernández/i });
+    // Radix opens the dropdown trigger on pointerdown, not on click.
+    fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    // Radix's outside-dismiss detection listens for `pointerdown`, not
+    // `click`.
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Fuera" }), {
+      button: 0,
+      pointerId: 1,
+    });
+
+    // Synchronous check, no `await`: the popover exits through Motion, it
+    // does not vanish the instant it closes.
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("moves into the menu with the down arrow, for keyboard users", async () => {

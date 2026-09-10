@@ -2,11 +2,16 @@
 
 import { useClerk } from "@clerk/nextjs";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronDown, Logout, UserAdd, UserCircle } from "reicon-react";
 import { Avatar } from "@/features/members/ui/avatar";
 import { cn } from "@/shared/lib/cn";
+import { DURATION, EXIT_RATIO, variants } from "@/shared/motion/tokens";
+
+const ENTER_TRANSITION = { duration: DURATION.fast };
+const EXIT_TRANSITION = { duration: DURATION.fast * EXIT_RATIO };
 
 type UserMenuProps = {
   displayName: string;
@@ -57,45 +62,60 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
         </button>
       </DropdownMenu.Trigger>
 
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="end"
-          sideOffset={8}
-          aria-label={`Sesión de ${displayName}`}
-          className="z-40 w-60 rounded-xl border border-border bg-surface p-1.5 shadow-2xl"
-        >
-          <div className="border-b border-border-soft px-3 pt-2 pb-3">
-            <p className="truncate text-sm font-medium text-ink">
-              {displayName}
-            </p>
-            <p className="truncate font-mono text-xs text-ink-muted">
-              @{username}
-            </p>
-          </div>
-
-          <div className="pt-1.5">
-            <DropdownMenu.Item asChild>
-              <Link href={`/miembros/${username}`} className={ITEM_CLASS}>
-                <UserCircle size={16} aria-hidden="true" />
-                Mi perfil
-              </Link>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item asChild>
-              <Link href="/invitar" className={ITEM_CLASS}>
-                <UserAdd size={16} aria-hidden="true" />
-                Invitar a alguien
-              </Link>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item
-              className={ITEM_CLASS}
-              onSelect={() => signOut()}
+      <AnimatePresence>
+        {isOpen ? (
+          <DropdownMenu.Portal forceMount>
+            <DropdownMenu.Content
+              asChild
+              forceMount
+              align="end"
+              sideOffset={8}
+              aria-label={`Sesión de ${displayName}`}
             >
-              <Logout size={16} aria-hidden="true" />
-              Cerrar sesión
-            </DropdownMenu.Item>
-          </div>
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
+              <m.div
+                className="z-40 w-60 origin-[var(--radix-dropdown-menu-content-transform-origin)] rounded-xl border border-border bg-surface p-1.5 shadow-2xl"
+                initial={variants.popover.hidden}
+                animate={{
+                  ...variants.popover.shown,
+                  transition: ENTER_TRANSITION,
+                }}
+                exit={{ ...variants.popover.exit, transition: EXIT_TRANSITION }}
+              >
+                <div className="border-b border-border-soft px-3 pt-2 pb-3">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {displayName}
+                  </p>
+                  <p className="truncate font-mono text-xs text-ink-muted">
+                    @{username}
+                  </p>
+                </div>
+
+                <div className="pt-1.5">
+                  <DropdownMenu.Item asChild>
+                    <Link href={`/miembros/${username}`} className={ITEM_CLASS}>
+                      <UserCircle size={16} aria-hidden="true" />
+                      Mi perfil
+                    </Link>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item asChild>
+                    <Link href="/invitar" className={ITEM_CLASS}>
+                      <UserAdd size={16} aria-hidden="true" />
+                      Invitar a alguien
+                    </Link>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    className={ITEM_CLASS}
+                    onSelect={() => signOut()}
+                  >
+                    <Logout size={16} aria-hidden="true" />
+                    Cerrar sesión
+                  </DropdownMenu.Item>
+                </div>
+              </m.div>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        ) : null}
+      </AnimatePresence>
     </DropdownMenu.Root>
   );
 }

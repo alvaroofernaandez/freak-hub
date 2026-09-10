@@ -33,6 +33,28 @@
   --color-success: var(--color-cat-games);
   --color-warning: var(--color-accent);
 
+  /* Soft backgrounds for state surfaces (docs/states.md): each is its own
+   * token, not an ad-hoc `bg-danger/15` opacity modifier repeated per call
+   * site (that pattern is exactly what this replaces — see the Decision Log
+   * entry dated 2026-09-10). Derived systematically with `color-mix`, so a
+   * change to `--color-danger`/`--color-success`/`--color-warning` carries
+   * through without touching these. */
+  --color-danger-soft: color-mix(
+    in oklch,
+    var(--color-danger) 15%,
+    transparent
+  );
+  --color-success-soft: color-mix(
+    in oklch,
+    var(--color-success) 15%,
+    transparent
+  );
+  --color-warning-soft: color-mix(
+    in oklch,
+    var(--color-warning) 15%,
+    transparent
+  );
+
   --font-sans: var(--font-sora), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-bungee), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
@@ -40,29 +62,19 @@
   /* A status change is worth one short beat of attention, no more. */
   --animate-status-pop: status-pop 200ms ease-out;
 
-  /* Opening a modal is infrequent enough to afford one short beat. */
-  --animate-dialog-overlay-in: dialog-overlay-in 150ms ease-out;
-  --animate-dialog-panel-in: dialog-panel-in 150ms ease-out;
-}
+  /* Arrivals: fast to respond, then a long quiet settle. The built-in
+   * `ease-out` is too weak to feel like anything. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
 
-@keyframes dialog-overlay-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
+  /* Route content, replayed on every client-side navigation because it lives
+   * in template.tsx, which Next.js remounts per navigation (ADR-0012). */
+  --animate-route-in: route-in 180ms var(--ease-out-quint);
 
-@keyframes dialog-panel-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  /* Content that mounts already on the page: list and grid items. Runs from
+   * first paint via `fill-mode: backwards`, so nothing is ever invisible
+   * waiting on hydration. Pair with the `--i` custom property (see the
+   * `.stagger-in` rule below) to cascade a list instead of arriving at once. */
+  --animate-rise: rise 220ms var(--ease-out-quint) backwards;
 }
 
 @keyframes status-pop {
@@ -71,6 +83,71 @@
   }
   to {
     transform: scale(1);
+  }
+}
+
+@keyframes route-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced-motion overrides for the keyframes above.
+ *
+ * Deliberately unlayered and placed after the full-motion `@keyframes rise`
+ * and `@keyframes route-in`. Per CSS Cascade Layers, an unlayered rule always
+ * wins over a layered one of equal specificity regardless of source order, so
+ * nesting this inside `@layer base` (as it used to be) meant the *unlayered*
+ * full-motion keyframes above always won instead — reduced-motion users got
+ * the full animation. Keeping this block unlayered, and after the originals,
+ * is what makes the override actually apply.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes route-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+@layer utilities {
+  /* Cascades a list of `.stagger-in` items: give each item a `--i` custom
+   * property (its index) and this delays its `--animate-rise` accordingly,
+   * capped at 8 items so a long grid does not keep the last card waiting.
+   * `shared/motion/tokens.ts`'s `staggerIndex()` is the same cap in JS, for
+   * anything computing the index in a client component instead of CSS. */
+  .stagger-in {
+    animation: var(--animate-rise);
+    animation-delay: calc(min(var(--i, 0), 7) * 40ms);
   }
 }
 
@@ -137,5 +214,27 @@
     a[href]:active {
       transform: none;
     }
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced-motion override for vaul (the Drawer's implementation, ADR-0013).
+ *
+ * vaul injects its own stylesheet at runtime — unlayered, and inserted after
+ * this one, so it always wins a plain `[data-vaul-drawer]` match regardless
+ * of `@layer` nesting on this side. Deliberately unlayered here too (same
+ * reasoning as the `rise`/`route-in` override above) and with one extra type
+ * selector (`html`) so this wins on specificity as well, without needing
+ * `!important` to fight vaul's later-inserted, non-`!important` rule or its
+ * dynamically-set inline `transition` during drag. Kept at ~0 instead of
+ * `none` so vaul's own open/close logic, which waits out its transition
+ * duration before settling state, still resolves instead of hanging on a
+ * transition that never fires.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  html [data-vaul-drawer],
+  html [data-vaul-overlay] {
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
   }
 }

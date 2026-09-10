@@ -1,11 +1,14 @@
 "use client";
 
 import {
+  type Announcements,
   closestCenter,
   DndContext,
   type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
+  type ScreenReaderInstructions,
+  type UniqueIdentifier,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -62,6 +65,37 @@ export function moveSection(
   return arrayMove(order, from, to);
 }
 
+/** dnd-kit ships English instructions and announcements by default; the rest
+ * of the product's copy is neutral Spanish (AGENTS.md), so both are
+ * overridden here instead of leaking the library's own defaults. */
+const SCREEN_READER_INSTRUCTIONS: ScreenReaderInstructions = {
+  draggable:
+    "Para levantar una sección, pulsa la barra espaciadora. Mientras la arrastras, usa las flechas para moverla. Vuelve a pulsar espacio para soltarla en su nueva posición, o pulsa escape para cancelar.",
+};
+
+function sectionName(id: UniqueIdentifier): string {
+  return SECTION_LABELS[id as SectionId] ?? String(id);
+}
+
+const ANNOUNCEMENTS: Announcements = {
+  onDragStart({ active }) {
+    return `Se ha levantado ${sectionName(active.id)}.`;
+  },
+  onDragOver({ active, over }) {
+    return over
+      ? `${sectionName(active.id)} está sobre la posición de ${sectionName(over.id)}.`
+      : `${sectionName(active.id)} ya no está sobre ninguna posición.`;
+  },
+  onDragEnd({ active, over }) {
+    return over
+      ? `${sectionName(active.id)} se ha soltado en la posición de ${sectionName(over.id)}.`
+      : `${sectionName(active.id)} se ha soltado.`;
+  },
+  onDragCancel({ active }) {
+    return `Se ha cancelado el arrastre. ${sectionName(active.id)} ha vuelto a su posición.`;
+  },
+};
+
 /** Whatever order was stored, completed with any section missing from it. */
 function resolveOrder(order: SectionId[] | undefined): SectionId[] {
   const chosen = (order ?? []).filter((id) => SECTION_ORDER.includes(id));
@@ -97,9 +131,16 @@ function SectionRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         "flex items-center gap-3 rounded-lg border bg-surface p-2.5",
+        // `scale` and `transform` are independent CSS properties (Tailwind
+        // 4's `scale-*` writes `scale`, not `transform`), so this lift
+        // never fights dnd-kit's own inline `transform`/`transition` above,
+        // which stay untouched.
+        "transition-[scale,box-shadow] duration-150 ease-out-quint motion-reduce:transition-none motion-reduce:scale-100",
         isDragging
-          ? "relative z-10 border-accent shadow-lg"
-          : "border-border-soft",
+          ? // A shadow this wide, kept under 8px of blur, reads as "picked
+            // up" without the border+wide-shadow combo design.md rules out.
+            "relative z-10 scale-[1.02] border-accent shadow-[0_4px_8px_-2px_rgba(0,0,0,0.45)]"
+          : "scale-100 border-border-soft",
       )}
     >
       <button
@@ -206,6 +247,10 @@ export function EditSectionsPanel({
           collisionDetection={closestCenter}
           modifiers={[restrictToVerticalAxis, restrictToParentElement]}
           onDragEnd={handleDragEnd}
+          accessibility={{
+            announcements: ANNOUNCEMENTS,
+            screenReaderInstructions: SCREEN_READER_INSTRUCTIONS,
+          }}
         >
           <SortableContext
             items={resolvedOrder}

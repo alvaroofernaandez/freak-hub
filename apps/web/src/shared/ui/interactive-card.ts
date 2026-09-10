@@ -18,13 +18,16 @@ const HOVER_BORDER: Record<CategoryId, string> = {
  * lift plus a border in the category's colour (#40). Keyboard focus gets the
  * same treatment as the pointer, so the affordance is not mouse-only.
  *
- * The lift is `transform` only: it never reflows the grid around it.
+ * The lift never reflows the grid around it. Tailwind 4's `scale-*` writes the
+ * `scale` property, not `transform`, so that is what the transition names; and
+ * since `transform: none` cannot cancel a `scale`, the lift only exists under
+ * `motion-safe:` rather than being switched off for reduced motion afterwards.
  */
 export function interactiveCardClasses(category: CategoryId): string {
   return [
-    "transition-[transform,border-color] duration-150 ease-out",
-    "hover:scale-[1.02] focus-visible:scale-[1.02]",
+    "transition-[scale,border-color] duration-150 ease-out-quint",
+    "motion-safe:hover:scale-[1.02] motion-safe:focus-visible:scale-[1.02]",
     HOVER_BORDER[category],
-    "motion-reduce:transform-none motion-reduce:transition-none",
+    "motion-reduce:transition-none",
   ].join(" ");
 }
