@@ -1,9 +1,11 @@
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import type {
   ActivityEvent,
   ActivityEventType,
 } from "@/features/activity/lib/activity-event";
 import { Avatar } from "@/features/members/ui/avatar";
+import { staggerStyle } from "@/shared/motion/tokens";
 import { EmptyState } from "@/shared/ui/empty-state";
 
 type ActivityFeedProps = {
@@ -42,13 +44,14 @@ export function ActivityFeed({ events }: ActivityFeedProps) {
 
   return (
     <ul className="space-y-3">
-      {events.map((event) => {
+      {events.map((event, index) => {
         const displayName = event.actorDisplayName ?? event.actorUsername;
 
         return (
           <li
             key={event.id}
-            className="flex items-start gap-3 rounded-lg border border-border bg-surface-raised p-3"
+            className="stagger-in flex items-start gap-3 rounded-lg border border-border bg-surface-raised p-3"
+            style={staggerStyle(index) as CSSProperties}
           >
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full">
               <Avatar displayName={displayName} />

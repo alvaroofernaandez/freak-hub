@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { CategoryActivityStat } from "@/features/profile/lib/activity-stats";
+import { AnimatedNumber } from "@/shared/ui/animated-number";
 import { CATEGORY_LABELS, type CategoryId } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Select } from "@/shared/ui/select";
@@ -70,7 +71,7 @@ export function ActivitySection({ stats }: ActivitySectionProps) {
                 />
               </div>
               <span className="w-6 text-right font-mono text-xs text-ink-muted">
-                {stat.completed}
+                <AnimatedNumber value={stat.completed} />
               </span>
               <span className="text-xs text-ink-muted">terminadas</span>
             </div>
@@ -82,7 +83,7 @@ export function ActivitySection({ stats }: ActivitySectionProps) {
                 />
               </div>
               <span className="w-6 text-right font-mono text-xs text-ink-muted">
-                {stat.inProgress}
+                <AnimatedNumber value={stat.inProgress} />
               </span>
               <span className="text-xs text-ink-muted">en curso</span>
             </div>

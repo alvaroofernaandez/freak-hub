@@ -1,7 +1,9 @@
 "use client";
 
+import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
-import { useState } from "react";
+import type { CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { Star } from "reicon-react";
 import {
   filterWorks,
@@ -12,10 +14,18 @@ import {
 } from "@/features/library/lib/work";
 import { WorkCard } from "@/features/library/ui/work-card";
 import { cn } from "@/shared/lib/cn";
+import {
+  DURATION,
+  EXIT_RATIO,
+  LAYOUT_SPRING,
+  staggerStyle,
+} from "@/shared/motion/tokens";
 import type { CategoryId } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Select } from "@/shared/ui/select";
 import { STATUS_ORDER } from "@/shared/ui/status-badge";
+
+const EXIT_TRANSITION = { duration: DURATION.base * EXIT_RATIO };
 
 type CategoryWorksBrowserProps = {
   works: Work[];
@@ -55,6 +65,24 @@ export function CategoryWorksBrowser({
   const [filters, setFilters] = useState<WorkFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<WorkSort>("recent");
   const filtered = sortWorks(filterWorks(works, filters), sort);
+  const hasSearch = Boolean(filters.search?.trim());
+  const hasActiveFilters = Boolean(
+    filters.status || filters.favouriteOnly || filters.ownedOnly,
+  );
+
+  // Announced on a short delay after the result count settles, not on every
+  // keystroke of a search — a burst of live-region updates while typing is
+  // noise, not help (docs/states.md).
+  const [announcedCount, setAnnouncedCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (works.length === 0 || (!hasSearch && !hasActiveFilters)) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setAnnouncedCount(filtered.length);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [filtered.length, works.length, hasSearch, hasActiveFilters]);
 
   const toggleStatus = (status: WorkFilters["status"]) => {
     setFilters((current) => ({
@@ -62,6 +90,19 @@ export function CategoryWorksBrowser({
       status: current.status === status ? undefined : status,
     }));
   };
+
+  function clearSearch() {
+    setFilters((current) => ({ ...current, search: "" }));
+  }
+
+  function clearFilters() {
+    setFilters((current) => ({
+      ...current,
+      status: undefined,
+      favouriteOnly: undefined,
+      ownedOnly: undefined,
+    }));
+  }
 
   if (works.length === 0) {
     return (
@@ -82,6 +123,13 @@ export function CategoryWorksBrowser({
 
   return (
     <div className="space-y-6">
+      {announcedCount !== null ? (
+        <output aria-live="polite" className="sr-only">
+          {announcedCount === 1
+            ? "1 resultado."
+            : `${announcedCount} resultados.`}
+        </output>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-border-soft bg-surface p-3">
         {STATUS_ORDER.map(({ status, Icon, label }) => (
           <button
@@ -149,14 +197,51 @@ export function CategoryWorksBrowser({
           data-testid="category-works-grid"
           className="grid grid-cols-2 gap-[14px] md:grid-cols-3 md:gap-4 lg:grid-cols-6 lg:gap-[18px]"
         >
-          {filtered.map((work) => (
-            <WorkCard key={work.id} work={work} />
-          ))}
+          <AnimatePresence mode="popLayout">
+            {filtered.map((work, index) => (
+              <m.div
+                key={work.id}
+                layout
+                transition={LAYOUT_SPRING}
+                exit={{ opacity: 0, scale: 0.95, transition: EXIT_TRANSITION }}
+                className="stagger-in"
+                style={staggerStyle(index) as CSSProperties}
+              >
+                <WorkCard work={work} />
+              </m.div>
+            ))}
+          </AnimatePresence>
         </div>
+      ) : hasSearch ? (
+        <EmptyState
+          size="inline"
+          title={`No hay resultados para “${filters.search}”`}
+          description="Prueba con otro término, o quita la búsqueda para ver el resto."
+          action={
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="rounded-lg border border-border px-3.5 py-2 text-sm text-ink-muted transition-colors duration-150 hover:text-ink"
+            >
+              Limpiar búsqueda
+            </button>
+          }
+        />
       ) : (
-        <p className="text-sm text-ink-muted">
-          No hay obras con estos filtros.
-        </p>
+        <EmptyState
+          size="inline"
+          title="No hay obras con estos filtros"
+          description="Quita alguno de los filtros activos para ver más resultados."
+          action={
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-lg border border-border px-3.5 py-2 text-sm text-ink-muted transition-colors duration-150 hover:text-ink"
+            >
+              Quitar filtros
+            </button>
+          }
+        />
       )}
     </div>
   );

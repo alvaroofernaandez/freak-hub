@@ -1,6 +1,7 @@
 import type { IconComponent } from "reicon-react";
 import { Check, Clock, Forbidden } from "reicon-react";
 import type { InvitationStatus } from "@/shared/api/types";
+import { StatusMark } from "@/shared/ui/status-mark";
 
 /**
  * Marks reuse the vocabulary `StatusBadge` already established for library
@@ -30,15 +31,12 @@ export function InvitationStatusBadge({
   const { Icon, label } = STATUSES[status];
 
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-xs text-ink-muted">
-      <span
-        data-testid="invitation-status-mark"
-        aria-hidden="true"
-        className="inline-flex"
-      >
-        <Icon size={14} />
-      </span>
-      {label}
-    </span>
+    <StatusMark
+      Icon={Icon}
+      label={label}
+      className="font-mono text-xs text-ink-muted"
+      iconTestId="invitation-status-mark"
+      iconSize={14}
+    />
   );
 }

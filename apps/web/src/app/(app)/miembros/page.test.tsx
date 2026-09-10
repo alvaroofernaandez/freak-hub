@@ -20,6 +20,7 @@ vi.mock("@/shared/lib/api-client", async () => {
 });
 
 const { default: MembersPage } = await import("./page");
+const { ApiError } = await import("@/shared/lib/api-client");
 
 const ROSTER: MemberPage = {
   items: [
@@ -102,15 +103,15 @@ describe("MembersPage", () => {
     currentUser.mockResolvedValue({ username: "alvaro" });
   });
 
-  it("asks for both the roster and the group's invitations", async () => {
+  it("asks for both the roster and the group's invitations, at the contract's page-size maximum", async () => {
     respondWith(ROSTER, INVITATIONS);
 
     render(await MembersPage());
 
-    expect(apiFetch).toHaveBeenCalledWith("/v1/members", {
+    expect(apiFetch).toHaveBeenCalledWith("/v1/members?limit=100", {
       token: "session-token",
     });
-    expect(apiFetch).toHaveBeenCalledWith("/v1/invitations/group", {
+    expect(apiFetch).toHaveBeenCalledWith("/v1/invitations/group?limit=100", {
       token: "session-token",
     });
   });
@@ -145,8 +146,8 @@ describe("MembersPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("still shows the roster when the invitations fail to load", async () => {
-    respondWith(ROSTER, new Error("boom"));
+  it("still shows the roster, and a retryable section error, when the invitations fail to load", async () => {
+    respondWith(ROSTER, new ApiError("boom", 500, "internal_error"));
 
     render(await MembersPage());
 
@@ -154,17 +155,47 @@ describe("MembersPage", () => {
       screen.getByRole("link", { name: /álvaro fernández/i }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: /invitaciones/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("heading", { name: "Invitaciones" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reintentar" }),
+    ).toBeInTheDocument();
   });
 
-  it("says the group could not be loaded when the roster fails", async () => {
-    respondWith(new Error("boom"), INVITATIONS);
+  it("shows a page-level recoverable error when the roster fails", async () => {
+    respondWith(new ApiError("boom", 500, "internal_error"), INVITATIONS);
 
     render(await MembersPage());
 
     expect(
-      screen.getByRole("heading", { name: /no se ha podido cargar el grupo/i }),
+      screen.getByRole("button", { name: "Reintentar" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Tú")).not.toBeInTheDocument();
+  });
+
+  it("shows the session-expired state, not a generic error, when the roster fetch is a 401", async () => {
+    respondWith(new ApiError("no token", 401, "invalid_token"), INVITATIONS);
+
+    render(await MembersPage());
+
+    expect(
+      screen.getByRole("link", { name: "Iniciar sesión" }),
+    ).toHaveAttribute("href", "/entrar?redirect_url=%2Fmiembros");
+  });
+
+  it("notes there is more of the roster than shown, instead of truncating silently", async () => {
+    respondWith({ ...ROSTER, next_cursor: "cursor-1" }, INVITATIONS);
+
+    render(await MembersPage());
+
+    expect(screen.getByText(/hay más miembros/i)).toBeInTheDocument();
+  });
+
+  it("notes there are more invitations than shown, instead of truncating silently", async () => {
+    respondWith(ROSTER, { ...INVITATIONS, next_cursor: "cursor-1" });
+
+    render(await MembersPage());
+
+    expect(screen.getByText(/hay más invitaciones/i)).toBeInTheDocument();
   });
 });

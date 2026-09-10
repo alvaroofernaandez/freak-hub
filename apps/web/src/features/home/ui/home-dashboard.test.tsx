@@ -86,6 +86,41 @@ describe("HomeDashboard", () => {
     expect(rail.className).not.toMatch(/\bgrid\b/);
   });
 
+  it("cascades the continue cards in, each a beat after the last", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressWorks={[
+          IN_PROGRESS_WORKS[0],
+          { ...IN_PROGRESS_WORKS[0], id: "anime-frieren", title: "Frieren" },
+        ]}
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    const cards = screen.getAllByTestId("continue-card");
+    expect(cards[0]).toHaveClass("stagger-in");
+    expect(cards[0].style.getPropertyValue("--i")).toBe("0");
+    expect(cards[1].style.getPropertyValue("--i")).toBe("1");
+  });
+
+  it("does not show a +1 control on continue cards, since there is no action behind it yet", () => {
+    // The "+1" looked pressable (bordered, padded like a button) but had no
+    // onClick and no progress-update action existed to back it — a fake
+    // affordance. Removed until that action is actually built.
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressWorks={IN_PROGRESS_WORKS}
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(screen.queryByText("+1")).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when nothing is in progress", () => {
     render(
       <HomeDashboard
@@ -97,6 +132,9 @@ describe("HomeDashboard", () => {
     );
 
     expect(screen.getByText(/nada en curso/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /ir a tu biblioteca/i }),
+    ).toHaveAttribute("href", "/biblioteca");
   });
 
   it("lists pending recommendations with their reason and sender", () => {

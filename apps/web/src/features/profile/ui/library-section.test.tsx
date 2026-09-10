@@ -1,7 +1,14 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import type { Work } from "@/features/library/lib/work";
-import { LibrarySection } from "./library-section";
+
+const open = vi.fn();
+vi.mock("@/shared/ui/add-category-modal", () => ({
+  useAddCategoryModal: () => ({ isOpen: false, open, close: vi.fn() }),
+}));
+
+const { LibrarySection } = await import("./library-section");
 
 const WORKS: Work[] = [
   {
@@ -32,5 +39,31 @@ describe("LibrarySection", () => {
     render(<LibrarySection works={[WORKS[1]]} />);
 
     expect(screen.getByText(/sin favoritos/i)).toBeInTheDocument();
+  });
+
+  it("offers no action on a read-only profile — canAdd defaults to false", () => {
+    render(<LibrarySection works={[]} />);
+
+    expect(
+      screen.queryByRole("button", { name: /añadir/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers to add a work, only when canAdd is true, opening the add-category picker", async () => {
+    const user = userEvent.setup();
+    render(<LibrarySection works={[]} canAdd />);
+
+    const button = screen.getByRole("button", { name: /añadir/i });
+    await user.click(button);
+
+    expect(open).toHaveBeenCalled();
+  });
+
+  it("does not offer the action when there is already something to show", () => {
+    render(<LibrarySection works={WORKS} canAdd />);
+
+    expect(
+      screen.queryByRole("button", { name: /añadir/i }),
+    ).not.toBeInTheDocument();
   });
 });

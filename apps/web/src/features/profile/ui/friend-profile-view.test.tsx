@@ -32,6 +32,14 @@ describe("FriendProfileView", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("never offers to add a work from a friend's empty library — read-only", () => {
+    render(<FriendProfileView displayName="Gon Freecss" username="gon" />);
+
+    expect(
+      screen.queryByRole("button", { name: /añadir/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the member-since line when it is passed in", () => {
     render(
       <FriendProfileView
