@@ -183,3 +183,20 @@ func ValidateProgress(work Work, progress int) error {
 
 	return nil
 }
+
+// AddToLibraryInput is what a member sends to register a work.
+//
+// Status is required rather than defaulted, and any of the six is accepted:
+// wanting something, already owning it and having finished it years ago are
+// all equally normal ways to start, so there is nothing sensible to guess.
+type AddToLibraryInput struct {
+	WorkID      uuid.UUID
+	Status      Status
+	Progress    int
+	Rating      *int
+	IsFavourite bool
+	Owned       bool
+	Note        *string
+	StartedAt   *time.Time
+	FinishedAt  *time.Time
+}

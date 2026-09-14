@@ -207,3 +207,218 @@ func isAfterCursor(position, cursor library.Cursor) bool {
 
 	return position.ID.String() < cursor.ID.String()
 }
+
+// EntryRepository stores each member's relationship with the works in a
+// slice. It holds the catalogue too, because List resolves the work every
+// entry travels with — the stand-in for the JOIN the Postgres adapter does.
+type EntryRepository struct {
+	mu    sync.RWMutex
+	items []library.Entry
+	works *WorkRepository
+	// NowFunc returns the timestamps Create and Update stamp. Tests pin it
+	// to make listing order deterministic instead of depending on
+	// wall-clock timing.
+	NowFunc func() time.Time
+	// CreateErr makes Create fail, so a test can check what the service does
+	// when the library is unreachable.
+	CreateErr error
+}
+
+// NewEntryRepository builds an empty in-memory library over a catalogue.
+func NewEntryRepository(works *WorkRepository) *EntryRepository {
+	return &EntryRepository{works: works, NowFunc: time.Now}
+}
+
+// Seed inserts an entry directly, bypassing Create's side effects, for tests
+// that need full control over its fields.
+func (r *EntryRepository) Seed(entry library.Entry) library.Entry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if entry.ID == uuid.Nil {
+		entry.ID = uuid.New()
+	}
+
+	if entry.CreatedAt.IsZero() {
+		entry.CreatedAt = r.NowFunc().UTC()
+	}
+
+	if entry.UpdatedAt.IsZero() {
+		entry.UpdatedAt = entry.CreatedAt
+	}
+
+	r.items = append(r.items, entry)
+
+	return entry
+}
+
+// Create implements library.EntryRepository.
+func (r *EntryRepository) Create(_ context.Context, entry library.Entry) (library.Entry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.CreateErr != nil {
+		return library.Entry{}, r.CreateErr
+	}
+
+	entry.ID = uuid.New()
+	entry.CreatedAt = r.NowFunc().UTC()
+	entry.UpdatedAt = entry.CreatedAt
+	r.items = append(r.items, entry)
+
+	return entry, nil
+}
+
+// ByID implements library.EntryRepository.
+func (r *EntryRepository) ByID(_ context.Context, id uuid.UUID) (library.Entry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, item := range r.items {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+
+	return library.Entry{}, library.ErrEntryNotFound
+}
+
+// ByMemberAndWork implements library.EntryRepository. It is the lookup
+// domain rule 1 rests on, and it is also what the real unique index over
+// (member_id, work_id) will enforce underneath.
+func (r *EntryRepository) ByMemberAndWork(
+	_ context.Context, memberID, workID uuid.UUID,
+) (library.Entry, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, item := range r.items {
+		if item.MemberID == memberID && item.WorkID == workID {
+			return item, nil
+		}
+	}
+
+	return library.Entry{}, library.ErrEntryNotFound
+}
+
+// List implements library.EntryRepository, resolving each entry's work the
+// way the Postgres adapter will with a JOIN, and applying the same keyset
+// order (ADR-0011).
+func (r *EntryRepository) List(
+	ctx context.Context, filter library.EntryFilter, after *library.Cursor, limit int,
+) ([]library.EntryWithWork, error) {
+	r.mu.RLock()
+	matching := make([]library.Entry, 0, len(r.items))
+
+	for _, item := range r.items {
+		if item.MemberID != filter.MemberID {
+			continue
+		}
+
+		if filter.Status != "" && item.Status != filter.Status {
+			continue
+		}
+
+		matching = append(matching, item)
+	}
+	r.mu.RUnlock()
+
+	joined := make([]library.Entry, 0, len(matching))
+	works := make(map[uuid.UUID]library.Work, len(matching))
+
+	for _, item := range matching {
+		work, err := r.works.ByID(ctx, item.WorkID)
+		if err != nil {
+			return nil, err
+		}
+
+		if filter.Category != "" && work.Category != filter.Category {
+			continue
+		}
+
+		works[item.ID] = work
+		joined = append(joined, item)
+	}
+
+	rows := pageOfEntries(joined, after, limit)
+
+	page := make([]library.EntryWithWork, 0, len(rows))
+	for _, row := range rows {
+		page = append(page, library.EntryWithWork{Entry: row, Work: works[row.ID]})
+	}
+
+	return page, nil
+}
+
+// Update implements library.EntryRepository.
+func (r *EntryRepository) Update(_ context.Context, entry library.Entry) (library.Entry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for i, item := range r.items {
+		if item.ID != entry.ID {
+			continue
+		}
+
+		entry.CreatedAt = item.CreatedAt
+		entry.UpdatedAt = r.NowFunc().UTC()
+		r.items[i] = entry
+
+		return entry, nil
+	}
+
+	return library.Entry{}, library.ErrEntryNotFound
+}
+
+// Delete implements library.EntryRepository. It removes the relationship and
+// nothing else: the work stays in the catalogue, which is domain rule 3 seen
+// from the other side.
+func (r *EntryRepository) Delete(_ context.Context, id uuid.UUID) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for i, item := range r.items {
+		if item.ID == id {
+			r.items = append(r.items[:i], r.items[i+1:]...)
+
+			return nil
+		}
+	}
+
+	return library.ErrEntryNotFound
+}
+
+// pageOfEntries is the keyset walk the library listing uses, identical in
+// order to the catalogue's (ADR-0011). Doing it the same way twice is what
+// keeps the two doubles from drifting apart in a way the Postgres adapter
+// never would.
+func pageOfEntries(items []library.Entry, after *library.Cursor, limit int) []library.Entry {
+	sorted := make([]library.Entry, len(items))
+	copy(sorted, items)
+	sort.Slice(sorted, func(i, j int) bool {
+		return isBeforeInListOrder(
+			library.Cursor{CreatedAt: sorted[i].CreatedAt, ID: sorted[i].ID},
+			library.Cursor{CreatedAt: sorted[j].CreatedAt, ID: sorted[j].ID},
+		)
+	})
+
+	start := 0
+	if after != nil {
+		start = sort.Search(len(sorted), func(i int) bool {
+			return isAfterCursor(
+				library.Cursor{CreatedAt: sorted[i].CreatedAt, ID: sorted[i].ID}, *after,
+			)
+		})
+	}
+
+	end := start + limit
+	if end > len(sorted) {
+		end = len(sorted)
+	}
+
+	if end < start {
+		end = start
+	}
+
+	return sorted[start:end]
+}

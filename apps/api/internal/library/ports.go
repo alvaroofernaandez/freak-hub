@@ -24,3 +24,28 @@ type WorkRepository interface {
 	// returned. It returns at most limit rows (ADR-0011).
 	Search(ctx context.Context, filter WorkFilter, after *Cursor, limit int) ([]Work, error)
 }
+
+// EntryRepository persists each member's own relationship with the works.
+//
+// Every lookup that can reach somebody else's entry takes the member as well,
+// so a forgotten owner check is a compile error rather than a leak.
+type EntryRepository interface {
+	Create(ctx context.Context, entry Entry) (Entry, error)
+	// ByID returns ErrEntryNotFound when no entry carries that id. It does
+	// not filter by owner: the service is what decides that somebody else's
+	// entry answers as missing.
+	ByID(ctx context.Context, id uuid.UUID) (Entry, error)
+	// ByMemberAndWork returns ErrEntryNotFound when that member has not
+	// registered that work. It is what domain rule 1 is checked with.
+	ByMemberAndWork(ctx context.Context, memberID, workID uuid.UUID) (Entry, error)
+	// List returns a page of one member's library, newest first, each entry
+	// carrying its work inline. after is nil for the first page; otherwise
+	// only rows strictly after that position are returned. It returns at
+	// most limit rows (ADR-0011).
+	List(ctx context.Context, filter EntryFilter, after *Cursor, limit int) ([]EntryWithWork, error)
+	Update(ctx context.Context, entry Entry) (Entry, error)
+	// Delete removes one entry. The work it pointed at stays in the
+	// catalogue: what is deleted is a relationship, never shared history
+	// (domain rules 3 and 4).
+	Delete(ctx context.Context, id uuid.UUID) error
+}
