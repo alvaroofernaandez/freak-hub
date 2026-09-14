@@ -104,7 +104,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Invitations sent by the current member */
+        /**
+         * Invitations sent by the current member
+         * @description Every invitation the caller has sent, newest first and
+         *     keyset-paginated per
+         *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). It
+         *     includes every status: an accepted invitation is still part of the
+         *     trail of who invited whom.
+         */
         get: operations["listMyInvitations"];
         put?: never;
         /**
@@ -259,6 +266,14 @@ export interface components {
             inviter_id: string;
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+         *     nothing more remains to read.
+         */
+        InvitationPage: {
+            items: components["schemas"]["Invitation"][];
+            next_cursor: string | null;
         };
         /** @description The public identity of the member who sent an invitation. */
         InvitationInviter: {
@@ -602,22 +617,34 @@ export interface operations {
     };
     listMyInvitations: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Page size. Defaults to 25, must be between 1 and 100. */
+                limit?: number;
+                /** @description Opaque cursor returned as `next_cursor` by a previous page. */
+                cursor?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The caller's invitations, newest first */
+            /** @description A page of the caller's invitations */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        items: components["schemas"]["Invitation"][];
-                    };
+                    "application/json": components["schemas"]["InvitationPage"];
+                };
+            };
+            /** @description The limit or the cursor is not valid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
                 };
             };
             401: components["responses"]["Unauthorized"];

@@ -298,19 +298,39 @@ paths:
       operationId: listMyInvitations
       tags: [invitations]
       summary: Invitations sent by the current member
+      description: |
+        Every invitation the caller has sent, newest first and
+        keyset-paginated per
+        [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). It
+        includes every status: an accepted invitation is still part of the
+        trail of who invited whom.
+      parameters:
+        - in: query
+          name: limit
+          description: Page size. Defaults to 25, must be between 1 and 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - in: query
+          name: cursor
+          description: Opaque cursor returned as `next_cursor` by a previous page.
+          schema:
+            type: string
       responses:
         "200":
-          description: The caller's invitations, newest first
+          description: A page of the caller's invitations
           content:
             application/json:
               schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/Invitation"
+                $ref: "#/components/schemas/InvitationPage"
+        "400":
+          description: The limit or the cursor is not valid
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -723,6 +743,20 @@ components:
         created_at:
           type: string
           format: date-time
+
+    InvitationPage:
+      type: object
+      description: |
+        A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+        nothing more remains to read.
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Invitation"
+        next_cursor:
+          type: [string, "null"]
 
     InvitationInviter:
       type: object
