@@ -145,7 +145,7 @@ describe("EntryEditor", () => {
 
       await userEvent.click(screen.getByRole("radio", { name: "En curso" }));
 
-      expect(screen.getByLabelText("Valoración")).toHaveValue(8);
+      expect(screen.getByLabelText("Valoración")).toHaveValue("8");
       expect(screen.getByLabelText("Valoración")).toBeDisabled();
     });
 
@@ -166,12 +166,7 @@ describe("EntryEditor", () => {
     it("counts in the category's own unit and says what the total is", () => {
       render(<EntryEditor item={item({ progress: 12, progressTotal: 64 })} />);
 
-      expect(screen.getByRole("spinbutton", { name: /progreso/i })).toHaveValue(
-        12,
-      );
-      expect(
-        screen.getByRole("spinbutton", { name: /progreso/i }),
-      ).toHaveAttribute("max", "64");
+      expect(screen.getByLabelText(/^progreso/i)).toHaveValue("12");
       expect(screen.getByText(/de 64 episodios/i)).toBeVisible();
     });
 
@@ -182,9 +177,7 @@ describe("EntryEditor", () => {
         />,
       );
 
-      expect(
-        screen.getByRole("spinbutton", { name: /progreso/i }),
-      ).not.toHaveAttribute("max");
+      expect(screen.getByLabelText(/^progreso/i)).not.toHaveAttribute("max");
       expect(screen.getByText(/no sabemos cuántos episodios/i)).toBeVisible();
     });
 
@@ -192,9 +185,7 @@ describe("EntryEditor", () => {
       render(<EntryEditor item={item({ progress: 12 })} />);
 
       await userEvent.click(screen.getByRole("button", { name: /sumar uno/i }));
-      expect(screen.getByRole("spinbutton", { name: /progreso/i })).toHaveValue(
-        13,
-      );
+      expect(screen.getByLabelText(/^progreso/i)).toHaveValue("13");
 
       await userEvent.click(
         screen.getByRole("button", { name: /restar uno/i }),
@@ -202,9 +193,7 @@ describe("EntryEditor", () => {
       await userEvent.click(
         screen.getByRole("button", { name: /restar uno/i }),
       );
-      expect(screen.getByRole("spinbutton", { name: /progreso/i })).toHaveValue(
-        11,
-      );
+      expect(screen.getByLabelText(/^progreso/i)).toHaveValue("11");
     });
 
     it("never steps below zero", async () => {
@@ -273,10 +262,113 @@ describe("EntryEditor", () => {
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "No se puede pasar a ese estado desde el actual.",
       );
-      expect(screen.getByRole("spinbutton", { name: /progreso/i })).toHaveValue(
-        13,
-      );
+      expect(screen.getByLabelText(/^progreso/i)).toHaveValue("13");
       expect(refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("what a field that cannot be read must never do", () => {
+    it("refuses an unreadable score instead of clearing the one that is stored", async () => {
+      render(<EntryEditor item={item({ status: "completed", rating: 8 })} />);
+
+      const rating = screen.getByLabelText("Valoración");
+      await userEvent.clear(rating);
+      await userEvent.type(rating, "8e");
+
+      expect(rating).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        /número entero/i,
+      );
+    });
+
+    it("refuses an unreadable progress instead of writing a zero over it", async () => {
+      render(
+        <EntryEditor item={item({ progress: 47, progressTotal: null })} />,
+      );
+
+      const progress = screen.getByLabelText(/^progreso/i);
+      await userEvent.clear(progress);
+      await userEvent.type(progress, "12e");
+
+      expect(progress).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();
+    });
+
+    it("refuses an empty progress box, which is not the same as zero", async () => {
+      render(<EntryEditor item={item({ progress: 47 })} />);
+
+      await userEvent.clear(screen.getByLabelText(/^progreso/i));
+
+      expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();
+    });
+
+    it("holds the ceiling itself, because the browser never validates a panel that does not submit", async () => {
+      render(<EntryEditor item={item({ progress: 4, progressTotal: 12 })} />);
+
+      const progress = screen.getByLabelText(/^progreso/i);
+      await userEvent.clear(progress);
+      await userEvent.type(progress, "9999");
+
+      expect(progress).toHaveAttribute("aria-invalid", "true");
+      expect(await screen.findByRole("alert")).toHaveTextContent(/12/);
+      expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();
+    });
+
+    it("lets a count past the ceiling be fixed rather than trapping the panel", async () => {
+      render(<EntryEditor item={item({ progress: 4, progressTotal: 12 })} />);
+
+      const progress = screen.getByLabelText(/^progreso/i);
+      await userEvent.clear(progress);
+      await userEvent.type(progress, "9999");
+      await userEvent.clear(progress);
+      await userEvent.type(progress, "11");
+
+      expect(progress).not.toHaveAttribute("aria-invalid");
+      expect(screen.getByRole("button", { name: /guardar/i })).toBeEnabled();
+    });
+  });
+
+  describe("a score edited just before the status moves away from it", () => {
+    it("puts back the stored score rather than sending one the API will refuse", async () => {
+      render(
+        <EntryEditor item={item({ status: "completed", rating: null })} />,
+      );
+
+      await userEvent.type(screen.getByLabelText("Valoración"), "8");
+      await userEvent.click(screen.getByRole("radio", { name: "En curso" }));
+
+      // Visibly reverted: the greyed-out box never shows a number the save is
+      // quietly dropping.
+      expect(screen.getByLabelText("Valoración")).toHaveValue("");
+
+      await save();
+      await waitFor(() => expect(updateLibraryEntry).toHaveBeenCalled());
+      // The whole point: a 422 rating_not_allowed here is atomic, so it would
+      // have taken the status change down with it.
+      expect(sentPatch()).toEqual({ status: "in_progress" });
+    });
+
+    it("keeps a deliberate clear, because null is accepted in any status", async () => {
+      render(<EntryEditor item={item({ status: "completed", rating: 8 })} />);
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /quitar la valoración/i }),
+      );
+      await userEvent.click(screen.getByRole("radio", { name: "En curso" }));
+      await save();
+
+      await waitFor(() => expect(updateLibraryEntry).toHaveBeenCalled());
+      expect(sentPatch()).toEqual({ status: "in_progress", rating: null });
+    });
+
+    it("leaves the clear button live in a status that cannot set a score, since clearing always can", () => {
+      render(<EntryEditor item={item({ status: "in_progress", rating: 8 })} />);
+
+      expect(screen.getByLabelText("Valoración")).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /quitar la valoración/i }),
+      ).toBeEnabled();
     });
   });
 
