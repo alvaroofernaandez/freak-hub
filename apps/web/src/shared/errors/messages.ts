@@ -146,6 +146,22 @@ export const MESSAGES: Record<ProblemCode, CopyResolver> = {
     "Ya es miembro",
     "Ese correo ya pertenece a alguien del grupo.",
   ),
+  already_in_library: fixed(
+    "Ya está en tu biblioteca",
+    "Ya tienes esa obra guardada. Ábrela para cambiar su estado o su progreso.",
+  ),
+  work_not_found: fixed(
+    "Esa obra ya no está",
+    "No hemos encontrado la obra. Puede que la hayan quitado del catálogo.",
+  ),
+  rating_not_allowed: fixed(
+    "Todavía no puedes valorar",
+    "Solo se puede valorar lo que has terminado o lo que has abandonado.",
+  ),
+  invalid_progress: fixed(
+    "Progreso no válido",
+    "Ese progreso no encaja con la obra. Revisa el número e inténtalo de nuevo.",
+  ),
   method_not_allowed: fixed(
     "Acción no disponible",
     "Esta acción no está disponible ahora mismo.",

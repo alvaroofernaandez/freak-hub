@@ -83,6 +83,42 @@ describe("normalizeError copy for a submit", () => {
   });
 });
 
+describe("normalizeError copy for the library codes", () => {
+  const LIBRARY_CODES: { code: string; status: number }[] = [
+    { code: "already_in_library", status: 409 },
+    { code: "work_not_found", status: 404 },
+    { code: "rating_not_allowed", status: 422 },
+    { code: "invalid_progress", status: 422 },
+  ];
+
+  it.each(
+    LIBRARY_CODES,
+  )("resolves display copy for $code without leaking the code name", ({
+    code,
+    status,
+  }) => {
+    const normalized = normalizeError(problemError({ code }, status), {
+      resource: "tu biblioteca",
+      operation: "submit",
+      scope: "operation",
+      idempotent: false,
+      action: "guardar la entrada",
+    });
+
+    expect(normalized.copy.title).not.toHaveLength(0);
+    expect(normalized.copy.description).not.toHaveLength(0);
+    // The wording is for a person, so it must never surface the wire
+    // identifier or the underscored shape of one.
+    expect(normalized.copy.title).not.toContain(code);
+    expect(normalized.copy.description).not.toContain(code);
+    expect(normalized.copy.description).not.toMatch(/_/);
+    // And it must be its own copy, not the generic fallback.
+    expect(normalized.copy.title).not.toBe(
+      "No se ha podido completar la acción",
+    );
+  });
+});
+
 describe("normalizeError", () => {
   it("classifies a missing/invalid token as a session_expired kind", () => {
     const normalized = normalizeError(
