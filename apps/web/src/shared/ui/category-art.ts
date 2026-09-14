@@ -1,4 +1,4 @@
-import type { CategoryId } from "./category-stripe";
+import type { WorkCategory } from "@/shared/api/types";
 
 /**
  * A character standing in for each category, cut out and served from /public.
@@ -9,7 +9,7 @@ import type { CategoryId } from "./category-stripe";
  * URL, so swapping a character while keeping the filename serves the old
  * picture from cache: renaming the file is what actually replaces it.
  */
-export const CATEGORY_ART: Record<CategoryId, string> = {
+export const CATEGORY_ART: Record<WorkCategory, string> = {
   anime: "/char-anime-ed.webp",
   manga: "/char-manga-asta.webp",
   game: "/char-game-arthur.webp",
@@ -23,7 +23,7 @@ export const CATEGORY_ART: Record<CategoryId, string> = {
  * a Tailwind class cannot carry a runtime colour, and a radial gradient with a
  * soft falloff is not expressible with `from-*`/`to-*` utilities.
  */
-export const CATEGORY_COLOR_VAR: Record<CategoryId, string> = {
+export const CATEGORY_COLOR_VAR: Record<WorkCategory, string> = {
   anime: "--color-cat-anime",
   manga: "--color-cat-manga",
   game: "--color-cat-games",
@@ -40,7 +40,7 @@ export const CATEGORY_COLOR_VAR: Record<CategoryId, string> = {
  * It replaced a top-left corner glow that lit nothing: on the dark surface it
  * read as a smudge in an empty corner, far from both the character and the name.
  */
-export function stageGlow(category: CategoryId): string {
+export function stageGlow(category: WorkCategory): string {
   const colour = `var(${CATEGORY_COLOR_VAR[category]})`;
   return [
     `radial-gradient(65% 95% at 82% 100%,`,
@@ -51,7 +51,7 @@ export function stageGlow(category: CategoryId): string {
 }
 
 /** Category -> "text-*" class for its own colour, for the name on a card. */
-export const CATEGORY_TEXT_CLASS: Record<CategoryId, string> = {
+export const CATEGORY_TEXT_CLASS: Record<WorkCategory, string> = {
   anime: "text-cat-anime",
   manga: "text-cat-manga",
   game: "text-cat-games",

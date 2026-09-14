@@ -1,46 +1,47 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import type { Work } from "@/features/library/lib/work";
+import type { LibraryItem } from "@/features/library/lib/library-item";
 import { TopSection } from "./top-section";
 
-const WORKS: Work[] = [
-  {
-    id: "1",
-    title: "Ocho",
+function item(overrides: Partial<LibraryItem> = {}): LibraryItem {
+  return {
+    id: "entry-1",
+    workId: "work-1",
+    title: "Una obra",
     category: "anime",
     status: "completed",
+    progress: 0,
+    progressTotal: null,
+    rating: null,
     isFavourite: false,
-    rating: 8,
-  },
-  {
-    id: "2",
-    title: "Diez",
-    category: "anime",
-    status: "completed",
-    isFavourite: false,
-    rating: 10,
-  },
-  {
+    owned: false,
+    note: null,
+    year: null,
+    season: null,
+    source: "anilist",
+    startedAt: null,
+    finishedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const ITEMS: LibraryItem[] = [
+  item({ id: "1", title: "Ocho", rating: 8 }),
+  item({ id: "2", title: "Diez", rating: 10 }),
+  item({
     id: "3",
     title: "Sin valorar",
     category: "manga",
     status: "in_progress",
-    isFavourite: false,
-  },
-  {
-    id: "4",
-    title: "Seis de mesa",
-    category: "boardgame",
-    status: "completed",
-    isFavourite: false,
-    rating: 6,
-  },
+  }),
+  item({ id: "4", title: "Seis de mesa", category: "boardgame", rating: 6 }),
 ];
 
 describe("TopSection", () => {
-  it("lists only rated works, sorted by rating descending", () => {
-    render(<TopSection works={WORKS} />);
+  it("lists only rated entries, sorted by rating descending", () => {
+    render(<TopSection items={ITEMS} />);
 
     const titles = screen
       .getAllByText(/^(Diez|Ocho|Seis de mesa)$/)
@@ -51,7 +52,7 @@ describe("TopSection", () => {
 
   it("filters by category", async () => {
     const user = userEvent.setup();
-    render(<TopSection works={WORKS} />);
+    render(<TopSection items={ITEMS} />);
 
     await user.click(screen.getByRole("combobox", { name: "Categoría" }));
     await user.click(
@@ -63,7 +64,7 @@ describe("TopSection", () => {
   });
 
   it("shows an empty state when nothing is rated", () => {
-    render(<TopSection works={[WORKS[2]]} />);
+    render(<TopSection items={[ITEMS[2]]} />);
 
     expect(screen.getByText(/sin obras valoradas/i)).toBeInTheDocument();
   });

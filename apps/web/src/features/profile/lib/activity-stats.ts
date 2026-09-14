@@ -1,22 +1,25 @@
-import type { Work } from "@/features/library/lib/work";
-import { CATEGORY_ORDER, type CategoryId } from "@/shared/ui/category-stripe";
+import type { LibraryItem } from "@/features/library/lib/library-item";
+import type { WorkCategory } from "@/shared/api/types";
+import { CATEGORY_ORDER } from "@/shared/ui/category-stripe";
 
 export type CategoryActivityStat = {
-  category: CategoryId;
+  category: WorkCategory;
   completed: number;
   inProgress: number;
 };
 
 /** Completed/in-progress counts per category, derived from a member's library. */
-export function activityStatsByCategory(works: Work[]): CategoryActivityStat[] {
+export function activityStatsByCategory(
+  items: LibraryItem[],
+): CategoryActivityStat[] {
   return CATEGORY_ORDER.map((category) => {
-    const categoryWorks = works.filter((work) => work.category === category);
+    const inCategory = items.filter((item) => item.category === category);
 
     return {
       category,
-      completed: categoryWorks.filter((work) => work.status === "completed")
+      completed: inCategory.filter((item) => item.status === "completed")
         .length,
-      inProgress: categoryWorks.filter((work) => work.status === "in_progress")
+      inProgress: inCategory.filter((item) => item.status === "in_progress")
         .length,
     };
   });

@@ -1,16 +1,46 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import type { Work } from "@/features/library/lib/work";
+import { describe, expect, it, vi } from "vitest";
+import { normalizeError } from "@/shared/errors/normalize-error";
+import { ApiError } from "@/shared/lib/api-client";
+
+// `RetryButton`, inside `ErrorState`, refreshes through the app router.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
+import type { LibraryItem } from "@/features/library/lib/library-item";
 import { HomeDashboard } from "./home-dashboard";
 
-const IN_PROGRESS_WORKS: Work[] = [
-  {
+function item(overrides: Partial<LibraryItem> = {}): LibraryItem {
+  return {
+    id: "entry-1",
+    workId: "work-1",
+    title: "Una obra",
+    category: "anime",
+    status: "completed",
+    progress: 0,
+    progressTotal: null,
+    rating: null,
+    isFavourite: false,
+    owned: false,
+    note: null,
+    year: null,
+    season: null,
+    source: "anilist",
+    startedAt: null,
+    finishedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const IN_PROGRESS: LibraryItem[] = [
+  item({
     id: "anime-hxh",
     title: "Hunter x Hunter (2011)",
-    category: "anime",
     status: "in_progress",
     isFavourite: true,
-  },
+    progress: 68,
+    progressTotal: 148,
+  }),
 ];
 
 const RECOMMENDATIONS = [
@@ -29,7 +59,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -44,7 +74,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -55,11 +85,11 @@ describe("HomeDashboard", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists the works in progress under the continue rail", () => {
+  it("lists the entries in progress under the continue rail", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -75,7 +105,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -90,9 +120,13 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={[
-          IN_PROGRESS_WORKS[0],
-          { ...IN_PROGRESS_WORKS[0], id: "anime-frieren", title: "Frieren" },
+        inProgressItems={[
+          IN_PROGRESS[0],
+          item({
+            id: "anime-frieren",
+            title: "Frieren",
+            status: "in_progress",
+          }),
         ]}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
@@ -112,7 +146,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -121,11 +155,71 @@ describe("HomeDashboard", () => {
     expect(screen.queryByText("+1")).not.toBeInTheDocument();
   });
 
+  it("shows the progress as a count and as a share of its total", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressItems={IN_PROGRESS}
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(screen.getByTestId("continue-card-progress")).toHaveTextContent(
+      "68 / 148 episodios",
+    );
+    expect(
+      screen.getByRole("progressbar", { name: /progreso/i }),
+    ).toHaveAttribute("aria-valuenow", "46");
+  });
+
+  it("draws no bar when the catalogue gives no total, rather than reading a count as a percentage", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressItems={[
+          item({ id: "x", status: "in_progress", progress: 12 }),
+        ]}
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(screen.getByTestId("continue-card-progress")).toHaveTextContent(
+      "12 episodios",
+    );
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("shows the rail's own failure instead of claiming nothing is in progress", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressItems={[]}
+        inProgressError={normalizeError(
+          new ApiError("boom", 503, "service_unavailable"),
+          {
+            resource: "lo que tienes en curso",
+            operation: "load",
+            scope: "section",
+          },
+        )}
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(screen.queryByText(/nada en curso/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reintentar" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows an empty state when nothing is in progress", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={[]}
+        inProgressItems={[]}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -141,7 +235,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -156,7 +250,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={ACTIVITY}
       />,
@@ -169,7 +263,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={[]}
         activity={ACTIVITY}
       />,
@@ -184,7 +278,7 @@ describe("HomeDashboard", () => {
     render(
       <HomeDashboard
         displayName="Ada Lovelace"
-        inProgressWorks={IN_PROGRESS_WORKS}
+        inProgressItems={IN_PROGRESS}
         recommendations={RECOMMENDATIONS}
         activity={[]}
       />,

@@ -5,17 +5,27 @@ import type {
   ActivityEntry,
   PendingRecommendation,
 } from "@/features/home/lib/home-content";
-import type { Work } from "@/features/library/lib/work";
+import {
+  type LibraryItem,
+  progressLabel,
+  progressPercentage,
+} from "@/features/library/lib/library-item";
+import type { NormalizedAppError } from "@/shared/errors/types";
 import { cn } from "@/shared/lib/cn";
 import { staggerStyle } from "@/shared/motion/tokens";
 import { CATEGORY_COLOR_CLASS } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { ProgressBar } from "@/shared/ui/progress-bar";
+import { ErrorState } from "@/shared/ui/state/error-state";
 import { StatusBadge } from "@/shared/ui/status-badge";
 
 type HomeDashboardProps = {
   displayName: string;
-  inProgressWorks: Work[];
+  inProgressItems: LibraryItem[];
+  /** Set when the rail's own request failed. A failure is not an empty rail:
+   * "nothing in progress" invites you to start something, and saying that
+   * when the request never landed would be a lie (docs/states.md). */
+  inProgressError?: NormalizedAppError | null;
   recommendations: PendingRecommendation[];
   activity: ActivityEntry[];
 };
@@ -23,7 +33,8 @@ type HomeDashboardProps = {
 /** The /inicio panel: what's in progress, pending recommendations, recent activity. */
 export function HomeDashboard({
   displayName,
-  inProgressWorks,
+  inProgressItems,
+  inProgressError = null,
   recommendations,
   activity,
 }: HomeDashboardProps) {
@@ -42,13 +53,15 @@ export function HomeDashboard({
         <h2 className="text-[14px] font-bold text-ink xl:text-[15px]">
           Sigue donde lo dejaste
         </h2>
-        {inProgressWorks.length > 0 ? (
+        {inProgressError ? (
+          <ErrorState error={inProgressError} size="section" />
+        ) : inProgressItems.length > 0 ? (
           <div
             data-testid="continue-rail"
             className="flex gap-3 overflow-x-auto pb-1 md:gap-4 xl:gap-5"
           >
-            {inProgressWorks.map((work, index) => (
-              <ContinueCard key={work.id} work={work} index={index} />
+            {inProgressItems.map((item, index) => (
+              <ContinueCard key={item.id} item={item} index={index} />
             ))}
           </div>
         ) : (
@@ -121,13 +134,14 @@ export function HomeDashboard({
 }
 
 type ContinueCardProps = {
-  work: Work;
+  item: LibraryItem;
   index: number;
 };
 
-/** A card in the "sigue donde lo dejaste" rail: cover, title, progress and a quick +1. */
-function ContinueCard({ work, index }: ContinueCardProps) {
-  const progress = work.progress ?? 0;
+/** A card in the "sigue donde lo dejaste" rail: cover, title and progress. */
+function ContinueCard({ item, index }: ContinueCardProps) {
+  const percentage = progressPercentage(item);
+  const progress = progressLabel(item);
 
   return (
     <div
@@ -136,16 +150,16 @@ function ContinueCard({ work, index }: ContinueCardProps) {
       style={staggerStyle(index) as CSSProperties}
     >
       <Link
-        href={`/obras/${work.id}`}
+        href={`/obras/${item.id}`}
         className="flex flex-col gap-2 transition-opacity duration-150 hover:opacity-90"
       >
         <div
           className={cn(
             "flex h-[110px] flex-col justify-end rounded-xl p-3 text-accent-ink md:h-[120px] xl:h-[140px]",
-            CATEGORY_COLOR_CLASS[work.category],
+            CATEGORY_COLOR_CLASS[item.category],
           )}
         >
-          {work.isFavourite ? (
+          {item.isFavourite ? (
             <span
               role="img"
               aria-label="Favorito"
@@ -156,11 +170,25 @@ function ContinueCard({ work, index }: ContinueCardProps) {
           ) : null}
         </div>
         <span className="font-display text-sm leading-tight text-ink">
-          {work.title}
+          {item.title}
         </span>
       </Link>
-      <StatusBadge status={work.status} />
-      <ProgressBar value={progress} label={`Progreso de ${work.title}`} />
+      <StatusBadge status={item.status} />
+      {progress ? (
+        <span
+          data-testid="continue-card-progress"
+          className="font-mono text-[11px] text-ink-muted"
+        >
+          {progress}
+        </span>
+      ) : null}
+      {/* `progress` counts episodes, chapters or hours, not percent, so the
+          bar only appears once the catalogue gives it a total to be a share
+          of (see `progressPercentage`). Drawing "12 episodes" as a bar 12%
+          full would be a figure the API never sent. */}
+      {percentage === null ? null : (
+        <ProgressBar value={percentage} label={`Progreso de ${item.title}`} />
+      )}
     </div>
   );
 }

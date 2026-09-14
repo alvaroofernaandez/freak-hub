@@ -1,52 +1,68 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Work } from "@/features/library/lib/work";
+import type { LibraryItem } from "@/features/library/lib/library-item";
 import { WorkPageHeader } from "./work-page-header";
 
-const BASE_WORK: Work = {
-  id: "anime-fma",
-  title: "Fullmetal Alchemist: Brotherhood",
-  category: "anime",
-  status: "completed",
-  isFavourite: false,
-};
-
-const BOARDGAME_WORK: Work = {
-  id: "board-wingspan",
-  title: "Wingspan",
-  category: "boardgame",
-  status: "completed",
-  isFavourite: true,
-  year: 2019,
-  duration: "40–70 min",
-  players: "1–5 jugadores",
-  publisher: "Stonemaier Games",
-  source: "BoardGameGeek",
-};
+function item(overrides: Partial<LibraryItem> = {}): LibraryItem {
+  return {
+    id: "entry-fma",
+    workId: "work-fma",
+    title: "Fullmetal Alchemist: Brotherhood",
+    category: "anime",
+    status: "completed",
+    progress: 0,
+    progressTotal: null,
+    rating: null,
+    isFavourite: false,
+    owned: false,
+    note: null,
+    year: null,
+    season: null,
+    source: "manual",
+    startedAt: null,
+    finishedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
 
 describe("WorkPageHeader", () => {
-  it("shows how far along the work is when it has progress", () => {
-    render(<WorkPageHeader work={{ ...BASE_WORK, progress: 40 }} />);
+  it("draws the progress bar as a share of the total, not as the raw count", () => {
+    render(<WorkPageHeader item={item({ progress: 32, progressTotal: 64 })} />);
 
     expect(
       screen.getByRole("progressbar", { name: /progreso/i }),
-    ).toHaveAttribute("aria-valuenow", "40");
+    ).toHaveAttribute("aria-valuenow", "50");
   });
 
-  it("shows no progress bar when the work has no progress recorded", () => {
-    render(<WorkPageHeader work={{ ...BASE_WORK, progress: undefined }} />);
+  it("shows no progress bar when the catalogue gives no total to be a share of", () => {
+    render(
+      <WorkPageHeader item={item({ progress: 12, progressTotal: null })} />,
+    );
 
     expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("work-page-header-progress")).toHaveTextContent(
+      "12 episodios",
+    );
+  });
+
+  it("shows no progress at all when nothing has been recorded", () => {
+    render(<WorkPageHeader item={item({ progress: 0 })} />);
+
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("work-page-header-progress"),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a cover placeholder", () => {
-    render(<WorkPageHeader work={BASE_WORK} />);
+    render(<WorkPageHeader item={item()} />);
 
     expect(screen.getByText("portada")).toBeInTheDocument();
   });
 
   it("shows the work's title as the page heading", () => {
-    render(<WorkPageHeader work={BASE_WORK} />);
+    render(<WorkPageHeader item={item()} />);
 
     expect(
       screen.getByRole("heading", {
@@ -56,7 +72,7 @@ describe("WorkPageHeader", () => {
   });
 
   it("shows the category pill as an outline, not a solid fill", () => {
-    render(<WorkPageHeader work={BOARDGAME_WORK} />);
+    render(<WorkPageHeader item={item({ category: "boardgame" })} />);
 
     const pill = screen.getByText("Juegos de mesa");
     expect(pill).toHaveClass("border-cat-board");
@@ -64,30 +80,62 @@ describe("WorkPageHeader", () => {
     expect(pill).not.toHaveClass("bg-cat-board");
   });
 
-  it("joins the category-specific metadata into one line for a boardgame", () => {
-    render(<WorkPageHeader work={BOARDGAME_WORK} />);
+  it("joins the year, the episode count and the season into one line for an anime", () => {
+    render(
+      <WorkPageHeader
+        item={item({ year: 2009, progressTotal: 64, season: "2009-spring" })}
+      />,
+    );
 
-    expect(
-      screen.getByText("2019 · 40–70 min · 1–5 jugadores · Stonemaier Games"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("work-page-header-metadata")).toHaveTextContent(
+      "2009 · 64 episodios · Primavera",
+    );
   });
 
-  it("omits the metadata line when none of its fields are present", () => {
-    render(<WorkPageHeader work={BASE_WORK} />);
+  it("shows a season the catalogue labelled some other way exactly as it arrived", () => {
+    render(<WorkPageHeader item={item({ season: "temporada especial" })} />);
+
+    expect(screen.getByTestId("work-page-header-metadata")).toHaveTextContent(
+      "temporada especial",
+    );
+  });
+
+  it("keeps the episode count and season out of a category that has neither", () => {
+    render(
+      <WorkPageHeader
+        item={item({
+          category: "game",
+          year: 2019,
+          progressTotal: 64,
+          season: "2009-spring",
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId("work-page-header-metadata")).toHaveTextContent(
+      "2019",
+    );
+    expect(
+      screen.getByTestId("work-page-header-metadata"),
+    ).not.toHaveTextContent("episodios");
+  });
+
+  it("omits the metadata line when the contract knows none of its fields", () => {
+    render(<WorkPageHeader item={item()} />);
 
     expect(
       screen.queryByTestId("work-page-header-metadata"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows the source attribution when present", () => {
-    render(<WorkPageHeader work={BOARDGAME_WORK} />);
+  it("credits the catalogue the work was imported from", () => {
+    render(<WorkPageHeader item={item({ source: "anilist" })} />);
 
-    expect(screen.getByText("Fuente: BoardGameGeek")).toBeInTheDocument();
+    expect(screen.getByText("Fuente: AniList")).toBeInTheDocument();
   });
 
-  it("omits the source attribution when absent", () => {
-    render(<WorkPageHeader work={BASE_WORK} />);
+  it("credits nobody for a work somebody typed in by hand", () => {
+    render(<WorkPageHeader item={item({ source: "manual" })} />);
 
     expect(screen.queryByText(/^Fuente:/)).not.toBeInTheDocument();
   });

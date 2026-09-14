@@ -2,11 +2,12 @@
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useState } from "react";
-import { type CategoryId, CategoryStripe } from "./category-stripe";
+import type { WorkCategory } from "@/shared/api/types";
+import { CategoryStripe } from "./category-stripe";
 
 type ActiveCategoryContextValue = {
-  activeCategory: CategoryId | undefined;
-  setActiveCategory: (category: CategoryId | undefined) => void;
+  activeCategory: WorkCategory | undefined;
+  setActiveCategory: (category: WorkCategory | undefined) => void;
 };
 
 const ActiveCategoryContext = createContext<ActiveCategoryContextValue>({
@@ -16,7 +17,7 @@ const ActiveCategoryContext = createContext<ActiveCategoryContextValue>({
 
 /** Holds which category is active so pages nested anywhere below can declare it. */
 export function ActiveCategoryProvider({ children }: { children: ReactNode }) {
-  const [activeCategory, setActiveCategory] = useState<CategoryId>();
+  const [activeCategory, setActiveCategory] = useState<WorkCategory>();
 
   return (
     <ActiveCategoryContext.Provider
@@ -33,7 +34,7 @@ export function CategoryStripeHost() {
   return <CategoryStripe activeCategory={activeCategory} />;
 }
 
-type SetActiveCategoryProps = { category: CategoryId };
+type SetActiveCategoryProps = { category: WorkCategory };
 
 /**
  * Rendered by a page to widen its segment on the shared stripe. Renders

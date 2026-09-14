@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Work } from "@/features/library/lib/work";
+import type { LibraryItem } from "@/features/library/lib/library-item";
 
 const open = vi.fn();
 vi.mock("@/shared/ui/add-category-modal", () => ({
@@ -10,39 +10,50 @@ vi.mock("@/shared/ui/add-category-modal", () => ({
 
 const { LibrarySection } = await import("./library-section");
 
-const WORKS: Work[] = [
-  {
-    id: "1",
-    title: "Favorita",
+function item(overrides: Partial<LibraryItem> = {}): LibraryItem {
+  return {
+    id: "entry-1",
+    workId: "work-1",
+    title: "Una obra",
     category: "anime",
     status: "completed",
-    isFavourite: true,
-  },
-  {
-    id: "2",
-    title: "No favorita",
-    category: "anime",
-    status: "completed",
+    progress: 0,
+    progressTotal: null,
+    rating: null,
     isFavourite: false,
-  },
+    owned: false,
+    note: null,
+    year: null,
+    season: null,
+    source: "anilist",
+    startedAt: null,
+    finishedAt: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const ITEMS: LibraryItem[] = [
+  item({ id: "1", title: "Favorita", isFavourite: true }),
+  item({ id: "2", title: "No favorita", isFavourite: false }),
 ];
 
 describe("LibrarySection", () => {
-  it("shows only the favourite works", () => {
-    render(<LibrarySection works={WORKS} />);
+  it("shows only the favourite entries", () => {
+    render(<LibrarySection items={ITEMS} />);
 
     expect(screen.getByText("Favorita")).toBeInTheDocument();
     expect(screen.queryByText("No favorita")).not.toBeInTheDocument();
   });
 
   it("shows an empty state when there are no favourites", () => {
-    render(<LibrarySection works={[WORKS[1]]} />);
+    render(<LibrarySection items={[ITEMS[1]]} />);
 
     expect(screen.getByText(/sin favoritos/i)).toBeInTheDocument();
   });
 
   it("offers no action on a read-only profile — canAdd defaults to false", () => {
-    render(<LibrarySection works={[]} />);
+    render(<LibrarySection items={[]} />);
 
     expect(
       screen.queryByRole("button", { name: /añadir/i }),
@@ -51,7 +62,7 @@ describe("LibrarySection", () => {
 
   it("offers to add a work, only when canAdd is true, opening the add-category picker", async () => {
     const user = userEvent.setup();
-    render(<LibrarySection works={[]} canAdd />);
+    render(<LibrarySection items={[]} canAdd />);
 
     const button = screen.getByRole("button", { name: /añadir/i });
     await user.click(button);
@@ -60,7 +71,7 @@ describe("LibrarySection", () => {
   });
 
   it("does not offer the action when there is already something to show", () => {
-    render(<LibrarySection works={WORKS} canAdd />);
+    render(<LibrarySection items={ITEMS} canAdd />);
 
     expect(
       screen.queryByRole("button", { name: /añadir/i }),

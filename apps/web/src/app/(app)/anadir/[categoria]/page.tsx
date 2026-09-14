@@ -11,11 +11,8 @@ import {
 } from "@/features/library/lib/catalog-search";
 import { CatalogSearchField } from "@/features/library/ui/catalog-search-field";
 import { CatalogSearchResults } from "@/features/library/ui/catalog-search-results";
-import {
-  CATEGORY_LABELS,
-  CATEGORY_ORDER,
-  type CategoryId,
-} from "@/shared/ui/category-stripe";
+import type { WorkCategory } from "@/shared/api/types";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { ErrorState } from "@/shared/ui/state/error-state";
 
@@ -28,7 +25,7 @@ type AddSearchPageProps = {
  * the step into a catalogue to browse. */
 const SEARCH_LIMIT = 10;
 
-function isCategoryId(value: string): value is CategoryId {
+function isWorkCategory(value: string): value is WorkCategory {
   return (CATEGORY_ORDER as string[]).includes(value);
 }
 
@@ -36,7 +33,7 @@ export async function generateMetadata({
   params,
 }: AddSearchPageProps): Promise<Metadata> {
   const { categoria } = await params;
-  return { title: isCategoryId(categoria) ? "Añadir" : "" };
+  return { title: isWorkCategory(categoria) ? "Añadir" : "" };
 }
 
 /**
@@ -69,7 +66,7 @@ export default async function AddSearchPage({
 }: AddSearchPageProps) {
   const { categoria } = await params;
 
-  if (!isCategoryId(categoria)) {
+  if (!isWorkCategory(categoria)) {
     notFound();
     return;
   }

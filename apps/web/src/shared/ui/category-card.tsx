@@ -2,18 +2,15 @@ import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowRight, Plus } from "reicon-react";
+import type { WorkCategory } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { AnimatedNumber } from "./animated-number";
 import { CATEGORY_ART, CATEGORY_TEXT_CLASS, stageGlow } from "./category-art";
-import {
-  CATEGORY_ACCENT_CLASS,
-  CATEGORY_LABELS,
-  type CategoryId,
-} from "./category-stripe";
+import { CATEGORY_ACCENT_CLASS, CATEGORY_LABELS } from "./category-stripe";
 import { interactiveCardClasses } from "./interactive-card";
 
 type CategoryCardBaseProps = {
-  category: CategoryId;
+  category: WorkCategory;
   /** "roster" in the library lobby, "compact" in the add picker. */
   size?: "roster" | "compact";
   /** Works in the category. Omitted where a figure means nothing (the picker). */

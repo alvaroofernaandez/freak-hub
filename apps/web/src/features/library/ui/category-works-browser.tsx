@@ -6,13 +6,14 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { Star } from "reicon-react";
 import {
-  filterWorks,
-  sortWorks,
-  type Work,
-  type WorkFilters,
-  type WorkSort,
-} from "@/features/library/lib/work";
+  filterItems,
+  type LibraryFilters,
+  type LibraryItem,
+  type LibrarySort,
+  sortItems,
+} from "@/features/library/lib/library-item";
 import { WorkCard } from "@/features/library/ui/work-card";
+import type { WorkCategory } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import {
   DURATION,
@@ -20,7 +21,6 @@ import {
   LAYOUT_SPRING,
   staggerStyle,
 } from "@/shared/motion/tokens";
-import type { CategoryId } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Select } from "@/shared/ui/select";
 import { STATUS_ORDER } from "@/shared/ui/status-badge";
@@ -28,13 +28,13 @@ import { STATUS_ORDER } from "@/shared/ui/status-badge";
 const EXIT_TRANSITION = { duration: DURATION.base * EXIT_RATIO };
 
 type CategoryWorksBrowserProps = {
-  works: Work[];
-  category: CategoryId;
+  items: LibraryItem[];
+  category: WorkCategory;
 };
 
-const EMPTY_FILTERS: WorkFilters = {};
+const EMPTY_FILTERS: LibraryFilters = {};
 
-const SORT_OPTIONS: { value: WorkSort; label: string }[] = [
+const SORT_OPTIONS: { value: LibrarySort; label: string }[] = [
   { value: "recent", label: "Recientes" },
   { value: "alphabetical", label: "Alfabético" },
   { value: "rating", label: "Valoración" },
@@ -50,21 +50,23 @@ const chipClass = (pressed: boolean) =>
 
 /**
  * Client-side status/favourite/owned/search filtering, plus sorting, over a
- * category's works (docs/screens.md#biblioteca-por-categoría,
+ * category's entries (docs/screens.md#biblioteca-por-categoría,
  * docs/design/high-fidelity-desktop.html §3). No API call: filters and sorts
- * the works array already loaded on the page.
+ * the page the server already fetched. Asking `/v1/library` again per chip
+ * would spend a round trip to reorder a list that is already in memory, and
+ * a cursor is only valid for the filters that produced it.
  *
- * When the category has no works at all yet (there is no library endpoint,
- * see docs/roadmap.md), the filter bar has nothing to filter, so it is
- * replaced by an honest empty state with a real action: go add one.
+ * When the category holds nothing at all, the filter bar has nothing to
+ * filter, so it is replaced by an honest empty state with a real action: go
+ * add one.
  */
 export function CategoryWorksBrowser({
-  works,
+  items,
   category,
 }: CategoryWorksBrowserProps) {
-  const [filters, setFilters] = useState<WorkFilters>(EMPTY_FILTERS);
-  const [sort, setSort] = useState<WorkSort>("recent");
-  const filtered = sortWorks(filterWorks(works, filters), sort);
+  const [filters, setFilters] = useState<LibraryFilters>(EMPTY_FILTERS);
+  const [sort, setSort] = useState<LibrarySort>("recent");
+  const filtered = sortItems(filterItems(items, filters), sort);
   const hasSearch = Boolean(filters.search?.trim());
   const hasActiveFilters = Boolean(
     filters.status || filters.favouriteOnly || filters.ownedOnly,
@@ -75,16 +77,16 @@ export function CategoryWorksBrowser({
   // noise, not help (docs/states.md).
   const [announcedCount, setAnnouncedCount] = useState<number | null>(null);
   useEffect(() => {
-    if (works.length === 0 || (!hasSearch && !hasActiveFilters)) {
+    if (items.length === 0 || (!hasSearch && !hasActiveFilters)) {
       return;
     }
     const timer = window.setTimeout(() => {
       setAnnouncedCount(filtered.length);
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [filtered.length, works.length, hasSearch, hasActiveFilters]);
+  }, [filtered.length, items.length, hasSearch, hasActiveFilters]);
 
-  const toggleStatus = (status: WorkFilters["status"]) => {
+  const toggleStatus = (status: LibraryFilters["status"]) => {
     setFilters((current) => ({
       ...current,
       status: current.status === status ? undefined : status,
@@ -104,7 +106,7 @@ export function CategoryWorksBrowser({
     }));
   }
 
-  if (works.length === 0) {
+  if (items.length === 0) {
     return (
       <EmptyState
         title="Aún no has añadido ninguna obra a esta categoría"
@@ -187,7 +189,7 @@ export function CategoryWorksBrowser({
         <Select
           label="Ordenar"
           value={sort}
-          onValueChange={(value) => setSort(value as WorkSort)}
+          onValueChange={(value) => setSort(value as LibrarySort)}
           options={[...SORT_OPTIONS]}
         />
       </div>
@@ -198,16 +200,16 @@ export function CategoryWorksBrowser({
           className="grid grid-cols-2 gap-[14px] md:grid-cols-3 md:gap-4 xl:grid-cols-6 xl:gap-[18px]"
         >
           <AnimatePresence mode="popLayout">
-            {filtered.map((work, index) => (
+            {filtered.map((item, index) => (
               <m.div
-                key={work.id}
+                key={item.id}
                 layout
                 transition={LAYOUT_SPRING}
                 exit={{ opacity: 0, scale: 0.95, transition: EXIT_TRANSITION }}
                 className="stagger-in"
                 style={staggerStyle(index) as CSSProperties}
               >
-                <WorkCard work={work} />
+                <WorkCard item={item} />
               </m.div>
             ))}
           </AnimatePresence>

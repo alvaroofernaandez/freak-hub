@@ -3,19 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { IconComponent } from "reicon-react";
 import { Check, Clock, Pause, Play, Star, X } from "reicon-react";
+import type { LibraryEntryStatus } from "@/shared/api/types";
 import { StatusMark } from "./status-mark";
-
-/**
- * No contract type exists for LibraryEntry yet (Work is not implemented), so
- * this union lives local to the component until then.
- */
-export type EntryStatus =
-  | "wishlist"
-  | "pending"
-  | "in_progress"
-  | "completed"
-  | "dropped"
-  | "on_hold";
 
 /**
  * One icon per status, chosen so the shape says what the word says: a star for
@@ -23,7 +12,10 @@ export type EntryStatus =
  * is underway, a check for what is finished, a cross for what was abandoned
  * and a pause for what is on hold.
  */
-const STATUSES: Record<EntryStatus, { Icon: IconComponent; label: string }> = {
+const STATUSES: Record<
+  LibraryEntryStatus,
+  { Icon: IconComponent; label: string }
+> = {
   wishlist: { Icon: Star, label: "Wishlist" },
   pending: { Icon: Clock, label: "Pendiente" },
   in_progress: { Icon: Play, label: "En curso" },
@@ -34,16 +26,16 @@ const STATUSES: Record<EntryStatus, { Icon: IconComponent; label: string }> = {
 
 /** The six statuses, in their canonical order, for anything that lists them (e.g. filters). */
 export const STATUS_ORDER: {
-  status: EntryStatus;
+  status: LibraryEntryStatus;
   Icon: IconComponent;
   label: string;
-}[] = (Object.keys(STATUSES) as EntryStatus[]).map((status) => ({
+}[] = (Object.keys(STATUSES) as LibraryEntryStatus[]).map((status) => ({
   status,
   ...STATUSES[status],
 }));
 
 type StatusBadgeProps = {
-  status: EntryStatus;
+  status: LibraryEntryStatus;
 };
 
 /**
