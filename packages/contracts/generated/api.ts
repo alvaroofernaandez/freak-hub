@@ -169,6 +169,12 @@ export interface paths {
          *     Newest first and keyset-paginated per
          *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). Both
          *     filters are optional and combine with an AND.
+         *
+         *     A cursor is only valid for the filters that produced it. Carrying a
+         *     `next_cursor` from one filter combination over to a different one
+         *     walks a keyset that was never computed for it, so re-send the same
+         *     `category` and `q` with every page, and start from no cursor
+         *     whenever a filter changes.
          */
         get: operations["listWorks"];
         put?: never;
@@ -183,6 +189,14 @@ export interface paths {
          *     `null` — importing from AniList, TMDB and the rest is a separate
          *     piece of work and this endpoint deliberately refuses to fake it, so
          *     neither field is accepted in the body.
+         *
+         *     **There is no `409` here, and that is not an oversight.** Imported
+         *     works are unique by `(source, source_id)`, but this endpoint only
+         *     ever creates manual ones, whose `source_id` is null — so there is
+         *     nothing to collide on. Two members can legitimately add different
+         *     things under the same title, and deciding otherwise would reject
+         *     honest entries to prevent a duplicate that costs little. Look first
+         *     with `GET /v1/works?q=`; merging duplicates is out of scope.
          *
          *     A work is never deleted, even if nobody keeps it in their library
          *     (domain rule 3): it is shared history.
@@ -236,6 +250,12 @@ export interface paths {
          *     Newest first and keyset-paginated per
          *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). Both
          *     filters are optional and combine with an AND.
+         *
+         *     A cursor is only valid for the filters that produced it. Carrying a
+         *     `next_cursor` from one filter combination over to a different one
+         *     walks a keyset that was never computed for it, so re-send the same
+         *     `status` and `category` with every page, and start from no cursor
+         *     whenever a filter changes.
          *
          *     Each entry carries its whole `Work` inline rather than just a
          *     `work_id`, so rendering a library list never needs a second round of
@@ -294,6 +314,22 @@ export interface paths {
          *     nullable here and merely absent means "leave as it is". A body with
          *     no fields at all changes nothing and answers `200` with the entry
          *     unchanged.
+         *
+         *     **A stored rating survives a status change.** The rule that only
+         *     `completed` and `dropped` can be rated applies to a rating *arriving
+         *     in the request*, not to one already saved: `rating_not_allowed` is
+         *     raised when the body carries a non-null `rating` and the resulting
+         *     status is neither of those. A `PATCH {"status": "in_progress"}` on an
+         *     entry rated 8 succeeds and keeps the 8. `completed → in_progress` is
+         *     a rewatch, there is no rating history to restore from, and silently
+         *     destroying a score because somebody revisited something would be
+         *     data loss. Clearing a rating is something you ask for, by sending
+         *     `"rating": null`.
+         *
+         *     Unlike creation, **a status change is a transition** and is checked
+         *     against the state machine in
+         *     [domain.md](../../docs/domain.md). A move the machine does not allow
+         *     is `422 invalid_transition`.
          *
          *     The work an entry points at never changes: pointing at a different
          *     work is a different entry. Delete this one and create the other.
@@ -364,7 +400,7 @@ export interface components {
              * @example not_found
              * @enum {string}
              */
-            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "already_in_library" | "work_not_found" | "rating_not_allowed" | "invalid_progress" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
+            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "already_in_library" | "work_not_found" | "rating_not_allowed" | "invalid_progress" | "library_entry_not_found" | "invalid_transition" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
             /**
              * @deprecated
              * @description Same text as `detail`. Kept only for backward compatibility with clients written before ADR-0014.
@@ -502,9 +538,19 @@ export interface components {
         };
         /**
          * @description The objective record of a thing: title, category, year, cover,
-         *     synopsis. It is **shared by the whole group** — if two members watch
-         *     the same anime, both point at this same record — and that overlap is
-         *     what makes matches and recommendations mean anything later.
+         *     synopsis. It is **shared by the whole group**, which is what makes
+         *     matches and recommendations mean anything later.
+         *
+         *     That sharing rests on **import**, not on manual entry. A work that
+         *     came from an external catalogue is unique by `(source, source_id)`
+         *     while `source_id` is not null, so two members importing the same
+         *     anime land on this same record.
+         *
+         *     **Manual works are not deduplicated.** `source_id` is null by
+         *     definition, and two people can legitimately add different things
+         *     under the same title. What prevents an accidental duplicate is the
+         *     search step: `GET /v1/works?q=` exists so you can look before you
+         *     create. Merging duplicates is out of scope for now.
          *
          *     A work is never deleted, even when nobody keeps it in their library
          *     any more (domain rule 3).
@@ -537,6 +583,20 @@ export interface components {
              *     everything.
              */
             expansion_of: string | null;
+            /**
+             * Format: date-time
+             * @description When the work entered the shared catalogue. This is the key
+             *     `GET /v1/works` orders by (ADR-0011), so a client can reproduce
+             *     and display the order it is being served.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description When the record last changed. A `Work` travels embedded in every
+             *     `LibraryEntry`, so this is what tells a client whether the copy
+             *     it is holding has gone stale.
+             */
+            updated_at: string;
         };
         /**
          * @description A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
@@ -595,10 +655,12 @@ export interface components {
              */
             progress: number;
             /**
-             * @description A score from 1 to 10, only meaningful once there is an opinion:
-             *     the domain accepts it on `completed` and `dropped` and rejects it
-             *     anywhere else with `rating_not_allowed` (domain rule 2). `null`
-             *     when unrated.
+             * @description A score from 1 to 10, only meaningful once there is an opinion.
+             *     The domain accepts a rating *arriving in a request* on
+             *     `completed` and `dropped` and rejects it anywhere else with
+             *     `rating_not_allowed` (domain rule 2). A rating already stored
+             *     survives a later status change — a rewatch does not erase a
+             *     score. `null` when unrated.
              */
             rating: number | null;
             /**
@@ -632,10 +694,16 @@ export interface components {
             next_cursor: string | null;
         };
         /**
-         * @description `status` is required rather than defaulted: a member either wants
-         *     something (`wishlist`) or already has it (`pending`), and both are
-         *     legitimate entry points into the lifecycle. Picking one silently
-         *     would guess at the very thing the member is telling us.
+         * @description `status` is required rather than defaulted, and **any of the six
+         *     values is accepted**. Creating an entry is not a transition: it is
+         *     the entry point into the lifecycle, so the state machine in
+         *     [domain.md](../../docs/domain.md) does not constrain it. Registering
+         *     an anime you finished years ago is an ordinary thing to do, and
+         *     forcing it through `pending` plus a `PATCH` would be theatre.
+         *
+         *     There is no default because there is nothing sensible to guess:
+         *     wanting something, already owning it and having finished it are all
+         *     equally normal ways to start.
          */
         CreateLibraryEntryRequest: {
             /**
@@ -646,7 +714,7 @@ export interface components {
             status: components["schemas"]["LibraryEntryStatus"];
             /** @description Defaults to `0` when absent. */
             progress?: number;
-            /** @description Only accepted when `status` is `completed` or `dropped`; otherwise `422 rating_not_allowed`. */
+            /** @description Only accepted when `status` is `completed` or `dropped`; otherwise `422 rating_not_allowed`. Send `null` to leave it unrated. */
             rating?: number | null;
             /** @description Defaults to `false` when absent. */
             is_favourite?: boolean;
@@ -666,6 +734,12 @@ export interface components {
          *
          *     `work_id` is absent by design: an entry never changes the work it
          *     points at.
+         *
+         *     A `status` here is a **transition** and is checked against the state
+         *     machine in [domain.md](../../docs/domain.md) — unlike creation,
+         *     which is the entry point and accepts any of the six. A rating
+         *     already stored is not touched by a status change; send
+         *     `"rating": null` to clear it deliberately.
          */
         UpdateLibraryEntryRequest: {
             status?: components["schemas"]["LibraryEntryStatus"];
@@ -702,11 +776,17 @@ export interface components {
             };
         };
         /**
-         * @description No entry with that id belongs to the caller. An entry that exists but
-         *     belongs to somebody else answers exactly the same way, on purpose: a
-         *     `403` would confirm the entry exists, and whose library holds what is
-         *     nobody else's business. `unknown_identity` lands here too, while the
-         *     `user.created` webhook is still in flight.
+         * @description `library_entry_not_found`: no entry with that id belongs to the
+         *     caller.
+         *
+         *     One code covers both "it does not exist" and "it is not yours", and
+         *     that is the point. Answering `403` for somebody else's entry would
+         *     confirm the entry exists, and whose library holds what is nobody
+         *     else's business — so an entry belonging to another member is
+         *     indistinguishable from one that was never there.
+         *
+         *     `unknown_identity` also lands here, while the `user.created` webhook
+         *     is still in flight.
          */
         LibraryEntryNotFound: {
             headers: {
@@ -1421,10 +1501,11 @@ export interface operations {
             };
             413: components["responses"]["PayloadTooLarge"];
             /**
-             * @description A domain rule rejects the body: `rating_not_allowed` when a
-             *     rating arrives on a status other than `completed` or `dropped`,
-             *     or `invalid_progress` when the progress does not fit the work's
-             *     category.
+             * @description A domain rule rejects the body: `rating_not_allowed` when the
+             *     body carries a rating and `status` is neither `completed` nor
+             *     `dropped`, or `invalid_progress` when the progress does not fit
+             *     the work's category. The state machine does not apply here —
+             *     creating an entry is not a transition.
              */
             422: {
                 headers: {
@@ -1532,9 +1613,10 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             /**
              * @description A domain rule rejects the body: `rating_not_allowed` when the
-             *     resulting status is neither `completed` nor `dropped`, or
-             *     `invalid_progress` when the progress does not fit the work's
-             *     category.
+             *     body carries a rating and the resulting status is neither
+             *     `completed` nor `dropped`, `invalid_progress` when the progress
+             *     does not fit the work's category, or `invalid_transition` when
+             *     the state machine does not allow the requested status change.
              */
             422: {
                 headers: {
