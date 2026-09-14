@@ -66,8 +66,11 @@ type InvitationsByInviterParams struct {
 // A page of the invitations one member has sent, newest first,
 // keyset-paginated (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md).
 // Pass a NULL after_created_at to fetch the first page. The
-// (inviter_id, created_at DESC, id DESC) index serves the whole ORDER BY, so
-// no COUNT(*) and no OFFSET are needed to walk the list.
+// (inviter_id, created_at DESC, id DESC) index serves the whole ORDER BY, so no
+// COUNT(*) and no OFFSET are needed to walk the list. That holds for a custom
+// plan: under a generic one the NULL guard blocks the row-comparison pushdown
+// and Postgres sorts the partition instead. Harmless at this size, but do not
+// copy this comment elsewhere as a guarantee.
 func (q *Queries) InvitationsByInviter(ctx context.Context, arg InvitationsByInviterParams) ([]Invitation, error) {
 	rows, err := q.db.Query(ctx, invitationsByInviter,
 		arg.InviterID,

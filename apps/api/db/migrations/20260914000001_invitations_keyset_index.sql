@@ -15,7 +15,7 @@ CREATE INDEX invitations_inviter_idx
 -- +goose Down
 -- +goose StatementBegin
 
--- Back to the index 20260831000001_init.sql created, tiebreak and all.
+-- Back to the index 20260831000001_init.sql created: no id tiebreak.
 DROP INDEX IF EXISTS invitations_inviter_idx;
 
 CREATE INDEX invitations_inviter_idx
