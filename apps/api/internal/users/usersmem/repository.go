@@ -19,6 +19,9 @@ type Repository struct {
 	byClerk  map[string]users.User
 	NowFunc  func() time.Time
 	NewIDFun func() uuid.UUID
+	// UpsertErr makes Upsert fail, so a test can drive the retryable path a
+	// webhook takes when the database is unavailable.
+	UpsertErr error
 }
 
 // New builds an empty in-memory repository.
@@ -61,6 +64,10 @@ func (r *Repository) ByID(_ context.Context, id uuid.UUID) (users.User, error) {
 func (r *Repository) Upsert(_ context.Context, user users.User) (users.User, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.UpsertErr != nil {
+		return users.User{}, r.UpsertErr
+	}
 
 	now := r.NowFunc()
 

@@ -149,6 +149,30 @@ func (s *Service) ListGroup(ctx context.Context, after *Cursor, limit int) ([]Gr
 	return rows, &next, nil
 }
 
+// PendingByEmail resolves the invitation an address is about to use, without
+// closing it.
+//
+// The webhook needs the inviter *before* it projects the member, because
+// members.invited_by is only ever written by that first INSERT. Consuming the
+// invitation at the same time would be a mistake: a delivery that is then
+// rejected or fails leaves the invitation closed with nobody behind it, and
+// the next delivery — the one that finally creates the member — would find
+// nothing and record no inviter at all. So reading and closing are two steps,
+// and closing is the one that waits for the member to exist.
+//
+// It returns ErrNotFound when nothing is pending: the ordinary answer for a
+// founder, for an account created by hand in Clerk, and for a redelivery whose
+// invitation an earlier one already closed. This package cannot tell those
+// three apart, and does not need to.
+func (s *Service) PendingByEmail(ctx context.Context, rawEmail string) (Invitation, error) {
+	email, err := normaliseEmail(rawEmail)
+	if err != nil {
+		return Invitation{}, err
+	}
+
+	return s.repo.PendingByEmail(ctx, email)
+}
+
 // MarkAccepted closes the loop when Clerk reports the invitation was used.
 func (s *Service) MarkAccepted(ctx context.Context, rawEmail string) error {
 	email, err := normaliseEmail(rawEmail)

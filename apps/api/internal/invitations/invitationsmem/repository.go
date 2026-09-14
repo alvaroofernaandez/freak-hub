@@ -23,6 +23,9 @@ type Repository struct {
 	// make listing order deterministic instead of depending on wall-clock
 	// timing.
 	NowFunc func() time.Time
+	// MarkAcceptedErr makes MarkAccepted fail, so a test can check that
+	// closing an invitation is bookkeeping and never blocks the caller.
+	MarkAcceptedErr error
 }
 
 // NewRepository builds an empty in-memory invitation repository.
@@ -105,6 +108,10 @@ func (r *Repository) ListByInviter(
 func (r *Repository) MarkAccepted(_ context.Context, email string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.MarkAcceptedErr != nil {
+		return r.MarkAcceptedErr
+	}
 
 	now := time.Now().UTC()
 	for i, item := range r.items {

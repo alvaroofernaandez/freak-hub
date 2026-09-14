@@ -6,12 +6,15 @@
 package webhooks
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
@@ -142,12 +145,19 @@ func (h *ClerkHandler) handleUserUpserted(w http.ResponseWriter, r *http.Request
 
 	email := payload.primaryEmail()
 
+	// Read who invited this account before projecting it: members.invited_by
+	// can only be written by the INSERT below, because the upsert deliberately
+	// leaves that column alone on conflict. Reading is all that happens here —
+	// the invitation is not consumed until the member exists.
+	invitedBy := h.inviterFor(r.Context(), email)
+
 	_, err := h.users.EnsureFromClerk(r.Context(), users.ClerkProfile{
 		ClerkUserID: payload.ID,
 		Username:    payload.Username,
 		DisplayName: payload.displayName(),
 		AvatarURL:   payload.ImageURL,
 		Email:       email,
+		InvitedBy:   invitedBy,
 	})
 	if err != nil {
 		if errors.Is(err, users.ErrMissingClerkID) || errors.Is(err, users.ErrInvalidUsername) {
@@ -165,16 +175,64 @@ func (h *ClerkHandler) handleUserUpserted(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Closing the invitation is bookkeeping: a failure here must not make Clerk
-	// retry an event whose main effect already succeeded.
-	if email != "" {
-		if err := h.invitations.MarkAccepted(r.Context(), email); err != nil {
-			slog.ErrorContext(r.Context(), "could not close invitation",
-				slog.String("email", email), slog.Any("error", err))
-		}
-	}
+	// Only now, with the member stored, is the invitation consumed. Had this
+	// delivery failed (500) or been rejected (422), the invitation would still
+	// be pending and the delivery that finally succeeds would record the
+	// inviter just the same.
+	h.closeInvitation(r.Context(), email)
 
 	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// inviterFor reports who invited the account behind an address, or nil when
+// there is nobody to point at. It only reads.
+//
+// Nil is the ordinary answer, not a failure: founders and accounts created by
+// hand in Clerk never had an invitation, and a redelivery finds the one an
+// earlier delivery already closed — in which case the member already carries
+// the inviter and the upsert will not touch it.
+func (h *ClerkHandler) inviterFor(ctx context.Context, email string) *uuid.UUID {
+	if email == "" {
+		return nil
+	}
+
+	invitation, err := h.invitations.PendingByEmail(ctx, email)
+	switch {
+	case errors.Is(err, invitations.ErrNotFound):
+		slog.DebugContext(ctx, "no pending invitation for this account", slog.String("email", email))
+
+		return nil
+	case err != nil:
+		slog.ErrorContext(ctx, "could not look up the pending invitation",
+			slog.String("email", email), slog.Any("error", err))
+
+		return nil
+	}
+
+	// A nil inviter would be a broken row: members.invited_by is a foreign key,
+	// and pointing it at the zero uuid would fail the insert for everyone.
+	if invitation.InviterID == uuid.Nil {
+		return nil
+	}
+
+	inviter := invitation.InviterID
+
+	return &inviter
+}
+
+// closeInvitation marks the invitation accepted once the member it belongs to
+// exists. It is bookkeeping: a failure here is logged and swallowed, because
+// the event's main effect already succeeded and making Clerk retry would only
+// repeat it.
+func (h *ClerkHandler) closeInvitation(ctx context.Context, email string) {
+	if email == "" {
+		return
+	}
+
+	if err := h.invitations.MarkAccepted(ctx, email); err != nil {
+		slog.ErrorContext(ctx, "could not close invitation",
+			slog.String("email", email), slog.Any("error", err))
+	}
 }
 
 func (h *ClerkHandler) handleUserDeleted(w http.ResponseWriter, r *http.Request, data json.RawMessage) {
