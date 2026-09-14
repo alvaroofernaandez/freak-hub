@@ -200,3 +200,38 @@ type AddToLibraryInput struct {
 	StartedAt   *time.Time
 	FinishedAt  *time.Time
 }
+
+// Field carries a value that may be absent from a patch. Absent and nil are
+// different things and the contract leans on the difference: an absent
+// property leaves the stored value alone, while an explicit null clears it.
+// Without this distinction there is no way to remove a rating, a note or a
+// date at all.
+type Field[T any] struct {
+	present bool
+	value   T
+}
+
+// Set marks a field as present in the patch, carrying that value. A pointer
+// type set to nil is the explicit null: Set[*int](nil) clears a rating.
+func Set[T any](value T) Field[T] {
+	return Field[T]{present: true, value: value}
+}
+
+// Get returns the value and whether the patch carried the field at all.
+func (f Field[T]) Get() (T, bool) {
+	return f.value, f.present
+}
+
+// EntryPatch is a partial update: only the fields present are touched.
+//
+// WorkID is absent by design — an entry never changes the work it points at.
+type EntryPatch struct {
+	Status      Field[Status]
+	Progress    Field[int]
+	Rating      Field[*int]
+	IsFavourite Field[bool]
+	Owned       Field[bool]
+	Note        Field[*string]
+	StartedAt   Field[*time.Time]
+	FinishedAt  Field[*time.Time]
+}

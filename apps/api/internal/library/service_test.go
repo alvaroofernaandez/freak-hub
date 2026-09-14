@@ -496,3 +496,487 @@ func TestAddToLibraryAcceptsProgressOnAnAnimeStillAiring(t *testing.T) {
 	require.NoError(t, err, "the catalogue never said how many episodes there are, so there is nothing to exceed")
 	assert.Equal(t, 13, entry.Progress)
 }
+
+// addEntry registers a work for a member through the service, which is the
+// only door: seeding an entry directly would let a test start from a state
+// the domain would never have allowed.
+func (h *harness) addEntry(
+	t *testing.T, member uuid.UUID, work library.Work, input library.AddToLibraryInput,
+) library.EntryWithWork {
+	t.Helper()
+
+	input.WorkID = work.ID
+
+	entry, err := h.service.AddToLibrary(context.Background(), member, input)
+	require.NoError(t, err)
+
+	return entry
+}
+
+func TestUpdateEntryMovesTheStatusAlongATransitionTheDomainDraws(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status:   library.Set(library.StatusInProgress),
+		Progress: library.Set(3),
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, library.StatusInProgress, updated.Status)
+	assert.Equal(t, 3, updated.Progress)
+	assert.Equal(t, work.ID, updated.Work.ID, "the work travels inline with the entry")
+}
+
+func TestUpdateEntryRefusesATransitionTheStateMachineDoesNotDraw(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusWishlist})
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status: library.Set(library.StatusCompleted),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidTransition,
+		"finishing something you only ever wanted is the jump this machine exists to refuse")
+}
+
+func TestUpdateEntryRefusesAStatusThatDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status: library.Set(library.Status("watching")),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidStatus)
+}
+
+// TestUpdateEntryKeepsAStoredRatingWhenTheEntryIsRevisited is the decision
+// the contract already took, and the one easiest to get wrong: domain rule 2
+// applies to a rating *arriving in a request*, not to one already saved.
+// completed → in_progress is a rewatch; there is no rating history to restore
+// from, so erasing the score would be silent data loss.
+func TestUpdateEntryKeepsAStoredRatingWhenTheEntryIsRevisited(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{
+		Status: library.StatusCompleted,
+		Rating: ratingOf(8),
+	})
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status: library.Set(library.StatusInProgress),
+	})
+
+	require.NoError(t, err, "a rewatch is a legitimate move and carries no rating of its own")
+	require.NotNil(t, updated.Rating, "the score survives the status change")
+	assert.Equal(t, 8, *updated.Rating)
+}
+
+// TestUpdateEntryClearsTheRatingOnlyWhenAskedTo is the other side of the same
+// decision: clearing a score is something you ask for, by sending null.
+func TestUpdateEntryClearsTheRatingOnlyWhenAskedTo(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{
+		Status: library.StatusCompleted,
+		Rating: ratingOf(8),
+	})
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Rating: library.Set[*int](nil),
+	})
+
+	require.NoError(t, err, "removing a score is always allowed: what rule 2 guards is adding one")
+	assert.Nil(t, updated.Rating)
+}
+
+// TestUpdateEntryRefusesARatingArrivingOnAnUnfinishedEntry is domain rule 2
+// on the PATCH.
+func TestUpdateEntryRefusesARatingArrivingOnAnUnfinishedEntry(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusInProgress})
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Rating: library.Set(ratingOf(9)),
+	})
+
+	require.ErrorIs(t, err, library.ErrRatingNotAllowed)
+}
+
+// TestUpdateEntryAcceptsTheRatingThatArrivesWithTheCompletion is the ordinary
+// way a score is given: the rule is checked against the status the entry ends
+// up in, not the one it came from.
+func TestUpdateEntryAcceptsTheRatingThatArrivesWithTheCompletion(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{
+		Status:   library.StatusInProgress,
+		Progress: 27,
+	})
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status:   library.Set(library.StatusCompleted),
+		Progress: library.Set(28),
+		Rating:   library.Set(ratingOf(10)),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated.Rating)
+	assert.Equal(t, 10, *updated.Rating)
+}
+
+func TestUpdateEntryRefusesProgressPastAKnownEpisodeCount(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusInProgress})
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Progress: library.Set(29),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidProgress)
+}
+
+func TestUpdateEntryLeavesAbsentFieldsAlone(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	note := "empezado en el tren"
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{
+		Status:   library.StatusInProgress,
+		Progress: 4,
+		Owned:    true,
+		Note:     &note,
+	})
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		IsFavourite: library.Set(true),
+	})
+
+	require.NoError(t, err)
+	assert.True(t, updated.IsFavourite)
+	assert.Equal(t, 4, updated.Progress, "an absent field is not the same as a null one")
+	assert.True(t, updated.Owned)
+	require.NotNil(t, updated.Note)
+	assert.Equal(t, note, *updated.Note)
+}
+
+func TestUpdateEntryOnAnEmptyPatchChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{
+		Status:   library.StatusInProgress,
+		Progress: 4,
+	})
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{})
+
+	require.NoError(t, err)
+	assert.Equal(t, library.StatusInProgress, updated.Status)
+	assert.Equal(t, 4, updated.Progress)
+}
+
+// TestUpdateEntryRefusesAnEntryThatBelongsToSomebodyElse is the 404-never-403
+// decision: whose library holds what is nobody else's business, so refusing
+// with a 403 would confirm the entry exists.
+func TestUpdateEntryRefusesAnEntryThatBelongsToSomebodyElse(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	owner := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, owner, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	_, err := h.service.UpdateEntry(context.Background(), uuid.New(), entry.ID, library.EntryPatch{
+		Status: library.Set(library.StatusInProgress),
+	})
+
+	require.ErrorIs(t, err, library.ErrEntryNotFound,
+		"the answer is the same one a missing entry gets: 404, never 403")
+
+	untouched, err := h.service.GetEntry(context.Background(), owner, entry.ID)
+	require.NoError(t, err)
+	assert.Equal(t, library.StatusPending, untouched.Status)
+}
+
+func TestUpdateEntryRefusesAnEntryThatDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.UpdateEntry(context.Background(), uuid.New(), uuid.New(), library.EntryPatch{})
+
+	require.ErrorIs(t, err, library.ErrEntryNotFound)
+}
+
+func TestGetEntryRefusesAnEntryThatBelongsToSomebodyElse(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	owner := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, owner, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	_, err := h.service.GetEntry(context.Background(), uuid.New(), entry.ID)
+
+	require.ErrorIs(t, err, library.ErrEntryNotFound)
+}
+
+func TestRemoveFromLibraryTakesTheWorkOffTheMembersShelf(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	require.NoError(t, h.service.RemoveFromLibrary(context.Background(), member, entry.ID))
+
+	_, err := h.service.GetEntry(context.Background(), member, entry.ID)
+	require.ErrorIs(t, err, library.ErrEntryNotFound)
+}
+
+// TestRemoveFromLibraryKeepsTheWorkInTheSharedCatalogue is domain rule 3 seen
+// from the side the domain can actually enforce: what leaves is the
+// relationship, never the shared history.
+func TestRemoveFromLibraryKeepsTheWorkInTheSharedCatalogue(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	require.NoError(t, h.service.RemoveFromLibrary(context.Background(), member, entry.ID))
+
+	catalogue, _, err := h.service.SearchWorks(context.Background(), library.WorkFilter{}, nil, 25)
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{work.ID}, idsOf(catalogue),
+		"nobody keeps it any more and it is still there: a work is shared history")
+}
+
+// TestRemoveFromLibraryRefusesAnEntryThatBelongsToSomebodyElse is the only
+// ownership rule the issue spells out, and the entry has to survive it.
+func TestRemoveFromLibraryRefusesAnEntryThatBelongsToSomebodyElse(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	owner := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, owner, work, library.AddToLibraryInput{Status: library.StatusPending})
+
+	err := h.service.RemoveFromLibrary(context.Background(), uuid.New(), entry.ID)
+	require.ErrorIs(t, err, library.ErrEntryNotFound, "404, never 403")
+
+	survivor, err := h.service.GetEntry(context.Background(), owner, entry.ID)
+	require.NoError(t, err, "somebody else's DELETE did not take it")
+	assert.Equal(t, entry.ID, survivor.ID)
+}
+
+func TestRemoveFromLibraryRefusesAnEntryThatDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	require.ErrorIs(t,
+		h.service.RemoveFromLibrary(context.Background(), uuid.New(), uuid.New()),
+		library.ErrEntryNotFound)
+}
+
+// TestRemoveFromLibraryWorksFromAnyStatus keeps the two ends of the state
+// diagram from being read as a guard: leaving the library is a deletion, and
+// the contract puts no status condition on it.
+func TestRemoveFromLibraryWorksFromAnyStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range allStatuses() {
+		t.Run(string(status), func(t *testing.T) {
+			t.Parallel()
+
+			h := newHarness(t)
+			member := uuid.New()
+			work := h.anime("Frieren", 28)
+			entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: status})
+
+			require.NoError(t, h.service.RemoveFromLibrary(context.Background(), member, entry.ID))
+		})
+	}
+}
+
+func TestListLibraryNeverShowsAnotherMembersShelf(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	mine, yours := uuid.New(), uuid.New()
+	work := h.anime("Frieren", 28)
+	own := h.addEntry(t, mine, work, library.AddToLibraryInput{Status: library.StatusPending})
+	h.addEntry(t, yours, work, library.AddToLibraryInput{Status: library.StatusCompleted})
+
+	// Even asked outright for somebody else's shelf, the listing answers with
+	// the caller's own: the owner is not a filter a caller gets to choose.
+	page, _, err := h.service.ListLibrary(
+		context.Background(), mine, library.EntryFilter{MemberID: yours}, nil, 25,
+	)
+
+	require.NoError(t, err)
+	require.Len(t, page, 1)
+	assert.Equal(t, own.ID, page[0].ID)
+}
+
+func TestListLibraryKeepsOnlyTheStatusAsked(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	watching := h.addEntry(t, member, h.anime("Frieren", 28), library.AddToLibraryInput{
+		Status: library.StatusInProgress,
+	})
+	h.addEntry(t, member, h.anime("Monster", 74), library.AddToLibraryInput{
+		Status: library.StatusWishlist,
+	})
+
+	page, _, err := h.service.ListLibrary(
+		context.Background(), member, library.EntryFilter{Status: library.StatusInProgress}, nil, 25,
+	)
+
+	require.NoError(t, err)
+	require.Len(t, page, 1)
+	assert.Equal(t, watching.ID, page[0].ID)
+}
+
+func TestListLibraryKeepsOnlyTheCategoryAsked(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	anime := h.addEntry(t, member, h.anime("Frieren", 28), library.AddToLibraryInput{
+		Status: library.StatusPending,
+	})
+	boardGame := h.works.Seed(library.Work{
+		Title:    "Gloomhaven",
+		Category: library.CategoryBoardGame,
+		Source:   library.SourceBGG,
+		SourceID: "174430",
+	})
+	h.addEntry(t, member, boardGame, library.AddToLibraryInput{Status: library.StatusPending})
+
+	page, _, err := h.service.ListLibrary(
+		context.Background(), member, library.EntryFilter{Category: library.CategoryAnime}, nil, 25,
+	)
+
+	require.NoError(t, err)
+	require.Len(t, page, 1)
+	assert.Equal(t, anime.ID, page[0].ID)
+	assert.Equal(t, library.CategoryAnime, page[0].Work.Category,
+		"the work travels inline, so a library screen needs no second round of requests")
+}
+
+func TestListLibraryPagesThroughTheShelfNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+
+	added := make([]uuid.UUID, 0, 3)
+	for i, title := range []string{"Oldest", "Middle", "Newest"} {
+		h.clock = time.Date(2026, time.March, 1, 12, i, 0, 0, time.UTC)
+		work := h.works.Seed(library.Work{
+			Title: title, Category: library.CategoryAnime, Source: library.SourceManual,
+		})
+		added = append(added, h.addEntry(t, member, work, library.AddToLibraryInput{
+			Status: library.StatusPending,
+		}).ID)
+	}
+
+	first, next, err := h.service.ListLibrary(context.Background(), member, library.EntryFilter{}, nil, 2)
+	require.NoError(t, err)
+	require.Len(t, first, 2)
+	assert.Equal(t, []uuid.UUID{added[2], added[1]}, entryIDsOf(first))
+	require.NotNil(t, next)
+
+	second, last, err := h.service.ListLibrary(context.Background(), member, library.EntryFilter{}, next, 2)
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{added[0]}, entryIDsOf(second))
+	assert.Nil(t, last)
+}
+
+func TestListLibraryRefusesALimitOutsideTheAllowedRange(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, limit := range []int{0, -1, library.MaxListLimit + 1} {
+		_, _, err := h.service.ListLibrary(context.Background(), uuid.New(), library.EntryFilter{}, nil, limit)
+		require.ErrorIsf(t, err, library.ErrInvalidLimit, "limit %d", limit)
+	}
+}
+
+func TestListLibraryRefusesAFilterThatDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+
+	_, _, err := h.service.ListLibrary(
+		context.Background(), member, library.EntryFilter{Status: library.Status("watching")}, nil, 25,
+	)
+	require.ErrorIs(t, err, library.ErrInvalidFilter)
+
+	_, _, err = h.service.ListLibrary(
+		context.Background(), member, library.EntryFilter{Category: library.Category("vinyl")}, nil, 25,
+	)
+	require.ErrorIs(t, err, library.ErrInvalidFilter)
+}
+
+func TestListLibraryRefusesACallWithNoMemberBehindIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, _, err := h.service.ListLibrary(context.Background(), uuid.Nil, library.EntryFilter{}, nil, 25)
+
+	require.ErrorIs(t, err, library.ErrMissingMember)
+}
+
+func entryIDsOf(entries []library.EntryWithWork) []uuid.UUID {
+	ids := make([]uuid.UUID, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.ID)
+	}
+
+	return ids
+}
