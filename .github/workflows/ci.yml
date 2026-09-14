@@ -218,11 +218,11 @@ jobs:
   # `contracts` are never held up by a browser run, let alone by a third party's
   # availability.
   #
-  # Everything here is conditional on the instance secrets existing, and that is
-  # not a preference — `clerkMiddleware` refuses to boot without a secret key,
-  # so with a fabricated one `next dev` answers 500 and even the signed-out
-  # perimeter never gets a page to assert on. A fork's pull request therefore
-  # reports this job as skipped rather than as broken.
+  # Everything here is conditional on the instance secrets existing. That is not
+  # a preference: without a secret key `clerkMiddleware` fails per request with
+  # "Handshake token verification failed", which Next renders as an error page,
+  # so even the signed-out perimeter has nothing to assert on. A fork's pull
+  # request therefore reports this job skipped rather than broken.
   e2e:
     name: Web · E2E (Playwright)
     runs-on: ubuntu-latest
@@ -244,15 +244,23 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
+      # Non-secret settings only. The Clerk keys are attached to the individual
+      # steps that need them instead, so they are not handed to `pnpm install`
+      # or to a `playwright install --with-deps` that calls sudo apt.
       DATABASE_URL: postgres://freakhub:freakhub@localhost:5432/freakhub?sslmode=disable
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
       NEXT_PUBLIC_CLERK_SIGN_IN_URL: /entrar
       NEXT_PUBLIC_CLERK_SIGN_UP_URL: /registro
       NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /inicio
       NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /inicio
       NEXT_PUBLIC_API_URL: http://localhost:8080
-      E2E_CLERK_USER_IDENTIFIER: ${{ secrets.E2E_CLERK_USER_IDENTIFIER }}
+      # One address per run, so two pull requests cannot revoke each other's
+      # pending invitation — the instance is shared and `concurrency` only
+      # serialises a single ref. The run attempt is in there because a re-run
+      # must not collide with what its previous attempt left behind.
+      E2E_INVITEE_EMAIL: freak-hub-e2e-${{ github.run_id }}-${{ github.run_attempt }}+clerk_test@example.com
+      # In CI an unreachable API is a failure, not a reason to skip: this job
+      # starts it deliberately.
+      E2E_REQUIRE_API: "1"
     steps:
       - uses: actions/checkout@v5
 
@@ -272,6 +280,9 @@ jobs:
 
       - name: Is there a Clerk instance to talk to?
         id: clerk
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+          E2E_CLERK_USER_IDENTIFIER: ${{ secrets.E2E_CLERK_USER_IDENTIFIER }}
         run: |
           if [ -n "$CLERK_SECRET_KEY" ] && [ -n "$E2E_CLERK_USER_IDENTIFIER" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
@@ -290,15 +301,28 @@ jobs:
       # user id is resolved from Clerk rather than stored as a fifth secret.
       - name: Seed the test user as a member
         if: steps.clerk.outputs.available == 'true'
+        working-directory: apps/api
+        shell: bash
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+          E2E_CLERK_USER_IDENTIFIER: ${{ secrets.E2E_CLERK_USER_IDENTIFIER }}
         run: |
+          set -euo pipefail
           go run ./cmd/migrate up
-          user=$(curl -sS -G "https://api.clerk.com/v1/users" \
+          # The key goes in on stdin: an -H argument is visible in /proc/*/cmdline.
+          user=$(curl -fsS -G "https://api.clerk.com/v1/users" \
             --data-urlencode "email_address=$E2E_CLERK_USER_IDENTIFIER" \
-            -H "Authorization: Bearer $CLERK_SECRET_KEY")
-          uid=$(echo "$user" | jq -r '.[0].id')
-          uname=$(echo "$user" | jq -r '.[0].username')
-          if [ -z "$uid" ] || [ "$uid" = "null" ]; then
+            -H @- <<<"Authorization: Bearer $CLERK_SECRET_KEY")
+          uid=$(jq -r '.[0].id // empty' <<<"$user")
+          uname=$(jq -r '.[0].username // empty' <<<"$user")
+          if [ -z "$uid" ]; then
             echo "::error::No user in the Clerk instance for E2E_CLERK_USER_IDENTIFIER."
+            exit 1
+          fi
+          # Without this the literal string "null" lands in members.username and
+          # a journey happily asserts on "@null".
+          if [ -z "$uname" ]; then
+            echo "::error::The E2E test user has no username; /inicio shows it and a journey asserts on it."
             exit 1
           fi
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -307,7 +331,6 @@ jobs:
           VALUES (:'uid', :'uname', :'uname', :'mail')
           ON CONFLICT (clerk_user_id) DO NOTHING;
           SQL
-        working-directory: apps/api
 
       # API_ALLOWED_ORIGINS is not decoration: its first entry becomes the
       # `authorizedParty` the JWT is checked against, so a mismatch here is one
@@ -315,27 +338,34 @@ jobs:
       - name: Start the API
         if: steps.clerk.outputs.available == 'true'
         working-directory: apps/api
+        shell: bash
         env:
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
           API_ALLOWED_ORIGINS: http://localhost:3000
           API_PORT: "8080"
         run: |
+          set -euo pipefail
           # The config refuses to boot without a webhook secret and svix
           # base64-decodes it, so a plain sentinel raises "illegal base64 data".
           # Fabricated rather than written literally, like the placeholder Clerk
-          # key above: no webhook is delivered in this job, and a high-entropy
-          # string in the repository is indistinguishable from a real leak.
+          # key in the `web` job: no webhook is delivered here, and a
+          # high-entropy string in the repository is indistinguishable from a
+          # real leak.
           secret=$(printf '%s' 'ci-e2e-no-webhooks-in-this-job' | base64 | tr -d '=\n')
           CLERK_WEBHOOK_SIGNING_SECRET="whsec_$secret" go run ./cmd/api &
           for _ in $(seq 1 60); do
-            curl -sf http://localhost:8080/healthz >/dev/null && break
+            curl -sf http://localhost:8080/healthz > /dev/null && break
             sleep 1
           done
-          curl -sf http://localhost:8080/healthz
+          curl -fsS http://localhost:8080/healthz
 
       # The perimeter needs no test user and no API. Its failure is a real
       # failure: a protected route stopped redirecting.
       - name: Signed-out perimeter
         if: steps.clerk.outputs.available == 'true'
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
         run: pnpm --filter @freak-hub/web exec playwright test --project=signed-out
 
       # Tied to a live Clerk instance, so an outage there would report itself
@@ -343,27 +373,69 @@ jobs:
       - name: Signed-in journeys
         if: steps.clerk.outputs.available == 'true'
         continue-on-error: true
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+          E2E_CLERK_USER_IDENTIFIER: ${{ secrets.E2E_CLERK_USER_IDENTIFIER }}
+          E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
         run: pnpm --filter @freak-hub/web exec playwright test --project=signed-in
 
-      # Each run invites a fresh address, so without this the instance collects
-      # one pending invitation per run forever. They are never delivered
-      # (`+clerk_test`), but they are still rows someone has to look at.
+      # Two halves. This run's own address is revoked by name, so a concurrent
+      # pull request's pending invitation is never touched. The prefix sweep
+      # then collects orphans — a cancelled run never reaches this step, and
+      # `cancel-in-progress` is on — but only ones old enough that no live run
+      # could still be using them.
       - name: Revoke the invitations this run created
         if: ${{ !cancelled() && steps.clerk.outputs.available == 'true' }}
+        shell: bash
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
         run: |
-          curl -sS -G "https://api.clerk.com/v1/invitations" \
-            --data-urlencode "status=pending" --data-urlencode "limit=100" \
-            -H "Authorization: Bearer $CLERK_SECRET_KEY" \
-            | jq -r '.[] | select(.email_address | startswith("freak-hub-e2e-")) | .id' \
-            | while read -r id; do
-                curl -sS -X POST "https://api.clerk.com/v1/invitations/$id/revoke" \
-                  -H "Authorization: Bearer $CLERK_SECRET_KEY" > /dev/null
-                echo "revoked $id"
-              done
+          set -euo pipefail
+          auth=$(mktemp)
+          ids=$(mktemp)
+          trap 'rm -f "$auth" "$ids"' EXIT
+          printf 'Authorization: Bearer %s\n' "$CLERK_SECRET_KEY" > "$auth"
 
-      # The HTML report, not `test-results/`: the setup project keeps this
-      # workflow's two retries, and a retry trace would carry the sign-in
-      # exchange and the session cookie.
+          # Two hours: longer than any plausible run, short enough to stay tidy.
+          cutoff=$(( ($(date +%s) - 7200) * 1000 ))
+          offset=0
+          while :; do
+            page=$(curl -fsS -G "https://api.clerk.com/v1/invitations" \
+              --data-urlencode "status=pending" \
+              --data-urlencode "limit=100" \
+              --data-urlencode "offset=$offset" \
+              -H @"$auth")
+            jq -r --arg mine "$E2E_INVITEE_EMAIL" --argjson cutoff "$cutoff" '
+              .[]
+              | select(.email_address | startswith("freak-hub-e2e-"))
+              | select(.email_address == $mine or .created_at < $cutoff)
+              | .id' <<<"$page" >> "$ids"
+            count=$(jq 'length' <<<"$page")
+            if [ "$count" -lt 100 ]; then
+              break
+            fi
+            offset=$(( offset + 100 ))
+          done
+
+          # A revoke that fails warns instead of failing the job: this is
+          # cleanup, and the listing above is the part that must be loud.
+          while read -r id; do
+            if [ -z "$id" ]; then
+              continue
+            fi
+            if curl -fsS -X POST "https://api.clerk.com/v1/invitations/$id/revoke" \
+              -H @"$auth" > /dev/null; then
+              echo "revoked $id"
+            else
+              echo "::warning::Could not revoke $id"
+            fi
+          done < "$ids"
+
+      # The HTML report. Safe to publish only because the `setup` project
+      # records no trace (see playwright.config.ts): the HTML reporter copies
+      # attachments into the report directory, so a trace would ride along into
+      # a public artifact regardless of `test-results/` being left out.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.clerk.outputs.available == 'true' }}
         with:
