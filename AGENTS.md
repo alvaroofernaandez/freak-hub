@@ -59,16 +59,19 @@ miras los tuyos.
 
 ## Diseño
 
-**La dirección visual ya está decidida**: "character select", oscura por defecto
-con tema claro disponible, extendiendo la identidad del banner del README. Los
+**La dirección visual ya está decidida y aplicada**: "character select",
+oscura por defecto, extendiendo la identidad del banner del README. Los
 valores están escritos —paleta oklch sobre un solo hue (272), un color por cada
 una de las seis categorías, Bungee para el wordmark, Sora para la interfaz y
 JetBrains Mono para datos— en [docs/design.md](docs/design.md) y
-[ADR-0008](docs/decisions/0008-direccion-visual.md).
+[ADR-0008](docs/decisions/0008-direccion-visual.md). `globals.css` ya tiene la
+paleta oklch definitiva y `app/layout.tsx` ya carga Sora, Bungee y JetBrains
+Mono.
 
-**Lo que falta es aplicarla.** `globals.css` sigue con los tokens provisionales y
-`app/layout.tsx` sigue con Inter en lugar de Sora. Esos dos cambios van antes de
-construir pantallas de verdad.
+**Lo único pendiente del tema es el tema claro**, que llega con `/ajustes`
+(issue #37). Las pantallas sin maqueta propia (Actividad, Grupo, Invitar,
+Recomendaciones, Ajustes) siguen el criterio de
+[docs/design.md#criterio-de-extensión-para-pantallas-sin-maqueta](docs/design.md#criterio-de-extensión-para-pantallas-sin-maqueta).
 
 No inventes tokens ni amplíes la paleta por tu cuenta: los valores ya están en
 `design.md`. Y recuerda la regla que más fácil se rompe: el color identifica la
