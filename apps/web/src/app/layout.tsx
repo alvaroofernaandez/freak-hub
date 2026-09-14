@@ -2,6 +2,7 @@ import { esES } from "@clerk/localizations";
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import { Bungee, JetBrains_Mono, Sora } from "next/font/google";
+import { THEME_COLOR, THEME_INIT_SCRIPT } from "@/shared/lib/theme";
 import { MotionProvider } from "@/shared/motion/motion-provider";
 import { OfflineNotice } from "@/shared/ui/offline-notice";
 import "./globals.css";
@@ -29,7 +30,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "oklch(0.130 0.020 272)",
+  // The dark default. `THEME_INIT_SCRIPT` rewrites it before first paint when
+  // the visitor chose light, and `useTheme` keeps it in step afterwards.
+  themeColor: THEME_COLOR.dark,
 };
 
 export default function RootLayout({
@@ -41,6 +44,16 @@ export default function RootLayout({
       className={`${sora.variable} ${bungee.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-dvh antialiased">
+        {/*
+         * Reads the stored theme and stamps it on <html> before a single
+         * pixel is painted. Resolving it after hydration instead would show
+         * everyone on the light theme a dark flash on every cold load, and
+         * there is no server-side way to know: the choice lives in this
+         * browser's localStorage, not in a cookie or in the session.
+         */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: a constant this module builds itself, with no user input anywhere near it. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+
         {/* Core 3 requires the provider inside <body>, not wrapping <html>. */}
         <ClerkProvider localization={esES}>
           <MotionProvider>
