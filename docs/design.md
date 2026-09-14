@@ -252,7 +252,7 @@ no vuelva a aparecer un `lg`. La única excepción registrada es el handle, que
 no es un escalón de esa escalera.
 
 **Entre 768 y 1023 px el handle `@usuario` no cabe.** Medido sobre el código
-anterior a la issue #63: a 768 px la fila pedía 819 px (775 de contenido más
+anterior a la issue #63: a 768 px la fila pedía unos 815 px (unos 770 de contenido más
 44 de padding), el wordmark partía en dos líneas y el disparador del menú
 terminaba en 792 px, es decir 24 px fuera de una pantalla de 768, con scroll
 horizontal en la página. El avatar solo basta para identificar la sesión en
@@ -1078,7 +1078,7 @@ Definition of Done de la épica #18.
   justificara.
 - **2026-09-14** · El handle `@usuario` y su chevron esperan a 1024 px
   (antes, a 640 px). Medido sobre el código anterior: a 768 px la fila pedía
-  819 px (775 de contenido más 44 de padding), el wordmark partía en dos líneas
+  unos 815 px (unos 770 de contenido más 44 de padding), el wordmark partía en dos líneas
   y el disparador del menú terminaba en 792 px — 24 px fuera de la pantalla— con
   scroll horizontal. El wordmark además pasa a `whitespace-nowrap`: una marca
   no se parte nunca. No es un escalón de la escalera móvil/tablet/escritorio:

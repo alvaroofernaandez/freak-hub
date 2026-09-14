@@ -28,7 +28,14 @@ const ALLOWED = [
 
 describe("desktop breakpoint", () => {
   it("is xl:, never lg:, so 1024 px renders the tablet variant", () => {
-    const offenders = sourceFilesContaining("lg:", SRC)
+    /*
+     * A class, not the two letters. Scanning for the bare substring made this
+     * guard fire on prose — the comment in `navbar.tsx` explaining the rule had
+     * to write the breakpoint without its colon to avoid tripping it, and the
+     * next person documenting the same rule would have got a red test pointing
+     * at their own comment with nothing to explain why.
+     */
+    const offenders = sourceFilesContaining(/\blg:[a-z[]/, SRC)
       .map((path) => relative(join(SRC, ".."), path).replaceAll("\\", "/"))
       .filter((path) => !ALLOWED.includes(path));
 
