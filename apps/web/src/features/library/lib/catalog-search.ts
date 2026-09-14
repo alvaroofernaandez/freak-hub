@@ -109,9 +109,13 @@ export function catalogSearchState(
 }
 
 /**
- * What the polite live region says once a search settles. An error is left
- * out on purpose: `ErrorState` is announced by its own heading, and counting
- * it here would read the same failure twice.
+ * What the polite live region says once a search settles.
+ *
+ * A failure is announced here too. `ErrorState` is a heading and a paragraph,
+ * not a live region, so on a client navigation it appears in silence: someone
+ * who heard «Buscando…» would get no answer at all. The title alone is the
+ * announcement — the description is right there to be read, and repeating it
+ * out loud turns every failed search into a paragraph.
  */
 export function catalogSearchAnnouncement(
   state: CatalogSearchViewState,
@@ -123,6 +127,10 @@ export function catalogSearchAnnouncement(
         : `${state.results.length} resultados.`;
     case "no_results":
       return "Sin resultados.";
+    case "error": {
+      const { title } = state.error.copy;
+      return title.endsWith(".") ? title : `${title}.`;
+    }
     default:
       return "";
   }

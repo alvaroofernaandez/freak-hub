@@ -316,6 +316,9 @@ anuncia en cuanto llega. La región viva vive en `CatalogSearchField` y no se
 desmonta entre búsquedas — una región que aparece con su propio texto no se
 anuncia. Mientras la búsqueda está en vuelo dice «Buscando…» y el recuento
 queda en blanco, para no leer el resultado anterior como si fuera el nuevo.
+Un fallo también se anuncia ahí, solo el título: `ErrorState` es un
+encabezado y un párrafo, no una región viva, así que en una navegación de
+cliente aparecería en silencio.
 
 ## No aplica hoy
 

@@ -119,7 +119,9 @@ describe("AddSearchPage", () => {
 
       await renderPage("anime", "naruto");
 
-      expect(screen.getByText(/demasiadas búsquedas/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /demasiadas búsquedas/i }),
+      ).toBeInTheDocument();
       expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
     });
 
@@ -128,7 +130,9 @@ describe("AddSearchPage", () => {
 
       await renderPage("anime", "naruto");
 
-      expect(screen.getByText(/no responde/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /no responde/i }),
+      ).toBeInTheDocument();
       expect(
         screen.getByRole("link", { name: /alta manual/i }),
       ).toBeInTheDocument();

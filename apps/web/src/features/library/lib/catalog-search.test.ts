@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { NormalizedAppError } from "@/shared/errors/types";
 import type { CatalogSearchResult } from "./anilist";
 import {
   catalogSearchAnnouncement,
@@ -130,8 +131,27 @@ describe("catalogSearchAnnouncement", () => {
     ).toBe("Sin resultados.");
   });
 
-  it("leaves an error to its own live region instead of announcing it twice", () => {
+  it("announces a failure too, since no other live region will", () => {
     const state = catalogSearchState("naruto", { status: "unavailable" });
-    expect(catalogSearchAnnouncement(state)).toBe("");
+    expect(catalogSearchAnnouncement(state)).toBe(
+      "El catálogo externo no responde.",
+    );
+  });
+
+  it("does not double the full stop the title already carries", () => {
+    expect(
+      catalogSearchAnnouncement({
+        kind: "error",
+        error: {
+          ...(
+            catalogSearchState("naruto", { status: "unavailable" }) as {
+              kind: "error";
+              error: NormalizedAppError;
+            }
+          ).error,
+          copy: { title: "Se ha acabado la paciencia.", description: "" },
+        },
+      }),
+    ).toBe("Se ha acabado la paciencia.");
   });
 });
