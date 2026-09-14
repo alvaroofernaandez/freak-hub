@@ -98,12 +98,30 @@ integración con un doble no prueba la integración.
 | Proyecto | Qué corre | Qué necesita |
 | :--- | :--- | :--- |
 | `setup` | Inicia sesión una vez y guarda el estado en `apps/web/playwright/.clerk/user.json` | `E2E_CLERK_USER_IDENTIFIER` y `CLERK_SECRET_KEY` |
-| `signed-out` | Los cuatro tests de `e2e/auth.spec.ts` | Nada |
+| `signed-out` | Todo lo que **no** sea `*.signed-in.spec.ts` | Nada |
 | `signed-in` | `e2e/*.signed-in.spec.ts`, partiendo del estado guardado | `setup` + (para invitar) la API en Go |
 
-`signed-out` no depende de `setup`. Es deliberado: una incidencia de Clerk, una
-clave que falta o una PR desde un *fork* no pueden impedir que se compruebe el
-perímetro.
+`signed-out` se define por lo que excluye, nunca por una lista de ficheros. Un
+proyecto que solo casara con `auth.spec.ts` dejaría fuera, en silencio, todo
+spec de perímetro escrito después: un `biblioteca.spec.ts` nuevo no pertenecería
+a ningún proyecto, no lo recogería nadie y la pasada seguiría en verde. Con ocho
+rutas autenticadas llegando en la épica #10, eso no es hipotético.
+
+`signed-out` tampoco depende de `setup`, y el *global setup* **no lanza nunca**.
+Si `clerkSetup()` no consigue su *testing token* —un 401 por clave rotada no
+entra en los reintentos de `@clerk/testing`, que solo cubren 408, 429 y 5xx—,
+avisa y sigue. Sin esa guardia la excepción se llevaría por delante la pasada
+entera, perímetro incluido, antes de la primera aserción.
+
+Dicho lo cual, conviene ser preciso sobre hasta dónde llega la protección. Con
+una clave **rotada** la guardia hace su trabajo (los recorridos con sesión se
+omiten, la pasada continúa), pero la propia aplicación tampoco funciona con esa
+clave, así que el perímetro falla igual — en sus aserciones, con un informe que
+dice cuáles, en vez de en el arranque. Comprobado: `clerkSetup()` devuelve
+`Unauthorized`, se avisa, seis tests se omiten y los cuatro del perímetro caen
+porque `next dev` no puede renderizar. De lo que sí protege por completo es de
+un fallo **transitorio** al pedir el token con una clave válida: ahí la web
+sigue sirviendo páginas y el perímetro pasa.
 
 El fichero de sesión está en `.gitignore`. Contiene una sesión real: subirlo
 equivale a dejar la cuenta abierta en público.
@@ -133,18 +151,36 @@ equivale a dejar la cuenta abierta en público.
    El nombre de usuario importa: `/inicio` lo muestra y uno de los recorridos lo
    comprueba.
 
-2. **Por qué `+clerk_test` y no una contraseña.** En esta instancia la
-   contraseña está activada como credencial pero **no como primer factor**: el
-   inicio de sesión es por código de correo. Con la estrategia `password`,
-   `@clerk/testing` crea un *sign-in* que nunca llega a `complete`, llama a
-   `setActive({ session: null })` y deja el navegador **sin sesión y sin
-   error** — el fallo aparece tres aserciones más tarde y señala al sitio
-   equivocado. Las direcciones `+clerk_test` son las de prueba de Clerk: nunca
-   se entregan de verdad y siempre aceptan el código `424242`, así que la
-   estrategia `email_code` funciona sin buzón y sin contraseña.
+2. **Por qué una dirección `+clerk_test` y no una contraseña.** No es que la
+   contraseña esté desactivada. Medido contra la instancia,
+   `signIn.create({ identifier })` ofrece `password`, `email_code` y
+   `reset_password_email_code`, y la contraseña se verifica de verdad: una
+   equivocada responde 422 `form_password_incorrect`. Pero con la **correcta**
+   el resultado es:
 
-   Si algún día la instancia acepta contraseña como primer factor, define
-   `E2E_CLERK_USER_PASSWORD` y `e2e/support/sign-in.ts` usará esa vía.
+   ```
+   status: "needs_client_trust"
+   createdSessionId: null
+   supportedSecondFactors: ["email_code"]
+   ```
+
+   La instancia quiere verificar el dispositivo, y cada contexto de Playwright
+   es un dispositivo recién estrenado. Empezar por `email_code` se salta ese
+   paso, porque el código **es** la verificación. Y las direcciones
+   `+clerk_test` son las de prueba de Clerk: nunca se entregan y siempre aceptan
+   el código `424242`.
+
+   Lo que convierte esto en una trampa en vez de en un error es
+   `@clerk/testing@2.2.31`: su rama `password` llama a `create` y luego a
+   `setActive` **sin mirar el estado en ningún momento** —las ramas `ticket` y
+   `email_code` sí comprueban `complete`—, así que ejecuta
+   `setActive({ session: null })` y deja el navegador sin sesión y sin ruido.
+   Encima hay una segunda salida silenciosa, un `if (!Clerk.client) return`. Por
+   eso `e2e/support/sign-in.ts` espera a `window.Clerk.user` con un tiempo
+   límite propio: convierte las dos en un fallo señalando la línea culpable.
+
+   `password` sigue cableada para un identificador que **no** sea una dirección
+   `+clerk_test`, que es el único caso en que `email_code` no sirve.
 
 3. Para que los recorridos de invitación funcionen, ese usuario tiene que ser
    miembro en la base de datos local. El webhook `user.created` lo crea solo si
@@ -158,12 +194,13 @@ equivale a dejar la cuenta abierta en público.
    E2E_CLERK_USER_IDENTIFIER=freak-hub-e2e+clerk_test@example.com
    ```
 
-   Ese fichero ya lleva `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y `CLERK_SECRET_KEY`
-   de `clerk env pull`. Playwright lee los tres de ahí.
+   Playwright carga ese fichero con el directorio de trabajo en `apps/web`, así
+   que las variables se documentan en `apps/web/.env.example`, no en el de la
+   raíz. Ahí ya están `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y `CLERK_SECRET_KEY`
+   de `clerk env pull`.
 
-Las variables están documentadas —sin valores— en `.env.example`. **Nunca** se
-escribe una credencial real en el repositorio, y el fichero de sesión que
-Playwright guarda está en `.gitignore` por la misma razón.
+**Nunca** se escribe una credencial real en el repositorio, y el fichero de
+sesión que Playwright guarda está en `.gitignore` por la misma razón.
 
 ### Ejecutarlos en local
 
@@ -174,9 +211,15 @@ pnpm test:e2e        # Playwright levanta la web y corre los tres proyectos
 ```
 
 Sin la API, los dos recorridos que la atraviesan se omiten con un mensaje que
-dice exactamente qué falta. Sin credenciales, se omiten todos los que llevan
-sesión. **Ninguno pasa en silencio**: un test que se salta sin decirlo es peor
-que no tenerlo.
+dice exactamente qué falta. Sin credenciales —o si `clerkSetup()` no consiguió
+su *testing token*—, se omiten todos los que llevan sesión. **Ninguno pasa en
+silencio**: un test que se salta sin decirlo es peor que no tenerlo.
+
+Esa comprobación vive en un `beforeEach`, no en el ámbito del módulo, y el
+motivo es medible: Playwright **recoge** los ficheros de test antes de ejecutar
+el *global setup*, así que un `test.skip(...)` de módulo se decide cuando
+`CLERK_TESTING_TOKEN` todavía no existe. Se vio en una pasada donde la condición
+valía `true` dentro del test y aun así los seis salían marcados como omitidos.
 
 El correo al que se invita se genera con el sufijo `+clerk_test`, la convención
 de Clerk para una dirección que nunca se entrega de verdad, y lleva una marca de
@@ -186,11 +229,29 @@ Si quieres comprobarlo en un buzón real, pon `E2E_INVITEE_EMAIL`.
 ### En CI
 
 El trabajo `e2e` de `.github/workflows/ci.yml` no depende de `web`, `api` ni
-`contracts` ni ellos de él: no bloquea a nadie. Dentro, el perímetro es un paso
-normal —falla y el trabajo se pone rojo— y los recorridos con sesión van en un
-paso marcado `continue-on-error`, porque atan la suite a una instancia real de
-Clerk y una incidencia suya no es una regresión nuestra.
+`contracts` ni ellos de él: no bloquea a nadie. Levanta Postgres como servicio,
+aplica las migraciones, siembra la fila de miembro del usuario de prueba
+—resolviendo su `clerk_user_id` contra la Backend API, para no guardar un
+secreto más—, arranca la API en Go y corre los dos proyectos. Al terminar revoca
+las invitaciones que la pasada haya dejado pendientes.
 
-Los recorridos que cruzan a la API no corren en CI: harían falta Postgres, la
-API en Go y una fila de miembro para el usuario de prueba. Se omiten solos con
-su mensaje, y se ejecutan en local con los tres comandos de arriba.
+El paso del perímetro es bloqueante: si falla, es que una ruta protegida dejó de
+redirigir. El de los recorridos con sesión va marcado `continue-on-error`,
+porque atan la suite a una instancia real de Clerk y una incidencia suya no es
+una regresión nuestra. El informe HTML se sube como artefacto —no `test-results/`:
+el proyecto `setup` conserva los dos reintentos de CI y una traza de reintento
+llevaría el intercambio de inicio de sesión y la cookie de sesión.
+
+Todo el trabajo está condicionado a que existan los secretos de la instancia, y
+eso viene forzado: `clerkMiddleware` se niega a arrancar sin clave secreta, así
+que con una fabricada `next dev` responde 500 y ni el perímetro tiene página
+sobre la que afirmar nada. Una PR desde un *fork* ve el trabajo omitido, no roto.
+
+Secretos de repositorio que necesita:
+
+| Secreto | Para qué |
+| :--- | :--- |
+| `E2E_CLERK_PUBLISHABLE_KEY` | La web arranca con la instancia de desarrollo |
+| `E2E_CLERK_SECRET_KEY` | `clerkSetup()`, resolver el usuario y revocar invitaciones |
+| `E2E_CLERK_USER_IDENTIFIER` | A quién iniciar sesión |
+| `E2E_CLERK_USER_PASSWORD` | Opcional: solo si el identificador no es `+clerk_test` |
