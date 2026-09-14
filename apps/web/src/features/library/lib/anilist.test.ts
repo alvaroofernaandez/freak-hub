@@ -115,7 +115,26 @@ describe("searchAnime — results", () => {
     });
   });
 
-  it("drops an entry with no usable title instead of showing it blank", async () => {
+  it("drops an entry with no usable title but keeps the rest", async () => {
+    fetchMock.mockResolvedValue(
+      pageResponse([
+        media({ id: 7, title: { english: null, romaji: null, native: null } }),
+        media({ id: 8, title: { english: "Monster" } }),
+      ]),
+    );
+
+    const outcome = await searchAnime("algo");
+
+    expect(outcome.status).toBe("ok");
+    if (outcome.status !== "ok") return;
+    expect(outcome.results).toHaveLength(1);
+    expect(outcome.results[0]).toMatchObject({
+      id: "anilist:8",
+      title: "Monster",
+    });
+  });
+
+  it("reports the empty state when every entry was unusable", async () => {
     fetchMock.mockResolvedValue(
       pageResponse([
         media({ id: 7, title: { english: null, romaji: null, native: null } }),
@@ -123,6 +142,140 @@ describe("searchAnime — results", () => {
     );
 
     await expect(searchAnime("algo")).resolves.toEqual({ status: "empty" });
+  });
+});
+
+describe("searchAnime — synopsis", () => {
+  async function synopsisOf(description: string): Promise<string | undefined> {
+    fetchMock.mockResolvedValue(pageResponse([media({ description })]));
+    const outcome = await searchAnime("algo");
+    if (outcome.status !== "ok") {
+      throw new Error(`expected results, got ${outcome.status}`);
+    }
+    return outcome.results[0].synopsis;
+  }
+
+  it("never turns escaped markup into real markup", async () => {
+    const synopsis = await synopsisOf(
+      "Una nota: &lt;b&gt;negrita&lt;/b&gt; y &lt;script&gt;alert(1)&lt;/script&gt;",
+    );
+
+    expect(synopsis).toBe("Una nota: negrita y alert(1)");
+    expect(synopsis).not.toContain("<");
+  });
+
+  it("strips an escaped image tag that carries an event handler", async () => {
+    const synopsis = await synopsisOf(
+      "Antes &lt;img src=x onerror=alert(1)&gt; despues",
+    );
+
+    expect(synopsis).toBe("Antes despues");
+  });
+
+  it("decodes an escaped ampersand last, so its payload stays literal text", async () => {
+    await expect(synopsisOf("5 &amp;lt; 6")).resolves.toBe("5 &lt; 6");
+  });
+
+  it("decodes the apostrophe in its three spellings", async () => {
+    await expect(
+      synopsisOf("It&#39;s &#039;ok&#039; &apos;x&apos;"),
+    ).resolves.toBe("It's 'ok' 'x'");
+  });
+
+  it("decodes quotes, non-breaking spaces and ampersands", async () => {
+    await expect(
+      synopsisOf("&quot;Uno&quot;&nbsp;y&nbsp;otro &amp; mas"),
+    ).resolves.toBe('"Uno" y otro & mas');
+  });
+
+  it("keeps a synopsis that is only markup out of the result", async () => {
+    await expect(synopsisOf("<br><i></i>")).resolves.toBeUndefined();
+  });
+});
+
+describe("searchAnime — request shape", () => {
+  function variablesOfLastCall(): Record<string, unknown> {
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    return JSON.parse(init.body as string).variables;
+  }
+
+  it("asks for the requested number of results", async () => {
+    fetchMock.mockResolvedValue(pageResponse([media()]));
+
+    await searchAnime("algo", { limit: 5 });
+
+    expect(variablesOfLastCall()).toMatchObject({ perPage: 5 });
+  });
+
+  it("never asks for more than AniList's own per-page ceiling", async () => {
+    fetchMock.mockResolvedValue(pageResponse([media()]));
+
+    await searchAnime("algo", { limit: 500 });
+
+    expect(variablesOfLastCall()).toMatchObject({ perPage: 50 });
+  });
+
+  it("asks for at least one result when given a nonsensical limit", async () => {
+    fetchMock.mockResolvedValue(pageResponse([media()]));
+
+    await searchAnime("algo", { limit: 0 });
+
+    expect(variablesOfLastCall()).toMatchObject({ perPage: 1 });
+  });
+});
+
+describe("searchAnime — cancellation", () => {
+  function signalOfLastCall(): AbortSignal {
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    return init.signal as AbortSignal;
+  }
+
+  /** Rejects the way a real `fetch` does when its signal is aborted, and
+   * otherwise never settles. */
+  function hangingFetch(): ReturnType<typeof vi.fn> {
+    return vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init.signal?.addEventListener("abort", () => {
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            );
+          });
+        }),
+    );
+  }
+
+  it("still applies its own deadline when the caller supplies a signal", async () => {
+    fetchMock.mockResolvedValue(pageResponse([media()]));
+    const caller = new AbortController();
+
+    await searchAnime("algo", { signal: caller.signal, timeoutMs: 5 });
+    const signal = signalOfLastCall();
+
+    await vi.waitFor(() => {
+      expect(signal.aborted).toBe(true);
+    });
+  });
+
+  it("comes back as unavailable when a search with a caller signal times out", async () => {
+    fetchMock = hangingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const caller = new AbortController();
+
+    await expect(
+      searchAnime("algo", { signal: caller.signal, timeoutMs: 5 }),
+    ).resolves.toEqual({ status: "unavailable" });
+  });
+
+  it("aborts the request when the caller aborts", async () => {
+    fetchMock = hangingFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const caller = new AbortController();
+
+    const outcome = searchAnime("algo", { signal: caller.signal });
+    caller.abort();
+
+    await expect(outcome).resolves.toEqual({ status: "unavailable" });
   });
 });
 
@@ -204,5 +357,41 @@ describe("searchAnime — rate limit", () => {
     await expect(searchAnime("death note")).resolves.toEqual({
       status: "rate_limited",
     });
+  });
+
+  it("caps an absurd Retry-After instead of passing it to a timer", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse({}, { status: 429, headers: { "retry-after": "99999999" } }),
+    );
+
+    await expect(searchAnime("death note")).resolves.toEqual({
+      status: "rate_limited",
+      retryAfterSeconds: 300,
+    });
+  });
+});
+
+describe("searchAnime — misconfiguration", () => {
+  it("says so once in development, where a silent unavailable is a trap", async () => {
+    vi.stubEnv("ANILIST_API_URL", "");
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await searchAnime("death note");
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("ANILIST_API_URL"),
+    );
+    warn.mockRestore();
+  });
+
+  it("stays quiet outside development", async () => {
+    vi.stubEnv("ANILIST_API_URL", "");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await searchAnime("death note");
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

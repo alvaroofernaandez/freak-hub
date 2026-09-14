@@ -8,9 +8,13 @@
  * disposable. The day `/v1/works` exists, this file is deleted whole — which
  * is why nothing outside it knows AniList exists.
  *
- * Server side only, on purpose. `ANILIST_API_URL` carries no `NEXT_PUBLIC_`
- * prefix, so it is undefined in the browser and a client-side import fails
- * fast into `unavailable`. Three reasons: `docs/catalogs.md` rule 5 keeps
+ * Meant to run on the server, and nothing here enforces it. `ANILIST_API_URL`
+ * carries no `NEXT_PUBLIC_` prefix, so Next's `process` polyfill leaves it
+ * `undefined` in the browser and a client-side call degrades into
+ * `unavailable` — it is not prevented, and no build error says so. Making it
+ * a hard error would mean the `server-only` package, a new dependency for a
+ * module written to be deleted; the honest sentence was preferred. Three
+ * reasons it belongs on the server: `docs/catalogs.md` rule 5 keeps
  * catalog calls out of the browser so the other five providers (which do
  * need secrets) never have to move; AniList's ~90 req/min budget is spent
  * per client IP, and the server pays it once instead of every visitor
@@ -23,6 +27,7 @@
  */
 
 import { z } from "zod";
+import { combineSignals } from "@/shared/lib/api-client";
 
 /**
  * A search hit as the product understands it, with no trace of the provider
@@ -60,6 +65,16 @@ export type CatalogSearchOutcome =
 const TIMEOUT_MS = 10_000;
 
 const DEFAULT_LIMIT = 10;
+
+/** AniList caps `perPage` at 50 and rejects the query above it. */
+const MAX_LIMIT = 50;
+
+/**
+ * A ceiling for `Retry-After`. AniList's window is a minute, so anything
+ * beyond a few minutes is a proxy inventing a number — and a caller that
+ * feeds it straight into a timer would leave the search disabled for hours.
+ */
+const MAX_RETRY_AFTER_SECONDS = 300;
 
 const SEARCH_QUERY = `
   query ($search: String!, $perPage: Int!) {
@@ -100,21 +115,30 @@ const ResponseSchema = z.object({
 type Media = z.infer<typeof MediaSchema>;
 
 /**
- * AniList returns the synopsis with markup in it (`<br>`, `<i>`, entities).
- * Stripping it at the boundary keeps the provider's formatting from reaching
- * a component, which would otherwise need `dangerouslySetInnerHTML` to show
- * it.
+ * AniList returns the synopsis with markup in it (`<br>`, `<i>`, entities),
+ * and its descriptions are community-edited. Reducing it to plain text at
+ * this boundary keeps the provider's formatting from reaching a component,
+ * which would otherwise need `dangerouslySetInnerHTML` to show it.
+ *
+ * The order is the whole point. Decoding entities *after* removing tags
+ * manufactures markup that was never there: `&lt;script&gt;…&lt;/script&gt;`
+ * arrives as inert text, survives the tag removal untouched, and then the
+ * decode turns it into a real `<script>` element — the exact string a future
+ * `dangerouslySetInnerHTML` would execute. So: decode the escapes first, let
+ * whatever they reveal be removed as the markup it is, and decode `&amp;`
+ * last so that `&amp;lt;` ends up as the literal text `&lt;` its author
+ * wrote rather than as another round of decoding.
  */
 function plainText(markup: string): string | undefined {
   const text = markup
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&quot;/gi, '"')
+    .replace(/&(?:apos|#0?39);/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
     .replace(/<br\s*\/?>/gi, " ")
     .replace(/<\/(p|div)>/gi, " ")
     .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
     .replace(/&amp;/gi, "&")
     .replace(/\s+/g, " ")
     .trim();
@@ -146,18 +170,35 @@ function adapt(media: Media): CatalogSearchResult | undefined {
   };
 }
 
+/** `Retry-After` may also be an HTTP date, which is not a number and so
+ * comes back without a wait — the caller's own fallback is better than a
+ * guess. */
 function rateLimited(response: Response): CatalogSearchOutcome {
   const seconds = Number(response.headers.get("retry-after"));
 
   return Number.isFinite(seconds) && seconds > 0
-    ? { status: "rate_limited", retryAfterSeconds: seconds }
+    ? {
+        status: "rate_limited",
+        retryAfterSeconds: Math.min(
+          Math.ceil(seconds),
+          MAX_RETRY_AFTER_SECONDS,
+        ),
+      }
     : { status: "rate_limited" };
 }
 
 export interface SearchAnimeOptions {
-  /** Cancels the search when the caller navigates away mid-request. */
+  /**
+   * Cancels the search when the caller navigates away or types again
+   * mid-request. It is combined with the deadline, never substituted for it.
+   * A search the caller aborted resolves to `unavailable`; the caller asked
+   * for it, so it should ignore that outcome rather than render it.
+   */
   signal?: AbortSignal;
+  /** Clamped to AniList's own 1-50 range. */
   limit?: number;
+  /** Overrides `TIMEOUT_MS`, mainly for tests — as in `api-client.ts`. */
+  timeoutMs?: number;
 }
 
 /**
@@ -166,7 +207,11 @@ export interface SearchAnimeOptions {
  */
 export async function searchAnime(
   query: string,
-  { signal, limit = DEFAULT_LIMIT }: SearchAnimeOptions = {},
+  {
+    signal,
+    limit = DEFAULT_LIMIT,
+    timeoutMs = TIMEOUT_MS,
+  }: SearchAnimeOptions = {},
 ): Promise<CatalogSearchOutcome> {
   const search = query.trim();
   if (search === "") {
@@ -175,8 +220,19 @@ export async function searchAnime(
 
   const endpoint = process.env.ANILIST_API_URL;
   if (!endpoint) {
+    // Without this, a missing variable is indistinguishable from AniList
+    // being down — for as long as nobody thinks to check, because the
+    // outcome contract makes the misconfiguration a perfectly ordinary
+    // state. Development only, like `reportError`.
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[freak-hub] ANILIST_API_URL is not set, so catalog search is disabled. Declare it in apps/web/.env.local (see apps/web/.env.example).",
+      );
+    }
     return { status: "unavailable" };
   }
+
+  const perPage = Math.min(Math.max(Math.trunc(limit) || 1, 1), MAX_LIMIT);
 
   let response: Response;
   try {
@@ -188,9 +244,9 @@ export async function searchAnime(
       },
       body: JSON.stringify({
         query: SEARCH_QUERY,
-        variables: { search, perPage: limit },
+        variables: { search, perPage },
       }),
-      signal: signal ?? AbortSignal.timeout(TIMEOUT_MS),
+      signal: combineSignals(AbortSignal.timeout(timeoutMs), signal),
     });
   } catch {
     return { status: "unavailable" };

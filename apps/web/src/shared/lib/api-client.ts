@@ -110,7 +110,17 @@ function resolveBaseUrl(): string {
   return baseUrl.replace(/\/$/, "");
 }
 
-function combineSignals(
+/**
+ * Ties a caller's own signal to a deadline without letting either replace the
+ * other (ADR-0014): a request aborts when the caller gives up *or* when the
+ * ceiling is reached, never only on whichever one was supplied.
+ *
+ * Exported because it is the one correct way to do this in the web app, and
+ * the alternative — `callerSignal ?? timeoutSignal` — silently removes the
+ * ceiling for exactly the callers that cancel, which are the ones most
+ * likely to be waiting on a spinner.
+ */
+export function combineSignals(
   timeoutSignal: AbortSignal,
   callerSignal: AbortSignal | null | undefined,
 ): AbortSignal {
