@@ -8,6 +8,37 @@
 -- recommendations mean anything; a table per category, or one wide table of
 -- mostly-null columns, would both throw that away.
 
+-- The contract promises that the title search of GET /v1/works?q= is case- AND
+-- accent-insensitive, which in a Spanish-speaking product is not a detail:
+-- somebody typing "pokemon" has to find "Pokémon". Folding accents needs
+-- contrib, so from here on this schema depends on two extensions and
+-- production has to have them available. That dependency is the decision
+-- recorded in ADR-0015 (docs/decisions/0015-busqueda-sin-acentos.md).
+--
+-- unaccent folds the accents; pg_trgm is what makes the result searchable by
+-- substring, because no B-tree can answer "contains" — only "starts with".
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- unaccent() cannot be indexed: it is declared STABLE, not IMMUTABLE, because
+-- it reads a dictionary that could be changed underneath it, and Postgres
+-- refuses to build an index on a function whose answer it cannot assume is
+-- fixed. This wrapper is the documented way around it — it pins the dictionary
+-- explicitly instead of resolving it through the search path at call time, and
+-- then promises IMMUTABLE.
+--
+-- It looks redundant and it is not: delete it and works_title_search_idx stops
+-- being creatable. The promise has one real condition attached — if the
+-- unaccent rules file is ever edited, every index built on this function has
+-- to be REINDEXed, because Postgres will keep trusting entries computed under
+-- the old rules.
+CREATE FUNCTION immutable_unaccent(input text) RETURNS text
+    LANGUAGE sql
+    IMMUTABLE
+    PARALLEL SAFE
+    STRICT
+    AS $$ SELECT public.unaccent('public.unaccent'::regdictionary, input) $$;
+
 -- Domain enums are Postgres types here, never text with a CHECK, the same way
 -- invitation_status already is. The type is declared once and every column,
 -- function and generated Go signature inherits it, instead of each table
@@ -116,6 +147,15 @@ CREATE INDEX library_entries_member_status_idx
 CREATE INDEX works_category_created_idx
     ON works (category, created_at DESC, id DESC);
 
+-- The free-text title search, folded to lower case and stripped of accents so
+-- "pokemon", "Pokemon" and "Pokémon" all land on the same entry. GIN over
+-- trigrams rather than a B-tree because the search is a substring match, and a
+-- B-tree can only answer a prefix: `LIKE 'poke%'` it could serve, `LIKE
+-- '%poke%'` it could not. The expression is indexed, so the query has to spell
+-- it the same way for the planner to recognise it.
+CREATE INDEX works_title_search_idx
+    ON works USING gin (immutable_unaccent(lower(title)) gin_trgm_ops);
+
 -- +goose StatementEnd
 
 -- +goose Down
@@ -130,5 +170,27 @@ DROP TABLE IF EXISTS works;
 DROP TYPE IF EXISTS library_status;
 DROP TYPE IF EXISTS work_source;
 DROP TYPE IF EXISTS work_category;
+
+-- The function goes after the table, because works_title_search_idx depends on
+-- it and dropping the table is what takes the index with it.
+DROP FUNCTION IF EXISTS immutable_unaccent(text);
+
+-- And the extensions go last, deliberately, with two choices worth stating.
+--
+-- No CASCADE. If something outside this migration ever comes to depend on
+-- unaccent or pg_trgm, this DROP refuses and the rollback fails loudly instead
+-- of quietly taking that something down with it. Failing loudly is the rule
+-- here, and a rollback that silently breaks an unrelated index is the exact
+-- opposite of one.
+--
+-- They are dropped at all because the Up created them and a Down owes back
+-- what its Up took — leaving them behind would mean a rolled-back database
+-- still carrying objects no migration declares. The asymmetry to know about:
+-- CREATE EXTENSION IF NOT EXISTS succeeds on a database where somebody had
+-- already installed unaccent by hand, and this DROP would then remove
+-- something this migration never created. Same class of knowingly destructive
+-- Down as the backfill above it, and recorded the same way in data-model.md.
+DROP EXTENSION IF EXISTS pg_trgm;
+DROP EXTENSION IF EXISTS unaccent;
 
 -- +goose StatementEnd

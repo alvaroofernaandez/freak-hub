@@ -30,6 +30,8 @@ const (
 	manualWork   = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 	baseGame     = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 	expansion    = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+	accentedWork = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+	percentWork  = "ffffffff-ffff-ffff-ffff-ffffffffffff"
 )
 
 // seedLibrary rebuilds the schema from zero up to the library migration and
@@ -48,7 +50,9 @@ INSERT INTO members (id, clerk_user_id, username, display_name) VALUES
 INSERT INTO works (id, title, category, source, source_id) VALUES
   ('`+importedWork+`', 'Fullmetal Alchemist: Brotherhood', 'anime', 'anilist', '5114'),
   ('`+manualWork+`',   'Un fanzine que no cataloga nadie', 'manga', 'manual',  NULL),
-  ('`+baseGame+`',     'Terraforming Mars',                'boardgame', 'bgg', '167791');
+  ('`+baseGame+`',     'Terraforming Mars',                'boardgame', 'bgg', '167791'),
+  ('`+accentedWork+`', 'Pokémon: Índigo',                  'anime', 'anilist', '527'),
+  ('`+percentWork+`',  '100% Teacher',                     'manga', 'manual',  NULL);
 
 INSERT INTO works (id, title, category, source, source_id, expansion_of) VALUES
   ('`+expansion+`', 'Terraforming Mars: Preludio', 'boardgame', 'bgg', '247030', '`+baseGame+`');
@@ -156,6 +160,55 @@ func TestLibrarySchemaHoldsTheInvariantsTheDomainCannot(t *testing.T) {
 	})
 }
 
+// The contract promises the title search is case- AND accent-insensitive, which
+// in a Spanish-language product is the difference between finding Pokémon and
+// not finding it. The folding happens in the schema — immutable_unaccent over
+// an installed extension — so it is the schema that has to prove it works.
+func TestTheTitleSearchFoldsCaseAndAccents(t *testing.T) {
+	connection := migrationsDB(t)
+	seedLibrary(t, connection)
+
+	// The same expression works_title_search_idx indexes and ListWorks spells,
+	// with the term escaped so a % from the caller stays a literal percent.
+	const search = `
+SELECT title FROM works
+WHERE immutable_unaccent(lower(title)) LIKE
+      '%' || replace(replace(replace(
+          immutable_unaccent(lower($1)), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+ORDER BY title`
+
+	found := func(term string) []string {
+		rows, err := connection.QueryContext(t.Context(), search, term)
+		require.NoError(t, err)
+		defer func() { assert.NoError(t, rows.Close()) }()
+
+		titles := []string{}
+		for rows.Next() {
+			var title string
+			require.NoError(t, rows.Scan(&title))
+			titles = append(titles, title)
+		}
+		require.NoError(t, rows.Err())
+
+		return titles
+	}
+
+	assert.Equal(t, []string{"Pokémon: Índigo"}, found("pokemon"),
+		"typing without accents is how most people type, and it has to find the work")
+	assert.Equal(t, []string{"Pokémon: Índigo"}, found("POKÉMON"),
+		"and so does typing with them, in any case")
+	assert.Equal(t, []string{"Pokémon: Índigo"}, found("indigo"),
+		"the fold applies to every accented character, not just the first")
+	assert.Equal(t, []string{"Terraforming Mars", "Terraforming Mars: Preludio"}, found("terraforming"),
+		"a substring match, not a prefix one")
+
+	assert.Equal(t, []string{"100% Teacher"}, found("100%"),
+		"a % from the caller is a percent sign, never a wildcard")
+	assert.Empty(t, found("100%Teacher"),
+		"and if it were a wildcard this would match, which is exactly the bug the escaping prevents")
+	assert.Empty(t, found("_"), "the same goes for the single-character wildcard")
+}
+
 // The risk the issue names out loud: a Down that drops the tables and forgets
 // the enum types leaves a database where the migration can never be applied
 // again, and `CREATE TYPE` is the statement that says so. Rolling forward,
@@ -244,6 +297,15 @@ LIMIT 26`)
 
 		assert.Contains(t, explained, "works_category_created_idx")
 		assert.NotContains(t, explained, "Sort")
+	})
+
+	t.Run("the title search", func(t *testing.T) {
+		explained := plan(`
+SELECT * FROM works
+WHERE immutable_unaccent(lower(title)) LIKE '%pokemon%'`)
+
+		assert.Contains(t, explained, "works_title_search_idx",
+			"a GIN trigram index is the only thing that answers a substring match without reading every row")
 	})
 
 	t.Run("filtering the library by status", func(t *testing.T) {

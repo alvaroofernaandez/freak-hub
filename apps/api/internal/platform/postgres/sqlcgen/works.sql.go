@@ -74,7 +74,10 @@ SELECT id, title, category, source, source_id, cover_url, synopsis, year, metada
 WHERE ($1::work_category IS NULL OR category = $1::work_category)
   AND (
     $2::text IS NULL
-    OR strpos(lower(title), lower($2::text)) > 0
+    OR immutable_unaccent(lower(title)) LIKE
+       '%' || replace(replace(replace(
+           immutable_unaccent(lower($2::text)),
+       '\', '\\'), '%', '\%'), '_', '\_') || '%'
   )
   AND (
     $3::timestamptz IS NULL
@@ -100,12 +103,20 @@ type ListWorksParams struct {
 // works_category_created_idx serves the category filter and the whole ORDER BY
 // at once, which is why the index carries the id tiebreak the keyset needs.
 //
-// The title search is a case-insensitive substring match. strpos rather than
-// ILIKE on purpose: the search term arrives from a query string, and under
-// ILIKE a user typing `%` would be writing a wildcard instead of searching for
-// a character. Accent-insensitivity, which the contract also promises, is NOT
-// implemented here — see docs/data-model.md, it needs a schema decision that
-// this migration deliberately did not take.
+// The title search folds case and accents, so "pokemon" finds "Pokémon"
+// (ADR-0015). Both sides go through immutable_unaccent(lower(...)), and the
+// left-hand side is spelled exactly as works_title_search_idx indexes it,
+// which is what lets the planner use the index instead of reading every row.
+//
+// LIKE rather than strpos, and this is the one place the query is not the
+// obvious shape. A GIN trigram index only answers LIKE, ILIKE and the regex
+// operators; strpos is invisible to it, so a strpos search would be correct
+// and would scan the whole catalogue forever. The property strpos was
+// protecting is kept by escaping instead: the term arrives from a query
+// string, so a backslash, a % and a _ are turned into literals before they
+// reach the pattern, and somebody searching for "100%" searches for a percent
+// sign rather than writing a wildcard. Order matters in that nesting —
+// backslash first, or the escapes the other two introduce get escaped again.
 func (q *Queries) ListWorks(ctx context.Context, arg ListWorksParams) ([]Work, error) {
 	rows, err := q.db.Query(ctx, listWorks,
 		arg.Category,
