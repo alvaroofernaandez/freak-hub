@@ -4,7 +4,10 @@ import { expect, test } from "@playwright/test";
  * Smoke coverage for the auth perimeter. These are the assertions that would
  * catch the worst possible regression: a protected route becoming public.
  *
- * Signed-in journeys need `@clerk/testing` and a test user; see docs/testing.md.
+ * They run in the `signed-out` project, which depends on nothing: no Clerk
+ * credentials, no stored session, no API. The signed-in journeys live in
+ * `*.signed-in.spec.ts` and are kept apart precisely so that their need for a
+ * real instance can never take this file down with it.
  */
 test.describe("perímetro de autenticación", () => {
   test("la portada es pública", async ({ page }) => {
