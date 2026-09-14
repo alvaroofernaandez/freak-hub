@@ -85,3 +85,43 @@ func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
 
 	assert.Error(t, err)
 }
+
+// TestDecodeJSONRejectsASecondDocumentAfterTheFirst closes the other half of
+// "no unknown fields": a decoder that reads one document and stops leaves
+// whatever follows unread, so two concatenated bodies were a silent partial
+// success. The field nobody expected and the document nobody read are the
+// same mistake seen twice.
+func TestDecodeJSONRejectsASecondDocumentAfterTheFirst(t *testing.T) {
+	t.Parallel()
+
+	var target struct {
+		Title string `json:"title"`
+	}
+
+	err := decodeInto(t, `{"title":"a"}{"title":"b"}`, &target)
+
+	require.Error(t, err, "a body of two documents is not a body this API accepts")
+	assert.ErrorIs(t, err, httpx.ErrTrailingData)
+}
+
+func TestDecodeJSONAcceptsTrailingWhitespaceAfterTheDocument(t *testing.T) {
+	t.Parallel()
+
+	var target struct {
+		Title string `json:"title"`
+	}
+
+	require.NoError(t, decodeInto(t, "{\"title\":\"a\"}\n  \t\n", &target),
+		"a trailing newline is how most clients end a body")
+	assert.Equal(t, "a", target.Title)
+}
+
+// decodeInto runs one body through DecodeJSON with a real ResponseWriter,
+// which http.MaxBytesReader needs.
+func decodeInto(t *testing.T, body string, target any) error {
+	t.Helper()
+
+	request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+
+	return httpx.DecodeJSON(httptest.NewRecorder(), request, target)
+}

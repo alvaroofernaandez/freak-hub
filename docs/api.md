@@ -18,6 +18,13 @@ documento explica las decisiones que hay detrás.
    `/webhooks` no la llevan porque no son API de producto.
 4. **Sin campos desconocidos.** El decodificador rechaza propiedades que no
    existen: una errata en un cliente falla ruidosamente en vez de ignorarse.
+   Y **sin nada detrás del documento**: un cuerpo con dos documentos JSON
+   pegados (`{"a":1}{"b":2}`) se rechaza con `400 invalid_payload` en lugar de
+   leer el primero y callar sobre el segundo. Es el mismo fallo visto desde el
+   otro lado —un éxito parcial con aspecto de éxito entero—, así que se
+   resuelve en `httpx.DecodeJSON` y vale para todos los endpoints con cuerpo.
+   Los espacios en blanco al final no son datos: un salto de línea es como
+   acaba casi cualquier cuerpo.
 
 ## Endpoints
 

@@ -1478,3 +1478,21 @@ func TestListWorksRejectsASearchQueryCarryingANullCharacter(t *testing.T) {
 	assert.Equal(t, "invalid_filter", errorCode(t, recorder),
 		"q travels in the query string, so it stays in the invalid_filter family")
 }
+
+// TestCreateWorkRejectsASecondDocumentAfterTheBody is the route-level half of
+// the httpx change: two concatenated documents used to answer 201, with the
+// second quietly unread. The fix is shared, so PATCH /v1/me and
+// POST /v1/invitations gain it too.
+func TestCreateWorkRejectsASecondDocumentAfterTheBody(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.doRaw(t, http.MethodPost, "/v1/works", "valid-user_alex",
+		`{"title":"a","category":"anime"}{"title":"b","category":"anime"}`)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code,
+		"a partial success that looks like a whole one is what principle 4 exists to prevent")
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}

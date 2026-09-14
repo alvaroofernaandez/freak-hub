@@ -169,6 +169,24 @@ func (s *suite) do(t *testing.T, method, path, token string, body any) *httptest
 	return recorder
 }
 
+// doRaw sends a body exactly as written, for the cases where the point is
+// that the bytes are not what json.Marshal would ever produce.
+func (s *suite) doRaw(t *testing.T, method, path, token, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+	s.router.ServeHTTP(recorder, request)
+
+	return recorder
+}
+
 // doMultipart posts a single-file multipart/form-data request under
 // fieldName, with content and contentType chosen by the caller — which lets
 // a test simulate both a valid upload and one with a deliberately wrong
