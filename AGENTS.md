@@ -68,9 +68,15 @@ JetBrains Mono para datos— en [docs/design.md](docs/design.md) y
 paleta oklch definitiva y `app/layout.tsx` ya carga Sora, Bungee y JetBrains
 Mono.
 
-**Lo único pendiente del tema es el tema claro**, que llega con `/ajustes`
-(issue #37). Las pantallas sin maqueta propia (Actividad, Grupo, Invitar,
-Recomendaciones, Ajustes) siguen el criterio de
+**El tema claro también está enviado** (issue #37): `globals.css` lleva el
+bloque `:root[data-theme="light"]` completo, el interruptor vive en `/ajustes`
+y se repite en el menú de sesión, y la elección se guarda en `localStorage` y
+se estampa sobre `<html>` antes del primer pintado (`shared/lib/theme.ts`). Lo
+que sigue existiendo solo en oscuro es la **maqueta**
+(`docs/design/high-fidelity-desktop.html`), no la aplicación.
+
+Las pantallas sin maqueta propia (Actividad, Grupo, Invitar, Recomendaciones,
+Ajustes) siguen el criterio de
 [docs/design.md#criterio-de-extensión-para-pantallas-sin-maqueta](docs/design.md#criterio-de-extensión-para-pantallas-sin-maqueta).
 
 No inventes tokens ni amplíes la paleta por tu cuenta: los valores ya están en
@@ -122,7 +128,7 @@ apps/web/src/
   app/                  enrutado (App Router). Sin lógica de negocio
   features/<dominio>/    actions/ y ui/ de cada funcionalidad
   shared/api/           tipos derivados del contrato
-  shared/lib/           api-client · routes · cn
+  shared/lib/           api-client · routes · nav-links · theme · cn
   proxy.ts              middleware de Clerk
 
 apps/api/

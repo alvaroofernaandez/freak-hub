@@ -135,10 +135,49 @@ Tres familias, cada una con un trabajo y solo uno.
 ## Motivo recurrente: la moldura
 
 El banner usa una franja de tres colores al pie del cabinet arcade (uno por
-personaje). En la interfaz se extiende a los seis colores del roster y se usa
-como separador entre secciones importantes: además de decorar, funciona como
-índice visual de las seis categorías, coherente con las etiquetas que ya se
-ven en las tarjetas.
+personaje). En la interfaz se extiende a los seis colores del roster y funciona
+como índice visual de las seis categorías, coherente con las etiquetas que ya
+se ven en las tarjetas.
+
+### Dos molduras, dos trabajos
+
+El motivo aparece dos veces, con dos componentes distintos. Conviene no
+confundirlos al tocar uno de los dos:
+
+| Componente | Dónde | Forma | Qué hace |
+| :--- | :--- | :--- | :--- |
+| `shared/ui/category-stripe.tsx` (`CategoryStripe`) | Debajo de la navbar, en **todas** las pantallas de sesión; la monta el shell (`app/(app)/layout.tsx`) | Banda de 8 px (`h-2`) a todo el ancho, seis segmentos a tope | Señala la categoría activa: su segmento pasa de `flex-1` a `flex-[2]` en 200 ms, y se queda quieto bajo `prefers-reduced-motion`. Lo declara la pantalla con `SetActiveCategory` |
+| `shared/ui/moulding.tsx` (`Moulding`) | Dentro de una pantalla, entre bloques con entidad propia (Ajustes, `/miembros`, `EmptyState`) | Franja de 4 px (`h-1`), seis segmentos separados y redondeados | Separa secciones. No conoce ninguna categoría activa |
+
+### La moldura bajo la navbar: solo color
+
+La maqueta dibuja aquí otra cosa: una fila de **seis celdas etiquetadas** —
+`border-top: 3px` en el color de la categoría, fondo tintado, y el nombre en
+JetBrains Mono de 10 px en mayúsculas con `letter-spacing: .06em`. El código
+pinta solo la banda de color, `aria-hidden`, sin celdas y sin nombres.
+
+**La divergencia es deliberada**, y se registra aquí para que quien compare la
+maqueta con la aplicación no la lea como un descuido pendiente de arreglar:
+
+1. **Seis celdas etiquetadas bajo la navbar se leen como una barra de
+   pestañas**, y no lo son. La moldura no navega: no lleva ningún enlace ni
+   botón, y va `aria-hidden`. Ofrecer esa afordancia contradiría
+   [ADR-0009](decisions/0009-arquitectura-de-informacion.md), que fija cuatro
+   destinos de primer nivel y **Biblioteca como única puerta** a las seis
+   categorías, precisamente para no tener seis enlaces sueltos arriba.
+2. **Los nombres sobran justo donde se leerían.** En `/biblioteca` las seis
+   categorías ya son las seis tarjetas, con su nombre en Bungee; en
+   `/biblioteca/[categoria]` el nombre es el `<h1>` de la pantalla. Escribirlos
+   una tercera vez en 10 px no informa de nada nuevo.
+3. **La regla del color se cumple igual.** «El color de categoría nunca es el
+   único identificador» se satisface en la página —el `<h1>` o la tarjeta dicen
+   la categoría—, no en la banda. Por eso la banda puede permitirse ser
+   decorativa y desaparecer del árbol de accesibilidad, que es lo que hoy hace.
+   No es el caso del **estado** de una entrada, que sigue sin usar color nunca.
+
+Si algún día la moldura tuviera que navegar, deja de ser esta decisión y pasa a
+ser una revisión de ADR-0009: se decide allí primero, y solo después se dibujan
+las celdas.
 
 ## Estado de una invitación
 
@@ -1099,3 +1138,19 @@ Definition of Done de la épica #18.
   no al revés: sin foto, `Avatar` cae a unas iniciales que ya oculta a la
   tecnología asistiva, y este disparador es el único acceso a la sesión en un
   teléfono. Ningún test lo cubría porque todos pasaban `avatarUrl: null`.
+- **2026-09-14** · La moldura de debajo de la navbar (`CategoryStripe`) se
+  queda en **solo color**: se descartan las seis celdas etiquetadas que dibuja
+  la maqueta (borde superior de 3 px, fondo tintado y el nombre en JetBrains
+  Mono de 10 px en mayúsculas). Es la única divergencia deliberada entre la
+  maqueta y la aplicación en este componente, y estaba sin registrar: el código
+  seguía a este documento —que siempre describió la moldura como color— y no a
+  la maqueta, así que quien comparaba ambas no tenía forma de saber si era una
+  decisión o un olvido. Motivo: seis celdas etiquetadas bajo la navbar se leen
+  como una barra de pestañas y la moldura no navega (va `aria-hidden`, sin
+  enlaces), de modo que ofrecerían una afordancia que ADR-0009 descartó a
+  propósito al dejar cuatro destinos de primer nivel y Biblioteca como única
+  puerta a las seis categorías; además los nombres ya están escritos donde se
+  necesitan (las tarjetas del lobby, el `<h1>` de la categoría). La regla de
+  que el color de categoría nunca va solo se cumple en la página, no en la
+  banda. Ver
+  [La moldura bajo la navbar: solo color](#la-moldura-bajo-la-navbar-solo-color).

@@ -435,6 +435,7 @@ Más en [docs/testing.md](docs/testing.md).
 | [auth.md](docs/auth.md) | Clerk, sesiones, invitaciones |
 | [api.md](docs/api.md) | El contrato HTTP |
 | [data-model.md](docs/data-model.md) | Esquema y migraciones |
+| [design.md](docs/design.md) | Paleta, tipografía, movimiento |
 
 </td>
 <td valign="top" width="50%">
@@ -445,6 +446,7 @@ Más en [docs/testing.md](docs/testing.md).
 | [development.md](docs/development.md) | El día a día |
 | [testing.md](docs/testing.md) | Estrategia y flujo TDD |
 | [deployment.md](docs/deployment.md) | El VPS, paso a paso |
+| [screens.md](docs/screens.md) | Las pantallas y la navegación |
 | [roadmap.md](docs/roadmap.md) | Qué está hecho y qué viene |
 | [decisions/](docs/decisions/) | Los ADR |
 
@@ -469,9 +471,10 @@ El **dominio está por construir**. Lo siguiente, en orden, es levantar `works` 
 > [ADR-0008](docs/decisions/0008-direccion-visual.md)): extiende la identidad de
 > este mismo banner —oscuro, paleta oklch, un color por categoría— a toda la
 > aplicación. `globals.css` ya tiene la paleta oklch definitiva y
-> `app/layout.tsx` ya carga Sora, Bungee y JetBrains Mono. Lo único pendiente
-> del tema es el **tema claro**, que llega con `/ajustes`. El banner y la
-> imagen social de este README se regeneran con `pnpm assets:render`.
+> `app/layout.tsx` ya carga Sora, Bungee y JetBrains Mono. El **tema claro**
+> también está enviado: se elige en `/ajustes` o en el menú de sesión, y este
+> navegador lo recuerda. El banner y la imagen social de este README se
+> regeneran con `pnpm assets:render`.
 
 Detalle completo en [docs/roadmap.md](docs/roadmap.md).
 

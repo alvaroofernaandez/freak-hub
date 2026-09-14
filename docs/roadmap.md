@@ -17,29 +17,36 @@
 - [x] Docker Compose con Postgres y MinIO
 - [x] CI en GitHub Actions: lint, tipos, tests, build de imágenes y gitleaks
 - [x] Documentación completa del proyecto
+- [x] Dirección visual decidida **y aplicada**: "character select", paleta
+      oklch sobre un solo hue (272), un color por cada una de las seis
+      categorías, Sora · Bungee · JetBrains Mono, y los dos temas — oscuro por
+      defecto, claro elegible en `/ajustes` y recordado en el navegador (ver
+      [design.md](design.md) y [ADR-0008](decisions/0008-direccion-visual.md))
+- [x] Listado cerrado de pantallas y estructura de navegación (ver
+      [screens.md](screens.md) y
+      [ADR-0009](decisions/0009-arquitectura-de-informacion.md))
+
+Las dos últimas entradas estuvieron mucho tiempo bajo «Siguiente». Suben aquí
+porque ya no queda ninguna decisión por tomar en ellas: la paleta, la
+tipografía, el movimiento y los **dos** temas están escritos en `design.md` y
+aplicados en el código. Lo que sigue abierto es el **acabado pantalla a
+pantalla** —clonar la maqueta en las diez pantallas que la tienen (épica #17) y
+extender el sistema a las cinco que no (épica #18)—, y eso aplica las
+decisiones en vez de replantearlas, así que no bloquea al dominio.
 
 ## Siguiente — el dominio
 
-1. **Dirección visual.** Hecha y aplicada: "character select", oscura por
-   defecto, extendiendo la identidad del banner del README (ver
-   [design.md](design.md) y [ADR-0008](decisions/0008-direccion-visual.md)).
-   `globals.css` ya tiene la paleta oklch definitiva (hue 272, los seis
-   tokens `--cat-*`) y `app/layout.tsx` ya carga Sora, Bungee y JetBrains
-   Mono. Lo único pendiente es el **tema claro**, que llega con `/ajustes`.
-   El listado de pantallas y la navegación ya están decididos (ver
-   [screens.md](screens.md) y
-   [ADR-0009](decisions/0009-arquitectura-de-informacion.md)).
-2. **`works` y `library_entries`.** El corazón del producto: registrar algo con su
+1. **`works` y `library_entries`.** El corazón del producto: registrar algo con su
    estado y su progreso. Empezar por **una sola categoría** (anime, vía AniList) y
    generalizar cuando el modelo haya sobrevivido al uso real.
-3. **Búsqueda e importación desde AniList**, con alta manual como alternativa.
-4. **Las otras cinco categorías**, una a una: manga, videojuegos, películas, juegos
+2. **Búsqueda e importación desde AniList**, con alta manual como alternativa.
+3. **Las otras cinco categorías**, una a una: manga, videojuegos, películas, juegos
    de mesa, TCG.
-5. **Wishlist**, que no es una tabla nueva sino `status = 'wishlist'`.
-6. **Valoraciones y favoritos.**
-7. **Recomendaciones dirigidas**, de persona a persona y con motivo.
-8. **Feed de actividad**, cronológico y sin algoritmo.
-9. **Perfil público dentro del grupo**: qué está viendo alguien, qué ha terminado.
+4. **Wishlist**, que no es una tabla nueva sino `status = 'wishlist'`.
+5. **Valoraciones y favoritos.**
+6. **Recomendaciones dirigidas**, de persona a persona y con motivo.
+7. **Feed de actividad**, cronológico y sin algoritmo.
+8. **Perfil público dentro del grupo**: qué está viendo alguien, qué ha terminado.
 
 ## Más adelante
 
