@@ -317,20 +317,40 @@ func (h *handlers) listLibraryEntries(w http.ResponseWriter, r *http.Request) {
 // smuggle one in into a 400 rather than a write into somebody else's
 // library.
 type createLibraryEntryRequest struct {
-	WorkID      string     `json:"work_id"`
-	Status      string     `json:"status"`
-	Progress    *int       `json:"progress"`
-	Rating      *int       `json:"rating"`
-	IsFavourite *bool      `json:"is_favourite"`
-	Owned       *bool      `json:"owned"`
-	Note        *string    `json:"note"`
-	StartedAt   *time.Time `json:"started_at"`
-	FinishedAt  *time.Time `json:"finished_at"`
+	WorkID string `json:"work_id"`
+	Status string `json:"status"`
+	// progress, is_favourite and owned carry a default rather than a null, so
+	// they need the same absent/null/value reading a PATCH does. Their zero
+	// value IS the contract's default, which is why an absent property needs
+	// nothing done to it — and also why reading a null as that same zero
+	// would have looked harmless right up until one of those defaults changed.
+	Progress    optionalField[int]  `json:"progress"`
+	IsFavourite optionalField[bool] `json:"is_favourite"`
+	Owned       optionalField[bool] `json:"owned"`
+	Rating      *int                `json:"rating"`
+	Note        *string             `json:"note"`
+	StartedAt   *time.Time          `json:"started_at"`
+	FinishedAt  *time.Time          `json:"finished_at"`
+}
+
+// nulledNonNullable reports a property that arrived as an explicit null where
+// the contract declares no null. status is not among them because a null
+// decodes to the empty string, which is not one of the six statuses and the
+// domain refuses it for that reason.
+func (c createLibraryEntryRequest) nulledNonNullable() bool {
+	return c.Progress.nulled() || c.IsFavourite.nulled() || c.Owned.nulled()
 }
 
 func (h *handlers) createLibraryEntry(w http.ResponseWriter, r *http.Request) {
 	var payload createLibraryEntryRequest
 	if !decodeJSON(w, r, &payload) {
+		return
+	}
+
+	if payload.nulledNonNullable() {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload,
+			"Ese campo no admite el valor nulo.")
+
 		return
 	}
 
@@ -350,10 +370,10 @@ func (h *handlers) createLibraryEntry(w http.ResponseWriter, r *http.Request) {
 	entry, err := h.library.AddToLibrary(r.Context(), member.ID, library.AddToLibraryInput{
 		WorkID:      workID,
 		Status:      library.Status(payload.Status),
-		Progress:    valueOr(payload.Progress, 0),
+		Progress:    payload.Progress.value,
 		Rating:      payload.Rating,
-		IsFavourite: valueOr(payload.IsFavourite, false),
-		Owned:       valueOr(payload.Owned, false),
+		IsFavourite: payload.IsFavourite.value,
+		Owned:       payload.Owned.value,
 		Note:        payload.Note,
 		StartedAt:   payload.StartedAt,
 		FinishedAt:  payload.FinishedAt,
@@ -364,16 +384,6 @@ func (h *handlers) createLibraryEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusCreated, toLibraryEntryResponse(entry))
-}
-
-// valueOr reads an optional scalar out of a request body, falling back to
-// the default the contract declares for an absent property.
-func valueOr[T any](value *T, fallback T) T {
-	if value == nil {
-		return fallback
-	}
-
-	return *value
 }
 
 // optionalField carries one property of a PATCH body through the three

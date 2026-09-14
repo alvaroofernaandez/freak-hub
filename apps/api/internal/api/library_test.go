@@ -1373,3 +1373,26 @@ func TestUpdateLibraryEntryRejectsANoteLongerThanTheContractAllows(t *testing.T)
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
 }
+
+// TestCreateLibraryEntryRejectsANullOnAPropertyTheContractDeclaresNonNullable
+// closes the asymmetry: PATCH refused these and POST read them as absent.
+// Landing on the contract's defaults made it harmless, which is exactly why
+// it would have survived until a default changed.
+func TestCreateLibraryEntryRejectsANullOnAPropertyTheContractDeclaresNonNullable(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	for _, property := range []string{"status", "progress", "is_favourite", "owned"} {
+		work := s.seedAnime("Anime "+property, seedTime)
+		body := map[string]any{"work_id": work.ID.String(), "status": "wishlist"}
+		body[property] = nil
+
+		recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex", body)
+
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code,
+			"%s is not nullable: %s", property, recorder.Body.String())
+		assert.Equalf(t, "invalid_payload", errorCode(t, recorder), "property %s", property)
+	}
+}
