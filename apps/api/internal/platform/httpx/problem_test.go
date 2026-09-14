@@ -149,3 +149,53 @@ func TestWriteProblemCarriesTheCorrelationIDFromContext(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
 	assert.Equal(t, "abc123deadbeef", body.CorrelationID)
 }
+
+// TestWriteProblemDescribesTheLibraryCodes pins the registry entries the
+// library contract (packages/contracts/openapi.yaml) introduced. A code the
+// registry does not describe still serialises — codeRegistry is a map, so a
+// miss yields the zero codeInfo — and the only visible symptom is an empty
+// title reaching a client. This is what makes that loud.
+func TestWriteProblemDescribesTheLibraryCodes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		code  httpx.ErrorCode
+		field string
+	}{
+		{name: "already in library", code: httpx.CodeAlreadyInLibrary, field: "work_id"},
+		{name: "rating not allowed", code: httpx.CodeRatingNotAllowed, field: "rating"},
+		{name: "invalid progress", code: httpx.CodeInvalidProgress, field: "progress"},
+		// work_not_found blames no single field: it answers both
+		// GET /v1/works/{id}, where the id is a path segment, and
+		// POST /v1/library, where it is the work_id property.
+		{name: "work not found", code: httpx.CodeWorkNotFound, field: ""},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodPost, "/v1/library", nil)
+
+			httpx.WriteProblem(recorder, request, http.StatusConflict, testCase.code, "detalle")
+
+			var body httpx.Problem
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+
+			assert.NotEmpty(t, body.Title, "the registry must describe %s with a title", testCase.code)
+			assert.False(t, body.Retryable, "%s is a domain rule, never transient", testCase.code)
+
+			if testCase.field == "" {
+				assert.Empty(t, body.FieldErrors, "%s blames no single field", testCase.code)
+
+				return
+			}
+
+			require.Len(t, body.FieldErrors, 1)
+			assert.Equal(t, testCase.field, body.FieldErrors[0].Field)
+			assert.Equal(t, testCase.code, body.FieldErrors[0].Code)
+		})
+	}
+}
