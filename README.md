@@ -461,16 +461,16 @@ Para agentes de IA: [AGENTS.md](AGENTS.md).
 Los **cimientos están terminados**: monorepo, autenticación funcionando de punta a
 punta, invitaciones, contrato, tests, CI y despliegue.
 
-El **dominio está por construir**. Lo siguiente, en orden, es cerrar la dirección
-visual y levantar `works` + `library_entries` con una sola categoría antes de
-generalizar a las seis.
+El **dominio está por construir**. Lo siguiente, en orden, es levantar `works` +
+`library_entries` con una sola categoría antes de generalizar a las seis.
 
 > [!NOTE]
-> **La dirección visual ya está decidida** (["character select"](docs/design.md),
+> **La dirección visual ya está decidida y aplicada** (["character select"](docs/design.md),
 > [ADR-0008](docs/decisions/0008-direccion-visual.md)): extiende la identidad de
 > este mismo banner —oscuro, paleta oklch, un color por categoría— a toda la
-> aplicación. `globals.css` todavía lleva los tokens provisionales; sustituirlos
-> es el siguiente paso, antes de construir pantallas de verdad. El banner y la
+> aplicación. `globals.css` ya tiene la paleta oklch definitiva y
+> `app/layout.tsx` ya carga Sora, Bungee y JetBrains Mono. Lo único pendiente
+> del tema es el **tema claro**, que llega con `/ajustes`. El banner y la
 > imagen social de este README se regeneran con `pnpm assets:render`.
 
 Detalle completo en [docs/roadmap.md](docs/roadmap.md).

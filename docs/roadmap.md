@@ -20,13 +20,14 @@
 
 ## Siguiente — el dominio
 
-1. **Dirección visual.** Decidida: "character select", oscura por defecto con
-   tema claro disponible, extendiendo la identidad del banner del README (ver
+1. **Dirección visual.** Hecha y aplicada: "character select", oscura por
+   defecto, extendiendo la identidad del banner del README (ver
    [design.md](design.md) y [ADR-0008](decisions/0008-direccion-visual.md)).
-   Falta aplicarla: sustituir los tokens provisionales de `globals.css` y
-   cambiar la fuente de cuerpo de Inter a Sora en `app/layout.tsx`. Eso va
-   antes de construir pantallas de verdad. El listado de pantallas y la
-   navegación ya están decididos (ver [screens.md](screens.md) y
+   `globals.css` ya tiene la paleta oklch definitiva (hue 272, los seis
+   tokens `--cat-*`) y `app/layout.tsx` ya carga Sora, Bungee y JetBrains
+   Mono. Lo único pendiente es el **tema claro**, que llega con `/ajustes`.
+   El listado de pantallas y la navegación ya están decididos (ver
+   [screens.md](screens.md) y
    [ADR-0009](decisions/0009-arquitectura-de-informacion.md)).
 2. **`works` y `library_entries`.** El corazón del producto: registrar algo con su
    estado y su progreso. Empezar por **una sola categoría** (anime, vía AniList) y
