@@ -1396,3 +1396,85 @@ func TestCreateLibraryEntryRejectsANullOnAPropertyTheContractDeclaresNonNullable
 		assert.Equalf(t, "invalid_payload", errorCode(t, recorder), "property %s", property)
 	}
 }
+
+// TestNoRouteAcceptsANullCharacterInClientText covers the eight places
+// client text reaches a text or jsonb column across these routes. Postgres
+// stores U+0000 in neither — 22021 for text, 22P05 for the escape inside
+// jsonb — and Go carries it inside a string without complaint, so nothing
+// upstream notices until the request has already reached the database.
+//
+// The last row is a read. Nothing is written and the failure happened
+// anyway, which is what makes "it does not corrupt anything" the wrong
+// reason to leave it alone.
+func TestNoRouteAcceptsANullCharacterInClientText(t *testing.T) {
+	t.Parallel()
+
+	const nul = "a\x00b"
+
+	probes := []struct {
+		name   string
+		method string
+		path   string
+		body   func(work, entry uuid.UUID) any
+		code   string
+	}{
+		{"a title", http.MethodPost, "/v1/works", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"title": nul, "category": "anime"}
+		}, "invalid_payload"},
+		{"a synopsis", http.MethodPost, "/v1/works", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"title": "S", "category": "anime", "synopsis": nul}
+		}, "invalid_payload"},
+		{"a cover url", http.MethodPost, "/v1/works", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"title": "C", "category": "anime", "cover_url": "http://" + nul}
+		}, "invalid_payload"},
+		{"a metadata value", http.MethodPost, "/v1/works", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"title": "M", "category": "anime", "metadata": map[string]any{"k": nul}}
+		}, "invalid_payload"},
+		{"a metadata key", http.MethodPost, "/v1/works", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"title": "K", "category": "anime", "metadata": map[string]any{nul: 1}}
+		}, "invalid_payload"},
+		{"a nested metadata value", http.MethodPost, "/v1/works", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"title": "N", "category": "anime",
+				"metadata": map[string]any{"studio": map[string]any{"name": nul}}}
+		}, "invalid_payload"},
+		{"a note at creation", http.MethodPost, "/v1/library", func(work, _ uuid.UUID) any {
+			return map[string]any{"work_id": work.String(), "status": "wishlist", "note": nul}
+		}, "invalid_payload"},
+		{"a note in an update", http.MethodPatch, "", func(uuid.UUID, uuid.UUID) any {
+			return map[string]any{"note": nul}
+		}, "invalid_payload"},
+	}
+
+	for _, probe := range probes {
+		s := newSuite(t)
+		alex := s.seedMember(t, "user_alex", "alex")
+		work := s.seedAnime("Host "+probe.name, seedTime)
+		entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+		path := probe.path
+		if path == "" {
+			path = "/v1/library/" + entry.ID.String()
+		}
+
+		recorder := s.do(t, probe.method, path, "valid-user_alex", probe.body(work.ID, entry.ID))
+
+		assert.NotEqualf(t, http.StatusInternalServerError, recorder.Code,
+			"a null character in %s answered 500", probe.name)
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code, "%s: %s", probe.name, recorder.Body.String())
+		assert.Equalf(t, probe.code, errorCode(t, recorder), "%s", probe.name)
+	}
+}
+
+func TestListWorksRejectsASearchQueryCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/works?q=a%00b", "valid-user_alex", nil)
+
+	assert.NotEqual(t, http.StatusInternalServerError, recorder.Code)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_filter", errorCode(t, recorder),
+		"q travels in the query string, so it stays in the invalid_filter family")
+}

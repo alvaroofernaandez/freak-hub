@@ -403,8 +403,16 @@ func (s *Service) CreateManualWork(ctx context.Context, input ManualWorkInput) (
 		return Work{}, err
 	}
 
-	if len([]rune(input.Synopsis)) > MaxSynopsisLength {
-		return Work{}, ErrInvalidSynopsis
+	if err := validateSynopsis(input.Synopsis); err != nil {
+		return Work{}, err
+	}
+
+	if carriesNullCharacter(input.CoverURL) {
+		return Work{}, ErrInvalidCoverURL
+	}
+
+	if metadataCarriesNullCharacter(input.Metadata) {
+		return Work{}, ErrInvalidMetadata
 	}
 
 	work, err := s.works.Create(ctx, Work{
@@ -445,7 +453,7 @@ func (s *Service) SearchWorks(
 	}
 
 	filter.Query = strings.TrimSpace(filter.Query)
-	if len([]rune(filter.Query)) > MaxQueryLength {
+	if len([]rune(filter.Query)) > MaxQueryLength || carriesNullCharacter(filter.Query) {
 		return nil, nil, ErrInvalidFilter
 	}
 
@@ -488,11 +496,72 @@ func validateNote(note *string) error {
 		return nil
 	}
 
-	if len([]rune(*note)) > MaxNoteLength {
+	if len([]rune(*note)) > MaxNoteLength || carriesNullCharacter(*note) {
 		return ErrInvalidNote
 	}
 
 	return nil
+}
+
+// validateSynopsis holds a synopsis to the same two rules.
+func validateSynopsis(synopsis string) error {
+	if len([]rune(synopsis)) > MaxSynopsisLength || carriesNullCharacter(synopsis) {
+		return ErrInvalidSynopsis
+	}
+
+	return nil
+}
+
+// carriesNullCharacter reports whether text holds U+0000.
+//
+// It is the one character Postgres will not store in a text column at all —
+// 22021, "invalid byte sequence for encoding UTF8: 0x00" — and the one a
+// jsonb column refuses as an escape sequence, 22P05. Go is perfectly happy
+// to carry it inside a string, so nothing upstream notices: the length is
+// fine, the encoding is valid UTF-8, and the request only fails once it has
+// reached the database, as a 500 with nothing useful to say.
+//
+// Modelling it here rather than translating the two SQLSTATEs in the adapter
+// is the same choice made for the int4 ceiling, for the same reason: a rule
+// about what the client may send belongs where every caller passes, not in
+// one adapter that happens to be the storage of the day.
+func carriesNullCharacter(text string) bool {
+	return strings.ContainsRune(text, '\x00')
+}
+
+// metadataCarriesNullCharacter walks the category-specific object looking for
+// the same character, at any depth and in keys as well as values.
+//
+// "At any depth" is the whole point. Metadata is the one part of a work whose
+// shape nobody declared, so a check that only read the top level would be a
+// check a nested object steps around — and the jsonb column refuses the
+// escape wherever it sits.
+func metadataCarriesNullCharacter(value any) bool {
+	switch typed := value.(type) {
+	case string:
+		return carriesNullCharacter(typed)
+	case Metadata:
+		return metadataCarriesNullCharacter(map[string]any(typed))
+	case map[string]any:
+		for key, nested := range typed {
+			if carriesNullCharacter(key) || metadataCarriesNullCharacter(nested) {
+				return true
+			}
+		}
+
+		return false
+	case []any:
+		for _, nested := range typed {
+			if metadataCarriesNullCharacter(nested) {
+				return true
+			}
+		}
+
+		return false
+	default:
+		// Numbers, booleans and nulls carry no text to refuse.
+		return false
+	}
 }
 
 // normaliseTitle trims the title and holds it to the bounds the contract
@@ -500,6 +569,10 @@ func validateNote(note *string) error {
 func normaliseTitle(raw string) (string, error) {
 	title := strings.TrimSpace(raw)
 	if len(title) < MinTitleLength || len([]rune(title)) > MaxTitleLength {
+		return "", ErrInvalidTitle
+	}
+
+	if carriesNullCharacter(title) {
 		return "", ErrInvalidTitle
 	}
 

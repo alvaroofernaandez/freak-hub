@@ -16,6 +16,8 @@ import "errors"
 //	ErrInvalidYear       → 400 invalid_payload
 //	ErrInvalidSynopsis   → 400 invalid_payload
 //	ErrInvalidNote       → 400 invalid_payload
+//	ErrInvalidCoverURL   → 400 invalid_payload
+//	ErrInvalidMetadata   → 400 invalid_payload
 //	ErrInvalidCategory   → 400 invalid_payload
 //	ErrInvalidStatus     → 400 invalid_payload
 //	ErrInvalidRating     → 400 invalid_payload
@@ -70,6 +72,12 @@ var (
 	ErrInvalidSynopsis = errors.New("synopsis must be at most 5000 characters")
 	// ErrInvalidNote means the note is longer than the contract allows.
 	ErrInvalidNote = errors.New("note must be at most 1000 characters")
+	// ErrInvalidCoverURL means the cover URL carries a character no column
+	// can store.
+	ErrInvalidCoverURL = errors.New("cover url carries a character that cannot be stored")
+	// ErrInvalidMetadata means the category-specific object carries, at some
+	// depth, a character no column can store.
+	ErrInvalidMetadata = errors.New("metadata carries a character that cannot be stored")
 	// ErrInvalidCategory means the payload names a category that does not exist.
 	ErrInvalidCategory = errors.New("category is not one of the declared values")
 	// ErrInvalidStatus means the payload names a status that does not exist.

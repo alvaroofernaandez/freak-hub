@@ -1457,3 +1457,137 @@ func TestSearchWorksRefusesAQueryLongerThanTheContractAllows(t *testing.T) {
 	require.ErrorIs(t, err, library.ErrInvalidFilter,
 		"q is a query parameter, so it joins the invalid_filter family and not invalid_payload")
 }
+
+// U+0000 is the one character Postgres refuses in a text or jsonb column —
+// 22021 for text, 22P05 for the escape inside jsonb — and no amount of
+// length checking catches it. It is the same shape of failure as the int4
+// ceiling: client text meeting a column constraint the domain had not
+// modelled, arriving as a 500.
+
+func TestCreateManualWorkRefusesATitleCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren\x00", Category: library.CategoryAnime,
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidTitle)
+}
+
+func TestCreateManualWorkRefusesASynopsisCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime, Synopsis: "a\x00b",
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidSynopsis)
+}
+
+func TestCreateManualWorkRefusesACoverURLCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime, CoverURL: "http://a\x00b",
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidCoverURL)
+}
+
+// TestCreateManualWorkRefusesMetadataCarryingANullCharacterAnywhere walks the
+// open map, because "anywhere" is the whole point: the category-specific
+// object is the one part of a work nobody declared the shape of, so a check
+// that only looked at the top level would be a check somebody could step
+// around by nesting.
+func TestCreateManualWorkRefusesMetadataCarryingANullCharacterAnywhere(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	hiding := map[string]library.Metadata{
+		"in a value":        {"season": "2024\x00spring"},
+		"in a key":          {"a\x00b": 1},
+		"inside a map":      {"studio": map[string]any{"name": "a\x00b"}},
+		"inside a slice":    {"tags": []any{"fine", "a\x00b"}},
+		"inside a map key":  {"studio": map[string]any{"a\x00b": "fine"}},
+		"deeper than usual": {"a": map[string]any{"b": []any{map[string]any{"c": "a\x00b"}}}},
+	}
+
+	for name, metadata := range hiding {
+		_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+			Title: "Frieren " + name, Category: library.CategoryAnime, Metadata: metadata,
+		})
+
+		require.ErrorIsf(t, err, library.ErrInvalidMetadata, "hiding %s", name)
+	}
+}
+
+func TestCreateManualWorkAcceptsMetadataWithNoNullCharacterInIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime,
+		Metadata: library.Metadata{
+			"episodes": 28,
+			"season":   "2023-autumn",
+			"studio":   map[string]any{"name": "Madhouse"},
+			"tags":     []any{"fantasy", "drama"},
+		},
+	})
+
+	require.NoError(t, err, "the walk must not turn ordinary metadata away")
+}
+
+func TestAddToLibraryRefusesANoteCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	work := h.anime("Frieren", 28)
+	note := "a\x00b"
+
+	_, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: work.ID, Status: library.StatusWishlist, Note: &note,
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+func TestUpdateEntryRefusesANoteCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.entries.Seed(library.Entry{
+		MemberID: member, WorkID: work.ID, Status: library.StatusInProgress,
+	})
+	note := "a\x00b"
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Note: library.Set(&note),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+// TestSearchWorksRefusesAQueryCarryingANullCharacter is the one on a read
+// path, which is what makes it worth its own name: nothing is written, and
+// the request still reached the database and came back a 500.
+func TestSearchWorksRefusesAQueryCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, _, err := h.service.SearchWorks(context.Background(),
+		library.WorkFilter{Query: "a\x00b"}, nil, 25)
+
+	require.ErrorIs(t, err, library.ErrInvalidFilter)
+}

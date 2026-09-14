@@ -290,3 +290,71 @@ func TestAWellFormedRequestNeverReachesTheInt4CeilingAsA500(t *testing.T) {
 	require.Equalf(t, http.StatusUnprocessableEntity, status, "%v", refused)
 	assert.Equal(t, "invalid_progress", refused["code"])
 }
+
+// TestNoClientTextReachesAColumnAsA500 is the regression for the second
+// failure of this shape, and the one the in-memory double is least able to
+// catch: a Go string holds U+0000 perfectly happily, so only a real column
+// refuses it — text with 22021, jsonb with 22P05 for the escape sequence.
+//
+// Eight requests, because eight is how many places client text reaches a
+// text or jsonb column across these routes, and the last of them is a read:
+// nothing is written and the 500 happens anyway.
+func TestNoClientTextReachesAColumnAsA500(t *testing.T) {
+	pool := libraryDB(t, nil)
+	base := journeyAPI(t, pool)
+
+	seedMember(t, pool, "alvaro")
+	alvaro := &journeyClient{t: t, base: base, token: "valid-alvaro"}
+
+	const nul = "a\x00b"
+
+	status, work := alvaro.call(http.MethodPost, "/v1/works",
+		map[string]any{"title": "Host", "category": "anime"})
+	require.Equalf(t, http.StatusCreated, status, "%v", work)
+
+	workID, ok := work["id"].(string)
+	require.True(t, ok)
+
+	status, entry := alvaro.call(http.MethodPost, "/v1/library",
+		map[string]any{"work_id": workID, "status": "wishlist"})
+	require.Equalf(t, http.StatusCreated, status, "%v", entry)
+
+	entryID, ok := entry["id"].(string)
+	require.True(t, ok)
+
+	probes := []struct {
+		name   string
+		method string
+		path   string
+		body   any
+		code   string
+	}{
+		{"a title", http.MethodPost, "/v1/works",
+			map[string]any{"title": nul, "category": "anime"}, "invalid_payload"},
+		{"a synopsis", http.MethodPost, "/v1/works",
+			map[string]any{"title": "S", "category": "anime", "synopsis": nul}, "invalid_payload"},
+		{"a cover url", http.MethodPost, "/v1/works",
+			map[string]any{"title": "C", "category": "anime", "cover_url": "http://" + nul}, "invalid_payload"},
+		{"a metadata value", http.MethodPost, "/v1/works",
+			map[string]any{"title": "M", "category": "anime", "metadata": map[string]any{"k": nul}},
+			"invalid_payload"},
+		{"a metadata key", http.MethodPost, "/v1/works",
+			map[string]any{"title": "K", "category": "anime", "metadata": map[string]any{nul: 1}},
+			"invalid_payload"},
+		{"a note at creation", http.MethodPost, "/v1/library",
+			map[string]any{"work_id": workID, "status": "wishlist", "note": nul}, "invalid_payload"},
+		{"a note in an update", http.MethodPatch, "/v1/library/" + entryID,
+			map[string]any{"note": nul}, "invalid_payload"},
+		// The read path. Nothing is written and the 500 happened anyway.
+		{"a search query", http.MethodGet, "/v1/works?q=a%00b", nil, "invalid_filter"},
+	}
+
+	for _, probe := range probes {
+		status, problem := alvaro.call(probe.method, probe.path, probe.body)
+
+		assert.NotEqualf(t, http.StatusInternalServerError, status,
+			"a null character in %s answered 500: %v", probe.name, problem)
+		assert.Equalf(t, http.StatusBadRequest, status, "%s: %v", probe.name, problem)
+		assert.Equalf(t, probe.code, problem["code"], "%s", probe.name)
+	}
+}
