@@ -226,6 +226,33 @@ jobs:
   e2e:
     name: Web · E2E (Playwright)
     runs-on: ubuntu-latest
+    services:
+      # The two invitation journeys are the reason this job exists: they cross
+      # getToken -> Authorization -> JWKS -> Go -> Clerk's Backend API, which no
+      # unit test can reach because all of it lives between systems. That needs
+      # a real database behind a real API, so both run here.
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: freakhub
+          POSTGRES_PASSWORD: freakhub
+          POSTGRES_DB: freakhub
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U freakhub"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://freakhub:freakhub@localhost:5432/freakhub?sslmode=disable
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /entrar
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /registro
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /inicio
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /inicio
+      NEXT_PUBLIC_API_URL: http://localhost:8080
+      E2E_CLERK_USER_IDENTIFIER: ${{ secrets.E2E_CLERK_USER_IDENTIFIER }}
     steps:
       - uses: actions/checkout@v5
 
@@ -236,57 +263,107 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: apps/api/go.sum
+
       - run: pnpm install --frozen-lockfile
 
       - name: Is there a Clerk instance to talk to?
         id: clerk
-        env:
-          SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
         run: |
-          if [ -n "$SECRET_KEY" ]; then
+          if [ -n "$CLERK_SECRET_KEY" ] && [ -n "$E2E_CLERK_USER_IDENTIFIER" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Sin secretos de la instancia de Clerk: los E2E no se ejecutan en esta PR."
+            echo "::notice::No Clerk instance secrets on this run; the E2E suite is skipped."
           fi
 
       - name: Install Chromium
         if: steps.clerk.outputs.available == 'true'
         run: pnpm --filter @freak-hub/web exec playwright install --with-deps chromium
 
+      # The test user must already exist as a member, or every invitation is
+      # answered with "your account is still pending". The webhook that would
+      # create it is not wired here, so the row is written directly — and the
+      # user id is resolved from Clerk rather than stored as a fifth secret.
+      - name: Seed the test user as a member
+        if: steps.clerk.outputs.available == 'true'
+        run: |
+          go run ./cmd/migrate up
+          user=$(curl -sS -G "https://api.clerk.com/v1/users" \
+            --data-urlencode "email_address=$E2E_CLERK_USER_IDENTIFIER" \
+            -H "Authorization: Bearer $CLERK_SECRET_KEY")
+          uid=$(echo "$user" | jq -r '.[0].id')
+          uname=$(echo "$user" | jq -r '.[0].username')
+          if [ -z "$uid" ] || [ "$uid" = "null" ]; then
+            echo "::error::No user in the Clerk instance for E2E_CLERK_USER_IDENTIFIER."
+            exit 1
+          fi
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -v uid="$uid" -v uname="$uname" -v mail="$E2E_CLERK_USER_IDENTIFIER" <<'SQL'
+          INSERT INTO members (clerk_user_id, username, display_name, email)
+          VALUES (:'uid', :'uname', :'uname', :'mail')
+          ON CONFLICT (clerk_user_id) DO NOTHING;
+          SQL
+        working-directory: apps/api
+
+      # API_ALLOWED_ORIGINS is not decoration: its first entry becomes the
+      # `authorizedParty` the JWT is checked against, so a mismatch here is one
+      # of the five boundary failures these tests exist to catch.
+      - name: Start the API
+        if: steps.clerk.outputs.available == 'true'
+        working-directory: apps/api
+        env:
+          API_ALLOWED_ORIGINS: http://localhost:3000
+          API_PORT: "8080"
+        run: |
+          # The config refuses to boot without a webhook secret and svix
+          # base64-decodes it, so a plain sentinel raises "illegal base64 data".
+          # Fabricated rather than written literally, like the placeholder Clerk
+          # key above: no webhook is delivered in this job, and a high-entropy
+          # string in the repository is indistinguishable from a real leak.
+          secret=$(printf '%s' 'ci-e2e-no-webhooks-in-this-job' | base64 | tr -d '=\n')
+          CLERK_WEBHOOK_SIGNING_SECRET="whsec_$secret" go run ./cmd/api &
+          for _ in $(seq 1 60); do
+            curl -sf http://localhost:8080/healthz >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://localhost:8080/healthz
+
       # The perimeter needs no test user and no API. Its failure is a real
       # failure: a protected route stopped redirecting.
-      - name: Perímetro sin sesión
+      - name: Signed-out perimeter
         if: steps.clerk.outputs.available == 'true'
         run: pnpm --filter @freak-hub/web exec playwright test --project=signed-out
-        env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
-          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
-          NEXT_PUBLIC_CLERK_SIGN_IN_URL: /entrar
-          NEXT_PUBLIC_CLERK_SIGN_UP_URL: /registro
-          NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /inicio
-          NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /inicio
-          NEXT_PUBLIC_API_URL: http://localhost:8080
 
       # Tied to a live Clerk instance, so an outage there would report itself
-      # here as a regression that is not ours. Advisory on purpose; the two
-      # journeys that cross into the Go API skip themselves, since no Postgres
-      # and no API run in this job.
-      - name: Recorridos con sesión
+      # here as a regression that is not ours. Advisory on purpose.
+      - name: Signed-in journeys
         if: steps.clerk.outputs.available == 'true'
         continue-on-error: true
         run: pnpm --filter @freak-hub/web exec playwright test --project=signed-in
-        env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.E2E_CLERK_PUBLISHABLE_KEY }}
-          CLERK_SECRET_KEY: ${{ secrets.E2E_CLERK_SECRET_KEY }}
-          NEXT_PUBLIC_CLERK_SIGN_IN_URL: /entrar
-          NEXT_PUBLIC_CLERK_SIGN_UP_URL: /registro
-          NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /inicio
-          NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /inicio
-          NEXT_PUBLIC_API_URL: http://localhost:8080
-          E2E_CLERK_USER_IDENTIFIER: ${{ secrets.E2E_CLERK_USER_IDENTIFIER }}
-          E2E_CLERK_USER_PASSWORD: ${{ secrets.E2E_CLERK_USER_PASSWORD }}
 
+      # Each run invites a fresh address, so without this the instance collects
+      # one pending invitation per run forever. They are never delivered
+      # (`+clerk_test`), but they are still rows someone has to look at.
+      - name: Revoke the invitations this run created
+        if: ${{ !cancelled() && steps.clerk.outputs.available == 'true' }}
+        run: |
+          curl -sS -G "https://api.clerk.com/v1/invitations" \
+            --data-urlencode "status=pending" --data-urlencode "limit=100" \
+            -H "Authorization: Bearer $CLERK_SECRET_KEY" \
+            | jq -r '.[] | select(.email_address | startswith("freak-hub-e2e-")) | .id' \
+            | while read -r id; do
+                curl -sS -X POST "https://api.clerk.com/v1/invitations/$id/revoke" \
+                  -H "Authorization: Bearer $CLERK_SECRET_KEY" > /dev/null
+                echo "revoked $id"
+              done
+
+      # The HTML report, not `test-results/`: the setup project keeps this
+      # workflow's two retries, and a retry trace would carry the sign-in
+      # exchange and the session cookie.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.clerk.outputs.available == 'true' }}
         with:
