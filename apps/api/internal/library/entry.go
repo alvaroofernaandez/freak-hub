@@ -152,13 +152,27 @@ type EntryFilter struct {
 // metadata.episodes; a category whose unit has not been built yet caps
 // nothing, because inventing a ceiling for it would be inventing the unit
 // too.
+//
+// A count of zero reads as unknown rather than as a ceiling of zero. Real
+// catalogues publish 0 for a run that has not started, and taking that
+// literally traps the entry: once the series begins airing, every progress
+// above 0 is refused and the member has no way out. "There exist zero
+// episodes" is not a state any watchable work is in — the honest reading is
+// that nobody has said yet.
 func (w Work) Total() (int, bool) {
 	switch w.Category {
 	case CategoryAnime:
-		return w.Metadata.wholeNumber(MetadataKeyEpisodes)
+		episodes, declared := w.Metadata.wholeNumber(MetadataKeyEpisodes)
+		if !declared || episodes == 0 {
+			return 0, false
+		}
+
+		return episodes, true
 	case CategoryManga, CategoryGame, CategoryFilm, CategoryBoardGame, CategoryTCG:
 		// Their units — chapters, hours, plays — arrive with the categories
-		// themselves. Until then nothing is capped.
+		// themselves. Until then nothing is capped, which is why a film
+		// accepts a progress of a million today: not an oversight, a
+		// category whose unit has not been designed. See docs/domain.md.
 		return 0, false
 	default:
 		return 0, false
@@ -234,4 +248,37 @@ type EntryPatch struct {
 	Note        Field[*string]
 	StartedAt   Field[*time.Time]
 	FinishedAt  Field[*time.Time]
+}
+
+// IsEmpty reports whether the patch carries no field at all.
+//
+// It is not a tidiness check. A body with no properties changes nothing and
+// answers 200 with the entry untouched, and "untouched" has to include
+// updated_at: docs/domain.md resolves the activity feed by reading changes
+// to LibraryEntry rather than from an events table, so stamping a timestamp
+// nobody asked to move would announce to the whole group that somebody
+// updated something when nobody did.
+//
+// A patch whose values merely happen to match what is stored is not empty. A
+// client that sent a field did ask for a write, and pretending otherwise
+// would make the answer depend on data the client cannot see.
+func (p EntryPatch) IsEmpty() bool {
+	present := []bool{
+		p.Status.present,
+		p.Progress.present,
+		p.Rating.present,
+		p.IsFavourite.present,
+		p.Owned.present,
+		p.Note.present,
+		p.StartedAt.present,
+		p.FinishedAt.present,
+	}
+
+	for _, carried := range present {
+		if carried {
+			return false
+		}
+	}
+
+	return true
 }

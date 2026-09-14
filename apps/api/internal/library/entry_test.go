@@ -40,41 +40,43 @@ func TestTheStateMachineDrawsEveryTransitionTheDomainDocuments(t *testing.T) {
 	}
 }
 
-func TestTheStateMachineRefusesATransitionTheDomainDoesNotDraw(t *testing.T) {
+// TestTheStateMachineAnswersExactlyTheDiagramForAllThirtySixPairs walks
+// every ordered pair of statuses, not a hand-written list of the ones
+// somebody thought of.
+//
+// A list of refusals is only as complete as the day it was written: the
+// first version of this test named eighteen pairs and quietly left five
+// unchecked. Six by six is thirty-six, the whole space, and the expectation
+// for each pair is derived from the arrows the documentation draws rather
+// than restated by hand — so the diagram stays the single source of truth
+// and the coverage is complete by construction.
+func TestTheStateMachineAnswersExactlyTheDiagramForAllThirtySixPairs(t *testing.T) {
 	t.Parallel()
 
-	refused := []struct {
-		from library.Status
-		to   library.Status
-		why  string
-	}{
-		{library.StatusWishlist, library.StatusInProgress, "you cannot start what you have not got yet"},
-		{library.StatusWishlist, library.StatusCompleted, "finishing something you only wanted is the bug this machine exists to stop"},
-		{library.StatusWishlist, library.StatusOnHold, "nothing to park"},
-		{library.StatusWishlist, library.StatusDropped, "dropping what you never started is removing it"},
-		{library.StatusPending, library.StatusCompleted, "no"},
-		{library.StatusPending, library.StatusDropped, "no"},
-		{library.StatusPending, library.StatusOnHold, "no"},
-		{library.StatusPending, library.StatusWishlist, "you already have it"},
-		{library.StatusOnHold, library.StatusCompleted, "you resume before you finish"},
-		{library.StatusOnHold, library.StatusDropped, "you resume before you drop"},
-		{library.StatusInProgress, library.StatusPending, "no going back to not started"},
-		{library.StatusInProgress, library.StatusWishlist, "no"},
-		{library.StatusCompleted, library.StatusDropped, "you did not drop what you finished"},
-		{library.StatusCompleted, library.StatusOnHold, "revisit first"},
-		{library.StatusCompleted, library.StatusWishlist, "no"},
-		{library.StatusDropped, library.StatusInProgress, "picking it up again starts from the shelf, not from the bin"},
-		{library.StatusDropped, library.StatusCompleted, "no"},
-		{library.StatusDropped, library.StatusOnHold, "no"},
+	drawn := make(map[library.Status]map[library.Status]bool)
+	for _, transition := range legitimateTransitions {
+		if drawn[transition.from] == nil {
+			drawn[transition.from] = make(map[library.Status]bool)
+		}
+
+		drawn[transition.from][transition.to] = true
 	}
 
-	for _, transition := range refused {
-		t.Run(fmt.Sprintf("%s_to_%s", transition.from, transition.to), func(t *testing.T) {
-			t.Parallel()
+	checked := 0
 
-			assert.False(t, library.CanTransition(transition.from, transition.to), transition.why)
-		})
+	for _, from := range allStatuses() {
+		for _, to := range allStatuses() {
+			checked++
+
+			// Staying put is a no-op, not a move, so it needs no arrow.
+			want := from == to || drawn[from][to]
+
+			assert.Equalf(t, want, library.CanTransition(from, to), "%s → %s", from, to)
+		}
 	}
+
+	assert.Equal(t, len(allStatuses())*len(allStatuses()), checked,
+		"every ordered pair of statuses is accounted for")
 }
 
 func TestTheStateMachineAcceptsTheStatusAnEntryAlreadyHas(t *testing.T) {
@@ -192,4 +194,26 @@ func allStatuses() []library.Status {
 		library.StatusDropped,
 		library.StatusOnHold,
 	}
+}
+
+// TestAnEpisodeCountOfZeroMeansTheCatalogueDoesNotKnow is the difference
+// between a syntactically valid number and a real fact.
+//
+// A real catalogue publishes 0 for something not yet aired. Read as a known
+// ceiling of zero, that entry can never move: every progress above 0 is
+// refused, and the member is stuck with no way out. And "there exist zero
+// episodes" is not a state any work a person could watch is ever in — the
+// honest reading of 0 is that nobody has said yet.
+func TestAnEpisodeCountOfZeroMeansTheCatalogueDoesNotKnow(t *testing.T) {
+	t.Parallel()
+
+	unaired := library.Work{
+		Category: library.CategoryAnime,
+		Metadata: library.Metadata{library.MetadataKeyEpisodes: 0},
+	}
+
+	_, known := unaired.Total()
+	assert.False(t, known, "0 is what a catalogue publishes for a run that has not started")
+	assert.NoError(t, library.ValidateProgress(unaired, 1),
+		"a known ceiling of zero would trap the entry: every progress above 0 refused, forever")
 }

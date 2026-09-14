@@ -165,6 +165,33 @@ volumen demuestre lo contrario.
 5. La unidad de `progress` depende de la categoría, así que **la valida el
    dominio**, no la base de datos.
 
+### Qué acota de verdad la regla 5
+
+El progreso nunca es negativo, eso siempre. El techo es otra cosa: **solo
+existe cuando se conoce**, y hoy la única categoría que declara el suyo es
+`anime`, a través de `metadata.episodes`.
+
+- Un anime terminado con 28 episodios rechaza el episodio 29.
+- Un anime **en emisión** no trae número de episodios, así que no tiene techo:
+  rechazar el episodio 13 de una serie que ha emitido 13 sería inventarnos un
+  dato que el catálogo nunca nos dio.
+- **`episodes: 0` significa «no se sabe», no «cero episodios».** Los catálogos
+  publican un 0 para lo que todavía no se ha estrenado. Leerlo como un techo
+  conocido de cero deja la entrada atrapada: en cuanto la serie empieza a
+  emitir, cualquier progreso por encima de 0 se rechaza y el miembro no puede
+  hacer nada. Además, «existen cero episodios» no es un estado real de ninguna
+  obra que alguien pueda ver.
+- Un `metadata.episodes` que no sea un entero se trata como ausente, no como
+  cero, por la misma razón.
+
+**Las otras cinco categorías no acotan nada todavía**, y conviene que esté
+escrito en vez de descubrirse: hoy una película acepta un progreso de un
+millón. No es un descuido, es que su unidad no está diseñada. Capítulos para
+manga, horas para videojuego, partidas para juego de mesa; una película
+probablemente no tenga progreso en absoluto, sino vista o no vista. Cada
+categoría traerá su unidad —y su techo— cuando se construya, y entonces se
+añade aquí y en `Work.Total`.
+
 ## Decisiones que estaban abiertas y ya se cerraron
 
 - **Las notas son públicas**, sin ajuste de privacidad por entrada. Ver

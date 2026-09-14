@@ -692,7 +692,44 @@ func TestUpdateEntryLeavesAbsentFieldsAlone(t *testing.T) {
 	assert.Equal(t, note, *updated.Note)
 }
 
+// TestUpdateEntryOnAnEmptyPatchChangesNothing means the whole entry, and
+// that includes updated_at.
+//
+// docs/domain.md resolves the activity feed by reading changes to
+// LibraryEntry rather than from an events table, so a touched timestamp is
+// not bookkeeping nobody sees: it is the group being told that somebody
+// updated something, when nobody did.
 func TestUpdateEntryOnAnEmptyPatchChangesNothing(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	note := "empezado en el tren"
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{
+		Status:   library.StatusInProgress,
+		Progress: 4,
+		Owned:    true,
+		Note:     &note,
+	})
+
+	// Time moves between the two calls, so a timestamp that is rewritten
+	// cannot look unchanged by accident.
+	h.clock = h.clock.Add(48 * time.Hour)
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{})
+
+	require.NoError(t, err, "an empty body is a no-op, and a no-op answers 200")
+	assert.Equal(t, entry.Entry, updated.Entry,
+		"a body with no fields touches nothing at all, updated_at included")
+	assert.Equal(t, entry.UpdatedAt, updated.UpdatedAt,
+		"or the activity feed reports a change that never happened")
+}
+
+// TestUpdateEntryOnAPatchThatSetsTheSameValuesStillStamps draws the line:
+// what is skipped is a body with no fields, not a body whose fields happen
+// to match. A client that sent something did ask for a write.
+func TestUpdateEntryOnAPatchThatSetsTheSameValuesStillStamps(t *testing.T) {
 	t.Parallel()
 
 	h := newHarness(t)
@@ -703,11 +740,15 @@ func TestUpdateEntryOnAnEmptyPatchChangesNothing(t *testing.T) {
 		Progress: 4,
 	})
 
-	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{})
+	h.clock = h.clock.Add(48 * time.Hour)
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Progress: library.Set(4),
+	})
 
 	require.NoError(t, err)
-	assert.Equal(t, library.StatusInProgress, updated.Status)
 	assert.Equal(t, 4, updated.Progress)
+	assert.True(t, updated.UpdatedAt.After(entry.UpdatedAt))
 }
 
 // TestUpdateEntryRefusesAnEntryThatBelongsToSomebodyElse is the 404-never-403
@@ -979,4 +1020,262 @@ func entryIDsOf(entries []library.EntryWithWork) []uuid.UUID {
 	}
 
 	return ids
+}
+
+// revisitedAndRated builds the entry at the heart of the rating rule: one
+// that is in_progress and still carries the score from the run before.
+// Getting there only goes through legitimate moves, which is the point —
+// this is an ordinary entry, not a contrived one.
+func (h *harness) revisitedAndRated(t *testing.T, member uuid.UUID, score int) library.EntryWithWork {
+	t.Helper()
+
+	entry := h.addEntry(t, member, h.anime("Frieren", 28), library.AddToLibraryInput{
+		Status: library.StatusCompleted,
+		Rating: ratingOf(score),
+	})
+
+	revisited, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status: library.Set(library.StatusInProgress),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, revisited.Rating)
+	require.Equal(t, score, *revisited.Rating)
+
+	return revisited
+}
+
+// TestUpdateEntryAcceptsTheStoredRatingSentBackUnchanged is what makes PATCH
+// idempotent with respect to its own representation. An entry that is
+// in_progress and rated 8 is ordinary — a score survives a rewatch — so
+// handing it back exactly what the API just returned has to succeed.
+// Refusing it would make the state reachable but not re-affirmable.
+func TestUpdateEntryAcceptsTheStoredRatingSentBackUnchanged(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	entry := h.revisitedAndRated(t, member, 8)
+
+	updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Status: library.Set(library.StatusInProgress),
+		Rating: library.Set(ratingOf(8)),
+	})
+
+	require.NoError(t, err, "this is the object the API just returned, sent straight back")
+	require.NotNil(t, updated.Rating)
+	assert.Equal(t, 8, *updated.Rating)
+}
+
+// TestUpdateEntryStillRefusesADifferentRatingOnAnUnfinishedEntry is domain
+// rule 2 keeping its teeth: what is allowed is a no-op, not a re-score.
+func TestUpdateEntryStillRefusesADifferentRatingOnAnUnfinishedEntry(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	entry := h.revisitedAndRated(t, member, 8)
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Rating: library.Set(ratingOf(9)),
+	})
+
+	require.ErrorIs(t, err, library.ErrRatingNotAllowed,
+		"changing the score halfway through a rewatch is exactly what rule 2 exists to stop")
+}
+
+// TestUpdateEntryRefusesAFirstRatingOnAnUnratedUnfinishedEntry is the same
+// rule where there is nothing stored to match: a new score on an unfinished
+// entry is a change from nothing, and still refused.
+func TestUpdateEntryRefusesAFirstRatingOnAnUnratedUnfinishedEntry(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.addEntry(t, member, work, library.AddToLibraryInput{Status: library.StatusInProgress})
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Rating: library.Set(ratingOf(7)),
+	})
+
+	require.ErrorIs(t, err, library.ErrRatingNotAllowed)
+}
+
+// TestAddToLibraryStillRefusesARatingOnAnUnfinishedEntryWithNothingStored
+// pins the asymmetry: on creation there is no stored score for an incoming
+// one to match, so the no-op escape hatch cannot exist there.
+func TestAddToLibraryStillRefusesARatingOnAnUnfinishedEntryWithNothingStored(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	work := h.anime("Frieren", 28)
+
+	_, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: work.ID,
+		Status: library.StatusInProgress,
+		Rating: ratingOf(8),
+	})
+
+	require.ErrorIs(t, err, library.ErrRatingNotAllowed)
+}
+
+// TestUpdateEntryRefusesARatingOutsideOneToTenEvenAsANoOp keeps the range
+// check ahead of the no-op escape hatch, so a stored value could never
+// launder an impossible one.
+func TestUpdateEntryRefusesARatingOutsideOneToTenEvenAsANoOp(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	entry := h.revisitedAndRated(t, member, 8)
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Rating: library.Set(ratingOf(library.MaxRating + 1)),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidRating)
+}
+
+// TestAnEntryYouDoNotOwnIsIndistinguishableFromOneThatDoesNotExist is the
+// 404-never-403 promise taken seriously.
+//
+// errors.Is answers ErrEntryNotFound either way, so the status code was
+// always going to be the same. The message was not: one branch wrapped the
+// id and the other did not. The moment a handler logs the error or puts it
+// in a Problem's detail — which is exactly what a careless first version
+// does — that difference lets somebody walk UUIDs and learn which ones are
+// real. The two answers have to be the same string, not just the same code.
+func TestAnEntryYouDoNotOwnIsIndistinguishableFromOneThatDoesNotExist(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	owner, intruder := uuid.New(), uuid.New()
+	work := h.anime("Frieren", 28)
+	somebodyElses := h.addEntry(t, owner, work, library.AddToLibraryInput{Status: library.StatusPending})
+	imaginary := uuid.New()
+
+	t.Run("GetEntry", func(t *testing.T) {
+		t.Parallel()
+
+		_, foreign := h.service.GetEntry(context.Background(), intruder, somebodyElses.ID)
+		_, missing := h.service.GetEntry(context.Background(), intruder, imaginary)
+
+		requireIdenticalRefusals(t, foreign, missing)
+	})
+
+	t.Run("UpdateEntry", func(t *testing.T) {
+		t.Parallel()
+
+		patch := library.EntryPatch{Status: library.Set(library.StatusInProgress)}
+		_, foreign := h.service.UpdateEntry(context.Background(), intruder, somebodyElses.ID, patch)
+		_, missing := h.service.UpdateEntry(context.Background(), intruder, imaginary, patch)
+
+		requireIdenticalRefusals(t, foreign, missing)
+	})
+
+	t.Run("RemoveFromLibrary", func(t *testing.T) {
+		t.Parallel()
+
+		foreign := h.service.RemoveFromLibrary(context.Background(), intruder, somebodyElses.ID)
+		missing := h.service.RemoveFromLibrary(context.Background(), intruder, imaginary)
+
+		requireIdenticalRefusals(t, foreign, missing)
+	})
+}
+
+// TestAWorkThatIsNotThereDoesNotEchoTheIdBackInTheError closes the same door
+// on the catalogue: nothing is learned from the refusal beyond "not found".
+func TestAWorkThatIsNotThereDoesNotEchoTheIdBackInTheError(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	missing := uuid.New()
+
+	_, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: missing,
+		Status: library.StatusPending,
+	})
+
+	require.ErrorIs(t, err, library.ErrWorkNotFound)
+	assert.NotContains(t, err.Error(), missing.String())
+	assert.Equal(t, library.ErrWorkNotFound.Error(), err.Error())
+}
+
+func requireIdenticalRefusals(t *testing.T, foreign, missing error) {
+	t.Helper()
+
+	require.ErrorIs(t, foreign, library.ErrEntryNotFound)
+	require.ErrorIs(t, missing, library.ErrEntryNotFound)
+	assert.Equal(t, missing.Error(), foreign.Error(),
+		"the two refusals must read the same, or the message itself enumerates entries")
+	assert.Equal(t, library.ErrEntryNotFound.Error(), foreign.Error(),
+		"and neither should be carrying an id around")
+}
+
+// racingEntries is an EntryRepository that reports the work as unregistered
+// and then refuses to create it — the exact window two interleaved requests
+// open between the service's check and its act.
+type racingEntries struct {
+	*librarymem.EntryRepository
+}
+
+func (r racingEntries) ByMemberAndWork(_ context.Context, _, _ uuid.UUID) (library.Entry, error) {
+	return library.Entry{}, library.ErrEntryNotFound
+}
+
+func (r racingEntries) Create(_ context.Context, _ library.Entry) (library.Entry, error) {
+	return library.Entry{}, library.ErrAlreadyInLibrary
+}
+
+// TestAddToLibraryAnswersAlreadyInLibraryWhenTheRepositoryWinsTheRace closes
+// the check-then-act window. Two taps on "add" can interleave past
+// ByMemberAndWork; what the loser must get is the domain's 409, not whatever
+// the storage engine happened to raise.
+func TestAddToLibraryAnswersAlreadyInLibraryWhenTheRepositoryWinsTheRace(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	work := h.anime("Frieren", 28)
+	service := library.NewService(library.ServiceDeps{
+		Works:   h.works,
+		Entries: racingEntries{EntryRepository: h.entries},
+	})
+
+	_, err := service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: work.ID,
+		Status: library.StatusPending,
+	})
+
+	require.ErrorIs(t, err, library.ErrAlreadyInLibrary)
+	assert.Equal(t, library.ErrAlreadyInLibrary.Error(), err.Error(),
+		"losing the race reads exactly like losing the check")
+}
+
+// TestAnUnairedAnimeImportedWithZeroEpisodesStillAcceptsTheFirstOne is the
+// same rule where a member actually feels it: the series starts airing, they
+// watch episode 1, and the domain must not refuse it because an importer
+// once wrote a 0.
+func TestAnUnairedAnimeImportedWithZeroEpisodesStillAcceptsTheFirstOne(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	unaired := h.works.Seed(library.Work{
+		Title:    "Algo que aún no se estrena",
+		Category: library.CategoryAnime,
+		Source:   library.SourceAniList,
+		SourceID: "999999",
+		Metadata: library.Metadata{
+			library.MetadataKeyEpisodes: 0,
+			"status_airing":             "not_yet_aired",
+		},
+	})
+
+	entry, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID:   unaired.ID,
+		Status:   library.StatusInProgress,
+		Progress: 1,
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, entry.Progress)
 }

@@ -47,12 +47,14 @@ func (s *Service) AddToLibrary(
 		return EntryWithWork{}, ErrInvalidStatus
 	}
 
-	work, err := s.works.ByID(ctx, input.WorkID)
+	work, err := s.existingWork(ctx, input.WorkID)
 	if err != nil {
-		return EntryWithWork{}, fmt.Errorf("look up work %s: %w", input.WorkID, err)
+		return EntryWithWork{}, err
 	}
 
-	if err := validateIncomingRating(input.Rating, input.Status); err != nil {
+	// Creation has no stored rating for an incoming one to match, so the
+	// no-op escape hatch below cannot apply here.
+	if err := validateRatingChange(input.Rating, nil, input.Status); err != nil {
 		return EntryWithWork{}, err
 	}
 
@@ -68,7 +70,7 @@ func (s *Service) AddToLibrary(
 	case errors.Is(err, ErrEntryNotFound):
 		// Nothing registered yet: carry on.
 	default:
-		return EntryWithWork{}, fmt.Errorf("look up entry for work %s: %w", input.WorkID, err)
+		return EntryWithWork{}, fmt.Errorf("look up the existing entry: %w", err)
 	}
 
 	entry, err := s.entries.Create(ctx, Entry{
@@ -83,8 +85,14 @@ func (s *Service) AddToLibrary(
 		StartedAt:   input.StartedAt,
 		FinishedAt:  input.FinishedAt,
 	})
-	if err != nil {
-		return EntryWithWork{}, fmt.Errorf("add work %s to the library of %s: %w", input.WorkID, memberID, err)
+	switch {
+	case errors.Is(err, ErrAlreadyInLibrary):
+		// The check above passed and the write still lost: two requests
+		// interleaved. The answer is the same 409 either way, because from
+		// outside these are the same event.
+		return EntryWithWork{}, ErrAlreadyInLibrary
+	case err != nil:
+		return EntryWithWork{}, fmt.Errorf("add the work to the library: %w", err)
 	}
 
 	return EntryWithWork{Entry: entry, Work: work}, nil
@@ -97,9 +105,9 @@ func (s *Service) GetEntry(ctx context.Context, memberID, entryID uuid.UUID) (En
 		return EntryWithWork{}, err
 	}
 
-	work, err := s.works.ByID(ctx, entry.WorkID)
+	work, err := s.existingWork(ctx, entry.WorkID)
 	if err != nil {
-		return EntryWithWork{}, fmt.Errorf("look up work %s: %w", entry.WorkID, err)
+		return EntryWithWork{}, err
 	}
 
 	return EntryWithWork{Entry: entry, Work: work}, nil
@@ -116,7 +124,9 @@ func (s *Service) GetEntry(ctx context.Context, memberID, entryID uuid.UUID) (En
 // status change: completed → in_progress is a rewatch, there is no rating
 // history to restore from, and erasing the score to keep the entry "clean"
 // would be silent data loss. Clearing a rating is something a caller asks
-// for, by sending an explicit null.
+// for, by sending an explicit null; re-sending the score already stored is a
+// no-op and passes in any status, for the same reason re-sending the current
+// status is.
 func (s *Service) UpdateEntry(
 	ctx context.Context, memberID, entryID uuid.UUID, patch EntryPatch,
 ) (EntryWithWork, error) {
@@ -125,9 +135,15 @@ func (s *Service) UpdateEntry(
 		return EntryWithWork{}, err
 	}
 
-	work, err := s.works.ByID(ctx, entry.WorkID)
+	work, err := s.existingWork(ctx, entry.WorkID)
 	if err != nil {
-		return EntryWithWork{}, fmt.Errorf("look up work %s: %w", entry.WorkID, err)
+		return EntryWithWork{}, err
+	}
+
+	// A body with no fields asks for nothing, and writing it anyway would
+	// move updated_at — which the activity feed reads as a change.
+	if patch.IsEmpty() {
+		return EntryWithWork{Entry: entry, Work: work}, nil
 	}
 
 	resulting := entry.Status
@@ -145,7 +161,7 @@ func (s *Service) UpdateEntry(
 	}
 
 	if rating, ok := patch.Rating.Get(); ok {
-		if err := validateIncomingRating(rating, resulting); err != nil {
+		if err := validateRatingChange(rating, entry.Rating, resulting); err != nil {
 			return EntryWithWork{}, err
 		}
 	}
@@ -160,7 +176,7 @@ func (s *Service) UpdateEntry(
 
 	updated, err := s.entries.Update(ctx, entry)
 	if err != nil {
-		return EntryWithWork{}, fmt.Errorf("update entry %s: %w", entryID, err)
+		return EntryWithWork{}, fmt.Errorf("update the entry: %w", err)
 	}
 
 	return EntryWithWork{Entry: updated, Work: work}, nil
@@ -179,7 +195,7 @@ func (s *Service) RemoveFromLibrary(ctx context.Context, memberID, entryID uuid.
 	}
 
 	if err := s.entries.Delete(ctx, entryID); err != nil {
-		return fmt.Errorf("remove entry %s: %w", entryID, err)
+		return fmt.Errorf("remove the entry: %w", err)
 	}
 
 	return nil
@@ -220,7 +236,7 @@ func (s *Service) ListLibrary(
 	// whether another page follows (ADR-0011).
 	rows, err := s.entries.List(ctx, filter, after, limit+1)
 	if err != nil {
-		return nil, nil, fmt.Errorf("list the library of %s: %w", memberID, err)
+		return nil, nil, fmt.Errorf("list the library: %w", err)
 	}
 
 	if len(rows) <= limit {
@@ -239,14 +255,25 @@ func (s *Service) ListLibrary(
 // same as one that does not exist: whose library holds what is nobody else's
 // business, and a 403 would confirm the entry is real. That is why the check
 // lives here, in the one place every use case has to pass through.
+//
+// "The same" means the same error value, not merely one errors.Is agrees
+// with. A wrapped id on one branch and a bare error on the other is a 404
+// either way until a handler logs the error or puts it in a Problem's
+// detail — and then the message itself lets somebody walk UUIDs and learn
+// which ones are real. So a not-found stays bare, and only a repository that
+// actually broke gets wrapped with what was being looked up.
 func (s *Service) ownedEntry(ctx context.Context, memberID, entryID uuid.UUID) (Entry, error) {
 	if memberID == uuid.Nil {
 		return Entry{}, ErrMissingMember
 	}
 
 	entry, err := s.entries.ByID(ctx, entryID)
-	if err != nil {
-		return Entry{}, fmt.Errorf("look up entry %s: %w", entryID, err)
+
+	switch {
+	case errors.Is(err, ErrEntryNotFound):
+		return Entry{}, ErrEntryNotFound
+	case err != nil:
+		return Entry{}, fmt.Errorf("look up entry: %w", err)
 	}
 
 	if entry.MemberID != memberID {
@@ -254,6 +281,21 @@ func (s *Service) ownedEntry(ctx context.Context, memberID, entryID uuid.UUID) (
 	}
 
 	return entry, nil
+}
+
+// existingWork resolves a work, keeping the same discipline: a missing one
+// answers bare, and only a broken catalogue gets wrapped.
+func (s *Service) existingWork(ctx context.Context, workID uuid.UUID) (Work, error) {
+	work, err := s.works.ByID(ctx, workID)
+
+	switch {
+	case errors.Is(err, ErrWorkNotFound):
+		return Work{}, ErrWorkNotFound
+	case err != nil:
+		return Work{}, fmt.Errorf("look up work: %w", err)
+	}
+
+	return work, nil
 }
 
 // applyPatch copies the fields the patch carries onto the entry, leaving the
@@ -294,23 +336,37 @@ func applyPatch(entry Entry, patch EntryPatch) Entry {
 	return entry
 }
 
-// validateIncomingRating is domain rule 2, and the "incoming" is the whole of
-// it: the rule applies to a rating arriving in a request, never to one
-// already stored. A nil rating asks for nothing and is always fine.
-func validateIncomingRating(rating *int, resulting Status) error {
-	if rating == nil {
+// validateRatingChange is domain rule 2, and every word of it is load-bearing.
+//
+// The rule is about a rating *arriving in a request*, never about one already
+// stored — and about a *change*, not about the field being present. A nil
+// incoming rating clears the score and asks for nothing. An incoming rating
+// equal to the stored one asks for nothing either, so it passes whatever the
+// status: an entry that is in_progress and rated 8 is ordinary, since a score
+// survives a rewatch, and refusing it its own representation handed straight
+// back would make the state reachable but not re-affirmable.
+//
+// Anything that would actually move the score needs a status that has an
+// opinion behind it. The range check comes first, so a matching stored value
+// can never launder an impossible one.
+func validateRatingChange(incoming, stored *int, resulting Status) error {
+	if incoming == nil {
 		return nil
 	}
 
-	if *rating < MinRating || *rating > MaxRating {
+	if *incoming < MinRating || *incoming > MaxRating {
 		return ErrInvalidRating
 	}
 
-	if !resulting.AllowsRating() {
-		return ErrRatingNotAllowed
+	if resulting.AllowsRating() {
+		return nil
 	}
 
-	return nil
+	if stored != nil && *stored == *incoming {
+		return nil
+	}
+
+	return ErrRatingNotAllowed
 }
 
 // CreateManualWork records a work no public catalogue lists.
@@ -344,7 +400,9 @@ func (s *Service) CreateManualWork(ctx context.Context, input ManualWorkInput) (
 		Metadata: input.Metadata,
 	})
 	if err != nil {
-		return Work{}, fmt.Errorf("create manual work %q: %w", title, err)
+		// ErrWorkAlreadyImported cannot reach here: a manual work carries no
+		// source id, so there is no key for it to collide on.
+		return Work{}, fmt.Errorf("create the manual work: %w", err)
 	}
 
 	return work, nil
