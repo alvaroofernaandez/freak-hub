@@ -95,7 +95,8 @@ sequenceDiagram
     I->>C: pulsa el enlace
     C->>I: /registro con __clerk_ticket
     C-)A: webhook user.created
-    A->>A: crea el miembro
+    A->>A: lee la invitación pendiente (sin cerrarla)
+    A->>A: crea el miembro con invited_by = quien invitó
     A->>A: marca la invitación aceptada
 ```
 
@@ -121,7 +122,7 @@ Clerk entrega los eventos en `POST /webhooks/clerk`, firmados con Svix.
 
 | Evento | Efecto |
 | :--- | :--- |
-| `user.created` | Crea el miembro y marca su invitación como aceptada |
+| `user.created` | Crea el miembro anotando quién lo invitó y marca la invitación aceptada |
 | `user.updated` | Refresca nombre, usuario y avatar |
 | `user.deleted` | Borra el miembro |
 | cualquier otro | Se responde 204 y se ignora |
@@ -131,7 +132,16 @@ Tres decisiones que importan:
 - **Se verifica la firma antes de parsear.** Una entrega sin firmar no es tráfico
   nuestro y no llega al dominio.
 - **Todo es idempotente.** Las entregas son *at-least-once* y pueden llegar
-  desordenadas: `EnsureFromClerk` hace upsert por `clerk_user_id`.
+  desordenadas: `EnsureFromClerk` hace upsert por `clerk_user_id`. Quien te
+  invitó no cambia nunca, así que `invited_by` solo se escribe en el `INSERT`
+  inicial: el `ON CONFLICT` no la toca y una reentrega no puede borrarla.
+- **La invitación se lee antes de crear al miembro y se cierra después.** El
+  `inviter_id` hace falta antes, porque `members.invited_by` solo se escribe en
+  ese primer `INSERT`; pero cerrarla antes sería un error: si la entrega acaba
+  en 422 —y 422 le dice a Clerk que deje de reintentar— la invitación se habría
+  consumido sin que exista el miembro, y el `user.updated` que arregle el
+  perfil ya no encontraría a quién apuntar. Cerrarla es contabilidad: si eso
+  falla, se registra el error y el miembro se queda creado igual.
 - **El código de estado es semántico.** 422 cuando el evento no se puede procesar
   nunca (reintentar no ayudaría) y 500 cuando el fallo es nuestro (queremos que
   Clerk reintente).

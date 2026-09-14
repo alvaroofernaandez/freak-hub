@@ -89,6 +89,14 @@ Reglas:
    probar.
 3. Los cambios destructivos van en su propia migración, separados de los aditivos.
 
+> [!WARNING]
+> El `Down` de `20260914120000_backfill_members_invited_by.sql` **borra datos en
+> una base viva**. No puede distinguir un `invited_by` que escribió el relleno
+> de uno idéntico que el webhook escribió después, así que vacía los dos. Si
+> lanzas `deploy.yml` con `run_migrations` y necesitas revertir, vuelve a
+> aplicar el `Up`: recupera los valores de `invitations`, que es la misma
+> fuente que leyó la primera vez.
+
 ## Lo que viene
 
 `works`, `library_entries`, `recommendations` (ver [domain.md](domain.md)). La
