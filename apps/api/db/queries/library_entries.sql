@@ -1,12 +1,16 @@
 -- name: LibraryEntryByID :one
--- Scoped by member on purpose: an entry that belongs to somebody else is not a
--- 403 for this API, it is a 404. The caller has no business knowing it exists.
--- The work travels with it so rendering never needs a second round trip.
-SELECT sqlc.embed(le), sqlc.embed(w)
-FROM library_entries le
-JOIN works w ON w.id = le.work_id
-WHERE le.id = sqlc.arg(id)::uuid
-  AND le.member_id = sqlc.arg(member_id)::uuid;
+-- Deliberately NOT scoped by member, and that is the one thing worth arguing
+-- about here. library.EntryRepository.ByID takes an id and nothing else,
+-- because the domain decided that "somebody else's entry answers as missing"
+-- is a rule of the service — Service.ownedEntry — rather than of the storage.
+-- Holding it in both places sounds safer and is not: the service would still
+-- have to compare the owner to tell 404 from 403, and a WHERE that can never
+-- fail is a branch no test can reach.
+--
+-- The work does not travel with it either, for the same reason: the port
+-- answers an Entry. GetEntry therefore costs two statements, a constant two,
+-- which is a different thing from the N+1 the listing avoids.
+SELECT * FROM library_entries WHERE id = sqlc.arg(id)::uuid;
 
 -- name: LibraryEntryByMemberAndWork :one
 -- The read behind `409 already_in_library`. It is a convenience, not the
@@ -95,9 +99,10 @@ WHERE id = sqlc.arg(id)::uuid
 RETURNING *;
 
 -- name: DeleteLibraryEntry :execrows
--- Returns the number of rows removed so the handler can answer 404 on the
--- second attempt instead of pretending a delete happened. The work itself is
--- untouched: domain rule 3, it is shared history.
-DELETE FROM library_entries
-WHERE id = sqlc.arg(id)::uuid
-  AND member_id = sqlc.arg(member_id)::uuid;
+-- Returns the number of rows removed so the adapter can answer "not found" on
+-- the second attempt instead of pretending a delete happened. Unscoped for the
+-- same reason the read is: library.EntryRepository.Delete takes an id, and
+-- RemoveFromLibrary has already resolved the owner through ownedEntry.
+--
+-- The work itself is untouched: domain rule 3, it is shared history.
+DELETE FROM library_entries WHERE id = sqlc.arg(id)::uuid;

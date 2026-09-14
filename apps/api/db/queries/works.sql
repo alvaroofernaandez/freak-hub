@@ -2,18 +2,21 @@
 SELECT * FROM works WHERE id = $1;
 
 -- name: CreateWork :one
--- Manual entry only, and the query is where that is enforced rather than in a
--- handler: `source` and `source_id` are written here, not taken from the
--- caller, so nothing can claim a record came from AniList when nobody checked.
--- A manual work has no external record to point at, so source_id stays NULL,
--- which is also what keeps it out of works_source_idx: manual works are
--- deliberately not deduplicated.
-INSERT INTO works (title, category, source, source_id, cover_url, synopsis, year, metadata)
+-- Every column the domain fills, `source` and `source_id` included. They are
+-- NOT stamped here: library.Service.CreateManualWork is what refuses to take
+-- them from a caller, and it is the only way into this today. Freezing
+-- 'manual' into the SQL instead would make the importer — the whole reason
+-- (source, source_id) is unique — impossible to write against this port.
+--
+-- source_id arrives NULL exactly when the work is manual, which is what
+-- works_source_id_matches_source checks and what keeps manual works out of the
+-- partial works_source_idx: they are deliberately not deduplicated.
+INSERT INTO works (title, category, source, source_id, cover_url, synopsis, year, metadata, expansion_of)
 VALUES (
     sqlc.arg(title)::text,
     sqlc.arg(category)::work_category,
-    'manual',
-    NULL,
+    sqlc.arg(source)::work_source,
+    sqlc.narg(source_id)::text,
     sqlc.narg(cover_url)::text,
     sqlc.narg(synopsis)::text,
     sqlc.narg(year)::int,
@@ -21,9 +24,31 @@ VALUES (
     -- CreateWorkRequest, and a required jsonb parameter would send Go's nil as
     -- SQL NULL and hit the NOT NULL constraint. A POST that simply omits the
     -- field has to land on the column's own '{}' default, not on a 500.
-    COALESCE(sqlc.narg(metadata)::jsonb, '{}')
+    --
+    -- It catches SQL NULL and only SQL NULL. The jsonb scalar `null` is a
+    -- perfectly valid value that satisfies NOT NULL and walks straight past
+    -- this, leaving a row where metadata->>'episodes' answers NULL rather than
+    -- "no such key". Nothing in SQL can tell the two apart once the bytes have
+    -- arrived, so the adapter is what closes that door: an absent or empty
+    -- Metadata is sent as SQL NULL, never as the four bytes `null`.
+    COALESCE(sqlc.narg(metadata)::jsonb, '{}'),
+    sqlc.narg(expansion_of)::uuid
 )
 RETURNING *;
+
+-- name: WorkBySource :one
+-- An imported work resolved by its catalogue coordinates, which is the read an
+-- importer does before deciding whether it has anything to insert. It walks
+-- works_source_idx, the same partial unique index that refuses the duplicate
+-- when two importers race past this check.
+--
+-- A manual work is unreachable through it by construction: its source_id is
+-- NULL and `source_id = NULL` matches nothing, which is the answer we want
+-- rather than an accident — two manual works would otherwise collide on a key
+-- that means nothing.
+SELECT * FROM works
+WHERE source = sqlc.arg(source)::work_source
+  AND source_id = sqlc.arg(source_id)::text;
 
 -- name: ListWorks :many
 -- A page of the shared catalogue, newest first, keyset-paginated
