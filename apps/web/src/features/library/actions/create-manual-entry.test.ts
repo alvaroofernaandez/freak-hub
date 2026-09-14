@@ -209,6 +209,15 @@ describe("createManualEntry", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("refuses a NUL character before the network, which the API rejects outright", async () => {
+    const withNul = (await submit(form({ title: "Frieren\u0000" }))) as Awaited<
+      ReturnType<typeof createManualEntry>
+    >;
+
+    expect(apiFetch).not.toHaveBeenCalled();
+    expect(withNul.status).toBe("error");
+  });
+
   it("says the work was already created when only the library step failed, so nobody creates it twice", async () => {
     const { ApiProblemError } = await import("@/shared/lib/api-client");
     const { parseProblem } = await import("@/shared/errors/problem");
@@ -229,8 +238,42 @@ describe("createManualEntry", () => {
     >;
 
     expect(result.status).toBe("error");
-    expect(result.message).toMatch(/ya se ha creado/i);
+    expect(result.message).toMatch(/sí se ha creado en el catálogo/i);
     expect(redirect).not.toHaveBeenCalled();
+    // The form reads this to keep its own submit button down: a second
+    // submission is a second work, and works are never deleted.
+    expect(result.workCreated).toBe(true);
+  });
+
+  /**
+   * The message used to send people to «Añadir» to find the orphaned work
+   * and add it from there. No such flow exists: `/anadir/[categoria]`
+   * searches AniList only, `GET /v1/works` is consumed nowhere in the web,
+   * and `catalog-search-results.tsx` deliberately has no add button. Naming
+   * a remedy that does not exist is worse than naming none, because the only
+   * thing the person can actually do is the one thing the message forbids.
+   */
+  it("does not send anybody down a route that does not exist to recover the orphaned work", async () => {
+    const { ApiProblemError } = await import("@/shared/lib/api-client");
+    const { parseProblem } = await import("@/shared/errors/problem");
+    const body = { code: "internal_error", message: "boom" };
+    apiFetch
+      .mockResolvedValueOnce({ id: "work-fma" })
+      .mockRejectedValueOnce(
+        new ApiProblemError(
+          body.message,
+          500,
+          body.code,
+          parseProblem(body, 500, null),
+        ),
+      );
+
+    const result = (await submit(form())) as Awaited<
+      ReturnType<typeof createManualEntry>
+    >;
+
+    expect(result.message).not.toMatch(/añádela|búscala|desde ahí/i);
+    expect(result.message).toMatch(/no vuelvas a enviar/i);
   });
 
   it("tells the member to sign in again when the session expired, instead of a generic retry", async () => {

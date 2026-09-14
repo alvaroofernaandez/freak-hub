@@ -71,6 +71,7 @@ export function ManualAddForm({ category }: ManualAddFormProps) {
   const titleRef = useRef<HTMLInputElement>(null);
   const yearRef = useRef<HTMLInputElement>(null);
   const synopsisRef = useRef<HTMLTextAreaElement>(null);
+  const statusRef = useRef<HTMLDivElement>(null);
 
   const errorFor = (field: string) =>
     state.fieldErrors?.find((error) => error.field === field)?.message;
@@ -93,18 +94,37 @@ export function ManualAddForm({ category }: ManualAddFormProps) {
     if (state.status !== "error") {
       return;
     }
-    // Visual order, so the focus lands on the first thing to fix.
+    // Visual order, so the focus lands on the first thing to fix. The status
+    // picker is last visually but the likeliest to be at fault on a first
+    // try, because it starts with nothing chosen; a radio group has no single
+    // focusable element of its own, so this reaches for the first chip that
+    // can actually take focus.
     if (titleError) {
       titleRef.current?.focus();
     } else if (yearError) {
       yearRef.current?.focus();
     } else if (synopsisError) {
       synopsisRef.current?.focus();
+    } else if (statusError) {
+      statusRef.current
+        ?.querySelector<HTMLElement>('[role="radio"]:not([disabled])')
+        ?.focus();
     }
-  }, [state, titleError, yearError, synopsisError]);
+  }, [state, titleError, yearError, synopsisError, statusError]);
+
+  // The work reached the catalogue but its entry did not. A second
+  // submission is a second work, and works are never deleted (domain rule 3),
+  // so the button goes down and stays down: the message says not to press
+  // again, and this is what makes that more than a request.
+  const orphanedWork = state.workCreated === true;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (orphanedWork) {
+      return;
+    }
+
     const data = new FormData(event.currentTarget);
     data.set("category", category);
     data.set("status", status);
@@ -184,14 +204,16 @@ export function ManualAddForm({ category }: ManualAddFormProps) {
         errorText={statusError}
       >
         {(aria) => (
-          <RadioChips
-            label="Estado"
-            value={status}
-            onValueChange={setStatus}
-            options={STATUS_OPTIONS}
-            disabled={isPending}
-            describedBy={aria["aria-describedby"]}
-          />
+          <div ref={statusRef}>
+            <RadioChips
+              label="Estado"
+              value={status}
+              onValueChange={setStatus}
+              options={STATUS_OPTIONS}
+              disabled={isPending || orphanedWork}
+              describedBy={aria["aria-describedby"]}
+            />
+          </div>
         )}
       </FormField>
 
@@ -203,7 +225,7 @@ export function ManualAddForm({ category }: ManualAddFormProps) {
 
       <button
         type="submit"
-        disabled={isPending}
+        disabled={isPending || orphanedWork}
         className="self-start rounded-lg bg-accent px-5 py-2.5 font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         <PendingLabel

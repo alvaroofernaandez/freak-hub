@@ -18,6 +18,11 @@ export interface ManualEntryFieldError {
 export interface ManualEntryFormState {
   status: "idle" | "error";
   message: string;
+  /** The work reached the catalogue but the library entry did not. The form
+   * reads this to keep its own submit button down for good: there is no way
+   * to finish the job from here, and pressing again would mint a duplicate
+   * work that nothing can remove. */
+  workCreated?: boolean;
   /** Set only when the failure ties to one field, so `manual-add-form.tsx`
    * can wire `aria-invalid`/`aria-describedby` and focus the first one. */
   fieldErrors?: ManualEntryFieldError[];
@@ -28,6 +33,14 @@ export interface ManualEntryFormState {
  * `packages/contracts/openapi.yaml`. Checked here so a value the contract
  * would reject never becomes a round trip — the same reason
  * `edit-profile-dialog.tsx` checks the avatar's size before uploading it.
+ *
+ * They are *not* exactly the API's bounds, and the difference is worth
+ * knowing rather than discovering. A JavaScript string's `.length` counts
+ * UTF-16 code units, while `apps/api/internal/library/service.go` counts
+ * runes (`len([]rune(title))`). An emoji or any astral character therefore
+ * costs two here and one there, so this side is the stricter of the two. The
+ * safe direction, and deliberate: nothing this accepts can be refused there
+ * for length.
  */
 const TITLE_MAX = 300;
 const SYNOPSIS_MAX = 5000;
@@ -60,9 +73,20 @@ const STATUSES = [
   "on_hold",
 ] as const;
 
+/**
+ * Postgres cannot store a NUL inside a text value, so the API refuses one
+ * outright (`carriesNullCharacter` in `apps/api/internal/library/service.go`)
+ * rather than letting the driver fail deeper down. Nobody types one, but a
+ * paste from a binary file carries them, and it is one `refine` here against
+ * an error nobody could act on there.
+ */
+const NO_NUL = (value: string) => !value.includes("\u0000");
+const NUL_MESSAGE = "Ese texto lleva un carácter que no se puede guardar.";
+
 /** An empty text field is "not given", which the contract spells `null`. */
 const optionalText = z
   .string()
+  .refine(NO_NUL, { message: NUL_MESSAGE })
   .transform((value) => value.trim())
   .transform((value) => (value === "" ? null : value));
 
@@ -73,6 +97,7 @@ const schema = z.object({
   }),
   title: z
     .string()
+    .refine(NO_NUL, { message: NUL_MESSAGE })
     .transform((value) => value.trim())
     .pipe(
       z
@@ -126,23 +151,39 @@ const ENTRY_CONTEXT: ErrorContext = {
 };
 
 /**
- * The half-done case, stated plainly.
+ * The half-done case, stated plainly — and it took a review to make this
+ * paragraph honest.
  *
  * The two writes are not one transaction and cannot be: `POST /v1/works` is
  * the only way to learn the id `POST /v1/library` needs. When the first
- * succeeds and the second does not, the work exists in the shared catalogue
- * and a work is never deleted (domain rule 3), so submitting the form again
- * would create a second, identical one. Saying so is the only thing that
- * stops it.
+ * succeeds and the second does not, the work exists in the shared catalogue,
+ * a work is never deleted (domain rule 3), and a manual work carries no
+ * `source_id`, so `works_source_idx` will not dedupe a second one. Submitting
+ * again mints a duplicate that nothing can clean up.
+ *
+ * The first version of this message told people to "find it under Añadir and
+ * add it from there". **There is no such flow.** `/anadir/[categoria]`
+ * searches AniList and nothing else, `GET /v1/works` is consumed nowhere in
+ * the web app, `catalog-search-results.tsx` deliberately ships no add button,
+ * and the only caller of `POST /v1/library` is this action. So the message
+ * sent somebody on an errand that ends where it started, and the one thing
+ * left to try was the one thing it forbade — which is how a warning gets
+ * ignored.
+ *
+ * There is no remedy to name, so it names none. What it can do is stop the
+ * next press: `workCreated` keeps the form's own button down.
  */
 const WORK_ALREADY_CREATED =
-  "La obra ya se ha creado en el catálogo, así que no vuelvas a enviar el " +
-  "formulario: búscala desde «Añadir» y añádela a tu biblioteca desde ahí.";
+  "La obra sí se ha creado en el catálogo del grupo, y una obra no se borra " +
+  "nunca. No vuelvas a enviar este formulario: crearía una segunda obra " +
+  "igual. Todavía no hay ninguna pantalla para añadir a tu biblioteca una " +
+  "obra que ya existe, así que esta entrada tendrá que esperar a que la haya.";
 
 function stateFor(
   cause: unknown,
   context: ErrorContext,
   suffix?: string,
+  workCreated?: boolean,
 ): ManualEntryFormState {
   const normalized = normalizeError(cause, context);
   // Always the normalizer's copy: it names the real cause (an expired
@@ -153,6 +194,7 @@ function stateFor(
   return {
     status: "error",
     message: suffix ? `${description} ${suffix}` : description,
+    ...(workCreated ? { workCreated: true } : {}),
     fieldErrors: normalized.fieldErrors?.map(({ field, code }) => ({
       field,
       message: (code in MESSAGES
@@ -231,7 +273,7 @@ export async function createManualEntry(
       timeoutMs: MUTATION_TIMEOUT_MS,
     });
   } catch (cause) {
-    return stateFor(cause, ENTRY_CONTEXT, WORK_ALREADY_CREATED);
+    return stateFor(cause, ENTRY_CONTEXT, WORK_ALREADY_CREATED, true);
   }
 
   redirect(`/obras/${entry.id}`);

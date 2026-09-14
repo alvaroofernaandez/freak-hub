@@ -129,6 +129,55 @@ describe("ManualAddForm", () => {
     );
   });
 
+  /**
+   * The work exists in the catalogue and cannot be deleted, so a second
+   * submission mints a duplicate nothing can clean up. The message says not
+   * to; the button makes sure.
+   */
+  it("stops offering to submit once a work was created without its entry", async () => {
+    createManualEntry.mockResolvedValue({
+      status: "error",
+      message: "La obra sí se ha creado en el catálogo del grupo.",
+      workCreated: true,
+    });
+    render(<ManualAddForm category="boardgame" />);
+
+    await userEvent.type(screen.getByLabelText("Título"), "Brass: Birmingham");
+    await userEvent.click(screen.getByRole("radio", { name: "Pendiente" }));
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled(),
+    );
+
+    createManualEntry.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }));
+    expect(createManualEntry).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The status picker starts empty on purpose, which makes it the likeliest
+   * thing to be missing on a first try — and docs/states.md promises focus on
+   * the first invalid field in every form, not just the ones with a text box.
+   */
+  it("moves the focus to the status picker when that is the field at fault", async () => {
+    createManualEntry.mockResolvedValue({
+      status: "error",
+      message: "Elige en qué punto estás con esta obra.",
+      fieldErrors: [
+        { field: "status", message: "Elige en qué punto estás con esta obra." },
+      ],
+    });
+    render(<ManualAddForm category="boardgame" />);
+
+    await userEvent.type(screen.getByLabelText("Título"), "Brass: Birmingham");
+    await userEvent.click(screen.getByRole("button", { name: /guardar/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: "Wishlist" })).toHaveFocus(),
+    );
+  });
+
   it("says how long a title and a synopsis may be, taking the bounds from the contract", () => {
     render(<ManualAddForm category="boardgame" />);
 

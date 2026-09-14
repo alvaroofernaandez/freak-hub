@@ -55,10 +55,32 @@ La misma decisión **no** aplica a la creación: `POST /v1/library` acepta los
 seis estados porque crear es la entrada al ciclo de vida y no una transición,
 así que el alta manual ofrece los seis sin restricción.
 
-Tampoco aplica a la valoración de la misma manera. Ahí el reflejo es más
-simple: el control se habilita solo en `completed` y `dropped`
-(`rating_not_allowed`), y la nota que sobrevive a un cambio de estado se
-respeta **no enviándola**, no reproduciendo la regla.
+A la valoración aplica de otra forma, y esto hubo que corregirlo: la primera
+versión de este ADR decía que ahí bastaba «el reflejo más simple», habilitar el
+control solo en `completed` y `dropped` y dejar que el diferencial hiciera el
+resto. **No basta, y el review de la PR #75 lo demostró con un caso concreto.**
+
+La API valida la valoración entrante contra el estado **resultante**, y lo hace
+en la misma petición atómica que la transición. Una entrada `completed` sin
+valorar en la que alguien escribe un 8 y después pulsa «En curso» —el único
+movimiento legítimo desde ahí, que la interfaz ofrece bien— produce
+`{status: "in_progress", rating: 8}`, porque el 8 **sí** se movió respecto de lo
+guardado. Eso es un `422 rating_not_allowed` que **se lleva por delante también
+el cambio de estado**, y deja a la persona encerrada detrás de un campo
+deshabilitado.
+
+Así que hacen falta las dos mitades:
+
+1. **Visible**: al pasar a un estado que no admite valoración, el campo vuelve
+   a la valoración guardada, para que una casilla en gris no enseñe un número
+   que el guardado va a descartar. Un borrado explícito sí se respeta, porque
+   `null` se acepta en cualquier estado.
+2. **Estructural**: `buildPatch` no incluye una valoración distinta cuando el
+   estado resultante no la admite. Es la garantía, no la presentación.
+
+La lección general: **el diferencial es necesario pero no suficiente.** Hace
+que dos de las tres cláusulas sutiles del `PATCH` se cumplan solas; la tercera
+necesita conocer la regla.
 
 ## Consecuencias
 

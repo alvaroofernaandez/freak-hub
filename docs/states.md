@@ -313,9 +313,26 @@ particularidades que no tenía ninguna escritura anterior.
   dominio va a rechazar con `422 invalid_transition`. Ver
   [ADR-0016](decisions/0016-maquina-de-estados-en-la-interfaz.md).
 - **Valorar solo se ofrece donde se acepta**, en `completed` y `dropped`
-  (`rating_not_allowed`). Fuera de ahí el control está deshabilitado y el
-  texto de ayuda dice, además, que la valoración que ya haya se conserva: la
-  regla afecta a un **cambio** de valoración, no a la que está guardada.
+  (`rating_not_allowed`). Fuera de ahí el campo está deshabilitado, pero
+  **«Quitar la valoración» no**: el contrato dice que `null` se acepta en
+  cualquier estado, así que la única salida de una puntuación no puede quedar
+  encerrada detrás de los estados que sí pueden ponerla. Y al salir de un
+  estado que admitía valoración, el campo **vuelve a la guardada**: la API
+  valida la valoración entrante contra el estado **resultante** y en la misma
+  petición atómica que la transición, así que un 8 recién escrito que viajara
+  con un «En curso» devolvería un 422 que se llevaría por delante el cambio de
+  estado. Ver [ADR-0016](decisions/0016-maquina-de-estados-en-la-interfaz.md).
+- **Los dos campos numéricos son de texto, no `<input type="number">`.** Un
+  campo numérico sanea su valor: la caja enseña `12e` mientras `.value` vale
+  `""`, y como el valor controlado de React también es `""`, React no
+  repinta. Leído sin cuidado eso escribía `progress: 0` sobre 47 episodios y
+  `rating: null` sobre un 8. Ninguna prueba de vitest podía cazarlo porque
+  jsdom no implementa ese saneado. Las reglas de lectura viven en
+  `features/library/lib/entry-draft.ts`, un campo ilegible **bloquea el
+  guardado** en vez de convertirse en un valor, y el tope del progreso se
+  comprueba ahí: `min`/`max` en el elemento serían decorativos, porque el
+  panel guarda desde un `onClick` y nunca envía un formulario, así que la
+  validación de restricciones del navegador no llega a correr.
 - **`DELETE` no es idempotente.** El segundo es un 404, así que su
   `ErrorContext` lleva `idempotent: false` —un plazo agotado no invita a
   repetir— y, al completarse, la interfaz **se va** a
