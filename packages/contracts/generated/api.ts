@@ -672,11 +672,20 @@ export interface components {
              * @description A score from 1 to 10, only meaningful once there is an opinion.
              *     The domain accepts a rating *arriving in a request* on
              *     `completed` and `dropped` and rejects it anywhere else with
-             *     `rating_not_allowed` (domain rule 2). What the rule guards is a
-             *     *change*: a rating already stored survives a later status change
-             *     — a rewatch does not erase a score — and sending that same score
-             *     back unchanged is a no-op that succeeds in any status. `null`
-             *     when unrated.
+             *     `rating_not_allowed` (domain rule 2). A rating already stored
+             *     survives a later status change — a rewatch does not erase a
+             *     score.
+             *
+             *     **In a `PATCH`**, what the rule guards is a *change*, so sending
+             *     that same stored score back unchanged is a no-op and succeeds in
+             *     any status. That clause does not carry over to creation: a
+             *     `POST` has nothing stored for an incoming rating to match, so
+             *     there the plain rule applies and
+             *     `{"status": "in_progress", "rating": 8}` is
+             *     `422 rating_not_allowed`. Creating cannot be idempotent with
+             *     respect to something that does not exist yet.
+             *
+             *     `null` when unrated.
              */
             rating: number | null;
             /**
