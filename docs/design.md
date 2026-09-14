@@ -205,22 +205,52 @@ mantiene "Grupo" marcado. Aplica igual a la barra inferior del móvil.
 
 | Pieza | Decisión |
 | :--- | :--- |
-| Wordmark | Bungee, enlaza a `/inicio` |
-| Navegación | Icono + palabra. El icono de la sección activa usa `weight="Filled"`; el resto, `Outline` |
-| Acción primaria | "Añadir" con `Plus`, en `--accent`: es la única acción primaria de la cabecera |
-| Identidad | `UserMenu` con avatar, handle y chevron que gira al desplegarse |
+| Wordmark | Bungee, enlaza a `/inicio`. Nunca parte en dos líneas (`whitespace-nowrap`) |
+| Navegación | Icono + palabra. El icono de la sección activa usa `weight="Filled"`; el resto, `Outline`. Desde 768 px |
+| Acción primaria | "Añadir" con `Plus`, en `--accent`: es la única acción primaria de la cabecera. Desde 768 px; por debajo vive en el botón central de la barra inferior |
+| Badge de pendientes | Enlace a `/recomendaciones`. La píldora mide 24 px; por debajo de 768 px el área pulsable a su alrededor sube a 44 px |
+| Identidad | `UserMenu` con avatar siempre, y con handle y chevron desde 1024 px |
 | Salto al contenido | Primer elemento enfocable del documento, visible solo al recibir foco |
 
 El peso del icono es la segunda señal de la sección activa, junto al color y al
 peso tipográfico. Tres señales para el mismo estado no es exceso: significa que
 funciona en escala de grises, con daltonismo y a tamaño pequeño.
 
+### La cabecera existe en las tres anchuras
+
+La maqueta dibuja la misma barra tres veces, y las tres se implementan:
+
+| Anchura | Alto · padding lateral · hueco | Qué lleva |
+| :--- | :--- | :--- |
+| 390 px | 56 · 16 · 12 | Wordmark, badge y avatar. Nada más |
+| 1024 px | 58 · 22 · 20 | Lo anterior más los cuatro enlaces y "Añadir" |
+| 1440 px | 64 · 28 · 32 | Lo mismo, con el handle junto al avatar |
+
+Dos consecuencias que conviene tener presentes al tocar este componente:
+
+**En el teléfono la cabecera no desaparece: se queda con lo que el artboard
+`(móvil)` dibuja.** Los destinos bajan a la barra inferior, pero la identidad
+—y con ella cerrar sesión— se queda arriba. Es la diferencia entre mover una
+pieza y borrarla.
+
+**Escritorio empieza en `xl:` (1280 px), no en `lg:` (1024 px).** 1024 px es
+justo la anchura del artboard de tablet: con `lg:` la variante de tablet nunca
+llegaba a renderizarse a la anchura para la que está dibujada. Las tres
+anchuras de referencia del proyecto —390, 1024 y 1440— caen así una en cada
+variante, que es lo que hace verificable una pasada visual.
+
+**Entre 768 y 1023 px el handle `@usuario` no cabe.** Medido: con él, la fila
+pedía 811 px dentro de 768, el wordmark partía en dos líneas y el disparador
+del menú quedaba cortado 16 px fuera de la pantalla. El avatar solo basta para
+identificar la sesión en esa franja, que es además como lo dibujan los dos
+artboards.
+
 ### La barra inferior del móvil
 
 Cuatro destinos más el botón de añadir en el centro: cinco objetivos, el máximo
 que un pulgar alcanza con comodidad en el borde inferior. Por eso la barra
 cambia "Grupo" por "Recomendaciones"; el grupo queda a un toque desde el menú
-de perfil.
+de sesión, que la cabecera del móvil mantiene en su sitio.
 
 Cada destino es icono sobre etiqueta, con altura mínima de 44 px, y respeta
 `env(safe-area-inset-bottom)` para no quedar bajo la barra de gestos.
@@ -246,6 +276,13 @@ No enlaza a rutas que no existen. `/recomendaciones` existe desde la issue
 #36, pero el menú sigue sin ofrecerla: no es suya. [screens.md](screens.md#navegación)
 le da dos entradas —el badge de pendientes de la navbar y la barra inferior del
 móvil— y una tercera en el menú solo repetiría lo que ya está a un clic.
+
+`/miembros` es el caso contrario, y por eso sí está. Por encima de 768 px
+repite el enlace "Grupo" de la barra, cierto; por debajo no tenía ninguna
+entrada, porque la barra inferior lo cambió por Recomendaciones. Ese es el
+precio de un único menú sirviendo a todas las anchuras, y es más barato que
+dejar una pantalla del listado cerrado sin ninguna vía de acceso desde un
+teléfono.
 `/ajustes` existe desde la issue #37, así que el menú la enlaza —y además lleva el tema, como fija
 [screens.md](screens.md#navegación)— con un elemento de tipo
 `menuitemcheckbox`, que es el que anuncia un estado; se queda abierto al
@@ -639,7 +676,7 @@ Definition of Done de la épica #18:
 
 | Anchura | Qué se comprueba |
 | :--- | :--- |
-| 390 px | La barra inferior sustituye a la navbar de escritorio (ya cableado en el shell); ningún texto se corta ni se solapa; el `<h1>` y su subtítulo caben en una columna; los objetivos pulsables mantienen los 44 px mínimos de [la barra inferior](#la-barra-inferior-del-móvil) |
+| 390 px | La cabecera conserva wordmark, badge e identidad, y la barra inferior sustituye a los destinos de la navbar (ya cableado en el shell); ningún texto se corta ni se solapa; el `<h1>` y su subtítulo caben en una columna; los objetivos pulsables mantienen los 44 px mínimos de [la barra inferior](#la-barra-inferior-del-móvil) |
 | 1024 px | El contenido sigue dentro de `max-w-5xl` sin franjas vacías desproporcionadas ni una sola columna forzada donde ya cabría una rejilla; la moldura, si la pantalla la usa, se lee completa |
 | 1440 px | El contenido no se estira sin límite — `max-w-5xl` es el tope, no un mínimo que rellenar; ninguna tarjeta ni fila queda más ancha que sus equivalentes en `/miembros` o `/actividad` |
 
@@ -987,3 +1024,28 @@ Definition of Done de la épica #18.
   primera pantalla donde el término llega desde la URL, así que un enlace
   compartido podía descuadrar la página de quien lo abriera. No es un problema
   de seguridad: React escapa el texto.
+- **2026-09-14** · La cabecera se mantiene por debajo de 768 px (issue #63).
+  Antes era `hidden md:flex`, así que en un teléfono el `<header>` medía 1 px:
+  sin wordmark, sin badge y sin menú de sesión, y por tanto sin ninguna forma
+  de cerrar sesión, ni de llegar a `/invitar`, `/ajustes`, `/miembros` ni al
+  perfil propio. Ahora la barra es una sola fila en las tres anchuras: los
+  cuatro destinos y "Añadir" se ocultan por debajo de `md:` —los cubre la barra
+  inferior—, y wordmark, badge e identidad se quedan, que es exactamente lo que
+  dibuja el artboard `(móvil)`. El área pulsable del badge sube a 44 px solo en
+  esa franja; la píldora de 24 px no cambia de tamaño. Ver
+  [La cabecera existe en las tres anchuras](#la-cabecera-existe-en-las-tres-anchuras).
+- **2026-09-14** · Las métricas de escritorio pasan de `lg:` (1024 px) a `xl:`
+  (1280 px). Motivo: 1024 px es la anchura del artboard de tablet, así que con
+  `lg:` la variante de tablet solo existía entre 768 y 1023 px y nunca se
+  renderizaba a la anchura para la que está dibujada. Medido antes: a 1024 px
+  la barra daba 64/28/32; ahora da 58/22/20 hasta 1279 px.
+- **2026-09-14** · El handle `@usuario` y su chevron esperan a 1024 px
+  (antes, a 640 px). Medido: entre 768 y 1023 px la fila pedía 811 px dentro de
+  768, el wordmark partía en dos líneas y el disparador del menú se salía 16 px
+  de la pantalla. El wordmark además pasa a `whitespace-nowrap`: una marca no
+  se parte nunca.
+- **2026-09-14** · El menú de sesión gana "Grupo" (`/miembros`). Es la única
+  vía a esa pantalla en un teléfono desde que la barra inferior cambió Grupo
+  por Recomendaciones, y hace cierta la frase que este documento ya daba por
+  hecha. Por encima de 768 px repite el enlace de la barra, a diferencia de
+  `/recomendaciones`, que ya tenía dos entradas y sigue fuera del menú.
