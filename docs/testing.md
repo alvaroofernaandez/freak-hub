@@ -30,7 +30,7 @@ esa regla está en el sitio equivocado.
 ## Cobertura actual
 
 ```
-apps/api   → config, auth, httpx, users, invitations, webhooks, api (router)
+apps/api   → config, auth, httpx, users, invitations, library, webhooks, api (router)
 apps/web   → routes, api-client, cn, invitation-form
 e2e        → perímetro de autenticación
 ```
@@ -45,6 +45,15 @@ Lo más interesante que ya está blindado:
 - Un webhook repetido no crea dos miembros.
 - Una invitación rechazada **nunca** llega a Clerk.
 - Si Clerk falla al enviar, **no queda fila local**.
+- Puntuar algo que no has terminado **no llega a la base de datos**, y la
+  máquina de estados se comprueba sobre **los 36 pares de estados posibles**,
+  no sobre una lista escrita a mano: acepta los 7 saltos que dibuja
+  `domain.md` más los 6 de quedarse donde estás, y rechaza los otros 23.
+- El dominio de la biblioteca **no conoce a sus adaptadores**, y eso se
+  comprueba en cada pasada: `go list -deps` sobre `internal/library/...` no
+  puede alcanzar pgx, chi, Clerk ni `sqlcgen`.
+- Una entrada ajena y una inexistente responden **el mismo error, carácter por
+  carácter**, para que el mensaje no enumere lo que el código de estado calla.
 
 ## Comandos
 
