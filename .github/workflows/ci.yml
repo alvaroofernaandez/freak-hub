@@ -162,6 +162,16 @@ jobs:
           go run ./cmd/migrate status
           go run ./cmd/migrate down
 
+      # The backfill migration carries logic — lower(email), the IS NULL guard,
+      # the self-link exclusion and the tiebreak between duplicate accepted
+      # invitations — so it is exercised against this Postgres. The same tests
+      # skip themselves in the `api` job, which has no database.
+      - name: Data migrations behave against a real Postgres
+        working-directory: apps/api
+        env:
+          TEST_DATABASE_URL: postgres://freakhub:freakhub@localhost:5432/freakhub?sslmode=disable
+        run: go test -count=1 ./db/...
+
   images:
     name: Images · both must build
     runs-on: ubuntu-latest
