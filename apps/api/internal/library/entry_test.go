@@ -217,3 +217,24 @@ func TestAnEpisodeCountOfZeroMeansTheCatalogueDoesNotKnow(t *testing.T) {
 	assert.NoError(t, library.ValidateProgress(unaired, 1),
 		"a known ceiling of zero would trap the entry: every progress above 0 refused, forever")
 }
+
+// TestProgressNeverPassesWhatAnyColumnCouldHold is the other end of domain
+// rule 5, and it is not hypothetical: without it a well-formed request
+// reached the adapter, which refused to truncate — rightly — with a bare
+// error, and the caller got a 500 for a request the domain should have
+// turned away.
+func TestProgressNeverPassesWhatAnyColumnCouldHold(t *testing.T) {
+	t.Parallel()
+
+	// An airing anime declares no total, so rule 5's ceiling does not apply
+	// and this is the only bound left.
+	airing := library.Work{
+		Category: library.CategoryAnime,
+		Metadata: library.Metadata{"status_airing": "airing"},
+	}
+
+	require.NoError(t, library.ValidateProgress(airing, 2_147_483_647),
+		"the widest count a column holds is still a count")
+	require.ErrorIs(t, library.ValidateProgress(airing, 2_147_483_648), library.ErrInvalidProgress)
+	require.ErrorIs(t, library.ValidateProgress(airing, 3_000_000_000), library.ErrInvalidProgress)
+}

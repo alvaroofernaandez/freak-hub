@@ -74,6 +74,26 @@ const (
 	MaxTitleLength = 300
 )
 
+// Year bounds a work's release year shares with the contract.
+//
+// They are not only a matter of taste about what counts as a plausible year.
+// The column underneath is an int4, and an adapter asked to store 2147483648
+// in one can only refuse or truncate silently — so leaving the bound to the
+// storage layer turned an ordinary request into a 500 with nothing to say.
+// A rule the contract already declares is not a rule the domain invents.
+const (
+	MinYear = 1800
+	MaxYear = 2200
+)
+
+// MaxSynopsisLength is the synopsis bound the contract declares, in
+// characters rather than bytes: an accented letter is one character to
+// whoever typed it.
+const MaxSynopsisLength = 5000
+
+// MaxQueryLength is the bound the contract puts on the free-text search.
+const MaxQueryLength = 200
+
 // Metadata carries everything specific to one category, kept out of the
 // fields that apply to all of them. Anime — the only category the product
 // feeds today — uses "episodes", "season" and "status_airing".

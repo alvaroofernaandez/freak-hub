@@ -253,3 +253,40 @@ func TestAMemberRegistersAnAnimeAdvancesItAndRatesItAgainstARealDatabase(t *test
 	require.Equal(t, http.StatusOK, status, "a work is never deleted, even when nobody keeps it")
 	assert.Equal(t, workID, stillCatalogued["id"])
 }
+
+// TestAWellFormedRequestNeverReachesTheInt4CeilingAsA500 is the regression
+// test for the one failure the in-memory double cannot reproduce: it stores
+// a Go int, so only a real int4 column refuses. The adapter is right to
+// refuse rather than truncate — a rating of 4294967297 stored as 1 would be
+// a valid score — but a bare error there falls to the 500 branch, and both
+// of these are ordinary requests a client can send by accident.
+//
+// year is reachable straight from POST /v1/works. progress is reachable
+// whenever the work has no known total, which is exactly what POST /v1/works
+// creates when nobody types an episode count in.
+func TestAWellFormedRequestNeverReachesTheInt4CeilingAsA500(t *testing.T) {
+	pool := libraryDB(t, nil)
+	base := journeyAPI(t, pool)
+
+	seedMember(t, pool, "alvaro")
+	alvaro := &journeyClient{t: t, base: base, token: "valid-alvaro"}
+
+	status, problem := alvaro.call(http.MethodPost, "/v1/works", map[string]any{
+		"title": "Out of range", "category": "anime", "year": 2147483648,
+	})
+	require.Equalf(t, http.StatusBadRequest, status, "%v", problem)
+	assert.Equal(t, "invalid_payload", problem["code"])
+
+	status, work := alvaro.call(http.MethodPost, "/v1/works",
+		map[string]any{"title": "No episode count", "category": "anime"})
+	require.Equalf(t, http.StatusCreated, status, "%v", work)
+
+	workID, ok := work["id"].(string)
+	require.True(t, ok)
+
+	status, refused := alvaro.call(http.MethodPost, "/v1/library", map[string]any{
+		"work_id": workID, "status": "in_progress", "progress": 3000000000,
+	})
+	require.Equalf(t, http.StatusUnprocessableEntity, status, "%v", refused)
+	assert.Equal(t, "invalid_progress", refused["code"])
+}

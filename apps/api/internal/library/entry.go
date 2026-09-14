@@ -1,6 +1,7 @@
 package library
 
 import (
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,6 +49,19 @@ const (
 	MinRating = 1
 	MaxRating = 10
 )
+
+// MaxProgress is the ceiling domain rule 5 has left when a work declares no
+// total of its own.
+//
+// Two billion episodes is not a number any work has, so the bound costs
+// nothing real — and without it a well-formed request reached an int4 column
+// that could not hold it. The adapter was right to refuse instead of
+// truncating, but its refusal had no error the transport could translate, so
+// the caller got a 500 for a request the domain should have turned away.
+const MaxProgress = math.MaxInt32
+
+// MaxNoteLength is the note bound the contract declares, in characters.
+const MaxNoteLength = 1000
 
 // transitions is the state machine docs/domain.md draws, transcribed arrow by
 // arrow. Everything absent from it is refused, which is what keeps that
@@ -179,14 +193,18 @@ func (w Work) Total() (int, bool) {
 	}
 }
 
-// ValidateProgress is domain rule 5: progress is never negative, and it never
-// passes the work's total when that total is known.
+// ValidateProgress is domain rule 5: progress is never negative, it never
+// passes the work's total when that total is known, and it never passes
+// MaxProgress even when it is not.
 //
 // The "when known" is the whole nuance. An anime still airing has no episode
 // count in its metadata, and refusing episode 13 of a series that has aired
-// 13 would be the domain inventing a fact the catalogue never gave it.
+// 13 would be the domain inventing a fact the catalogue never gave it. What
+// that nuance must not become is no bound at all: a work with no declared
+// total is exactly what POST /v1/works creates when nobody types an episode
+// count in, so it is the ordinary case and not an exotic one.
 func ValidateProgress(work Work, progress int) error {
-	if progress < 0 {
+	if progress < 0 || progress > MaxProgress {
 		return ErrInvalidProgress
 	}
 

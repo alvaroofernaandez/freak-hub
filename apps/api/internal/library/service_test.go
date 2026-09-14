@@ -1366,3 +1366,94 @@ func TestEveryPatchableFieldCountsAsAChange(t *testing.T) {
 		})
 	}
 }
+
+// The four bounds the contract declares and the domain used not to enforce.
+// Three of them were merely permissive; the year was a 500, because an int4
+// column cannot hold 2147483648 and the adapter refused to truncate it.
+
+func TestCreateManualWorkRefusesAYearOutsideTheRangeTheContractDeclares(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, year := range []int{1799, 2201, 99999, 2_147_483_648} {
+		value := year
+		_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+			Title: "Frieren", Category: library.CategoryAnime, Year: &value,
+		})
+
+		require.ErrorIsf(t, err, library.ErrInvalidYear, "year %d", year)
+	}
+}
+
+func TestCreateManualWorkAcceptsTheYearsAtTheEdgesOfTheRange(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, year := range []int{1800, 2200} {
+		value := year
+		_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+			Title: "Frieren", Category: library.CategoryAnime, Year: &value,
+		})
+
+		require.NoErrorf(t, err, "year %d", year)
+	}
+}
+
+func TestCreateManualWorkRefusesASynopsisLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime, Synopsis: strings.Repeat("á", 5001),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidSynopsis,
+		"the bound is in characters, so an accent must not count double")
+}
+
+func TestAddToLibraryRefusesANoteLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	work := h.anime("Frieren", 28)
+	note := strings.Repeat("á", 1001)
+
+	_, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: work.ID, Status: library.StatusWishlist, Note: &note,
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+func TestUpdateEntryRefusesANoteLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.entries.Seed(library.Entry{
+		MemberID: member, WorkID: work.ID, Status: library.StatusInProgress,
+	})
+	note := strings.Repeat("a", 1001)
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Note: library.Set(&note),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+func TestSearchWorksRefusesAQueryLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, _, err := h.service.SearchWorks(context.Background(),
+		library.WorkFilter{Query: strings.Repeat("a", 201)}, nil, 25)
+
+	require.ErrorIs(t, err, library.ErrInvalidFilter,
+		"q is a query parameter, so it joins the invalid_filter family and not invalid_payload")
+}

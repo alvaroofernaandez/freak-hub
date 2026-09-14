@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -1240,4 +1241,135 @@ func problemWithoutInstance(t *testing.T, recorder *httptest.ResponseRecorder) m
 	delete(body, "correlation_id")
 
 	return body
+}
+
+// ---------------------------------------------------------------------------
+// The bounds the contract declares.
+//
+// Two of these used to be a 500 an ordinary client could reach: the int4
+// column underneath year and progress cannot hold what the domain let
+// through, the adapter refused to truncate it — rightly — and the refusal
+// had no code to travel as. The other four were merely permissive, which is
+// how a 60000-character synopsis got stored.
+// ---------------------------------------------------------------------------
+
+// seedAiringAnime puts an anime with no known episode count in the catalogue.
+// Domain rule 5 caps nothing for it, which is what makes it the case where
+// progress has no ceiling but the storage still does — and what a manual work
+// created with no metadata looks like.
+func (s *suite) seedAiringAnime(title string) library.Work {
+	return s.works.Seed(library.Work{
+		Title:    title,
+		Category: library.CategoryAnime,
+		Source:   library.SourceManual,
+		Metadata: library.Metadata{"status_airing": "airing"},
+
+		CreatedAt: seedTime,
+		UpdatedAt: seedTime,
+	})
+}
+
+func TestCreateWorkRejectsAYearNoColumnCouldHold(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	for _, year := range []any{99999, 2147483648} {
+		recorder := s.do(t, http.MethodPost, "/v1/works", "valid-user_alex",
+			map[string]any{"title": "Y", "category": "anime", "year": year})
+
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code,
+			"year %v is a well-formed request and must not answer 500: %s", year, recorder.Body.String())
+		assert.Equalf(t, "invalid_payload", errorCode(t, recorder), "year %v", year)
+	}
+}
+
+func TestCreateWorkRejectsASynopsisLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodPost, "/v1/works", "valid-user_alex", map[string]any{
+		"title": "Frieren", "category": "anime", "synopsis": strings.Repeat("a", 5001),
+	})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestListWorksRejectsAQueryLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/works?q="+strings.Repeat("a", 201), "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_filter", errorCode(t, recorder),
+		"q travels in the query string, and invalid_payload means the body is not valid")
+}
+
+func TestCreateLibraryEntryRejectsProgressNoColumnCouldHold(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAiringAnime("Airing")
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex", map[string]any{
+		"work_id": work.ID.String(), "status": "in_progress", "progress": 3000000000,
+	})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code,
+		"a work with no known total has no rule-5 ceiling, and the column's is the one left: "+
+			recorder.Body.String())
+	assert.Equal(t, "invalid_progress", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRejectsProgressNoColumnCouldHold(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAiringAnime("Airing")
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"progress": 3000000000})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+	assert.Equal(t, "invalid_progress", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryRejectsANoteLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex", map[string]any{
+		"work_id": work.ID.String(), "status": "wishlist", "note": strings.Repeat("a", 1001),
+	})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRejectsANoteLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"note": strings.Repeat("a", 1001)})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
 }

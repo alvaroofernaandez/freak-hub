@@ -47,6 +47,10 @@ func (s *Service) AddToLibrary(
 		return EntryWithWork{}, ErrInvalidStatus
 	}
 
+	if err := validateNote(input.Note); err != nil {
+		return EntryWithWork{}, err
+	}
+
 	work, err := s.existingWork(ctx, input.WorkID)
 	if err != nil {
 		return EntryWithWork{}, err
@@ -168,6 +172,12 @@ func (s *Service) UpdateEntry(
 
 	if progress, ok := patch.Progress.Get(); ok {
 		if err := ValidateProgress(work, progress); err != nil {
+			return EntryWithWork{}, err
+		}
+	}
+
+	if note, ok := patch.Note.Get(); ok {
+		if err := validateNote(note); err != nil {
 			return EntryWithWork{}, err
 		}
 	}
@@ -389,6 +399,14 @@ func (s *Service) CreateManualWork(ctx context.Context, input ManualWorkInput) (
 		return Work{}, ErrInvalidCategory
 	}
 
+	if err := validateYear(input.Year); err != nil {
+		return Work{}, err
+	}
+
+	if len([]rune(input.Synopsis)) > MaxSynopsisLength {
+		return Work{}, ErrInvalidSynopsis
+	}
+
 	work, err := s.works.Create(ctx, Work{
 		Title:    title,
 		Category: input.Category,
@@ -427,6 +445,9 @@ func (s *Service) SearchWorks(
 	}
 
 	filter.Query = strings.TrimSpace(filter.Query)
+	if len([]rune(filter.Query)) > MaxQueryLength {
+		return nil, nil, ErrInvalidFilter
+	}
 
 	// Ask for one extra row: its presence, not a COUNT(*), is what tells us
 	// whether another page follows (ADR-0011).
@@ -443,6 +464,35 @@ func (s *Service) SearchWorks(
 	last := rows[len(rows)-1]
 
 	return rows, &Cursor{CreatedAt: last.CreatedAt, ID: last.ID}, nil
+}
+
+// validateYear holds a release year to the range the contract declares. An
+// absent year asks for nothing and passes.
+func validateYear(year *int) error {
+	if year == nil {
+		return nil
+	}
+
+	if *year < MinYear || *year > MaxYear {
+		return ErrInvalidYear
+	}
+
+	return nil
+}
+
+// validateNote holds a note to the length the contract declares, counting
+// characters rather than bytes. A nil note is an absent or a cleared one and
+// passes.
+func validateNote(note *string) error {
+	if note == nil {
+		return nil
+	}
+
+	if len([]rune(*note)) > MaxNoteLength {
+		return ErrInvalidNote
+	}
+
+	return nil
 }
 
 // normaliseTitle trims the title and holds it to the bounds the contract
