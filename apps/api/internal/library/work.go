@@ -87,15 +87,17 @@ type Metadata map[string]any
 // and progress on it therefore has no ceiling (domain rule 5).
 const MetadataKeyEpisodes = "episodes"
 
-// Total returns the number of units a work has — episodes for anime — and
-// whether that total is known at all.
+// wholeNumber reads a count out of the open metadata map, and says whether
+// it found one at all. That second answer is the whole point of domain rule
+// 5: a finished anime with 24 episodes caps progress at 24, while one still
+// airing declares no count and therefore caps nothing.
 //
-// The distinction is the whole point of domain rule 5: a finished anime with
-// 24 episodes caps progress at 24, while one still airing caps nothing. The
-// value is read defensively because metadata crosses a JSON boundary, where
-// an integer comes back as a float64.
-func (m Metadata) Total() (int, bool) {
-	raw, ok := m[MetadataKeyEpisodes]
+// It reads defensively because metadata crosses a JSON boundary, where an
+// integer comes back as a float64 and anything at all can come back as a
+// string. Nonsense is treated as absence rather than as zero, because a
+// ceiling of zero would refuse every episode.
+func (m Metadata) wholeNumber(key string) (int, bool) {
+	raw, ok := m[key]
 	if !ok {
 		return 0, false
 	}
