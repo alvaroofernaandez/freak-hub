@@ -181,6 +181,32 @@ jobs:
           TEST_DATABASE_URL: postgres://freakhub:freakhub@localhost:5432/freakhub_test?sslmode=disable
         run: go test -count=1 ./db/...
 
+      # The Postgres adapter: the SQL, the indexes and the translation of a
+      # driver error into a domain error. None of it is reachable from the `api`
+      # job, which has no database, so without this step these tests skip
+      # themselves everywhere and nothing ever runs them.
+      #
+      # Two things this step depends on, both easy to break from a distance:
+      #
+      #   -race is not optional. The suite shares a sync.Once and a mutexed
+      #   query tracer over one pool, and the race detector is what will catch
+      #   the day somebody adds t.Parallel() to a test that truncates.
+      #
+      #   The role must be able to CREATE DATABASE. The suite derives its own
+      #   database from TEST_DATABASE_URL — freakhub_test becomes
+      #   freakhub_adapter_test — and creates it on first run, using the
+      #   database named in the URL as its administrative connection. It has to
+      #   be a separate database because ./db/... rolls every migration back to
+      #   zero and `go test ./...` runs packages concurrently. Here it works
+      #   because POSTGRES_USER is a superuser in the service container; on a
+      #   managed Postgres with a least-privilege role it will not, and the
+      #   failure is a permission error at the first CREATE DATABASE.
+      - name: The Postgres adapter behaves against a real Postgres
+        working-directory: apps/api
+        env:
+          TEST_DATABASE_URL: postgres://freakhub:freakhub@localhost:5432/freakhub_test?sslmode=disable
+        run: go test -race -count=1 ./internal/platform/postgres/...
+
   images:
     name: Images · both must build
     runs-on: ubuntu-latest
