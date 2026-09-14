@@ -18,6 +18,7 @@ import "errors"
 //	ErrInvalidNote       → 400 invalid_payload
 //	ErrInvalidCoverURL   → 400 invalid_payload
 //	ErrInvalidMetadata   → 400 invalid_payload
+//	ErrUnstorableText    → 400 invalid_payload
 //	ErrInvalidCategory   → 400 invalid_payload
 //	ErrInvalidStatus     → 400 invalid_payload
 //	ErrInvalidRating     → 400 invalid_payload
@@ -78,6 +79,15 @@ var (
 	// ErrInvalidMetadata means the category-specific object carries, at some
 	// depth, a character no column can store.
 	ErrInvalidMetadata = errors.New("metadata carries a character that cannot be stored")
+	// ErrUnstorableText means the client sent bytes no text or jsonb column
+	// can hold, and the database is what noticed.
+	//
+	// It is the backstop to the rules above, not a replacement for them: a
+	// domain rule answers precisely and before anything is attempted, while
+	// this one only knows that something in the request would not go in. It
+	// firing at all means a rule is missing — which is exactly why it must
+	// not be a 500, and why the SQLSTATE goes to the log.
+	ErrUnstorableText = errors.New("the request carries text that cannot be stored")
 	// ErrInvalidCategory means the payload names a category that does not exist.
 	ErrInvalidCategory = errors.New("category is not one of the declared values")
 	// ErrInvalidStatus means the payload names a status that does not exist.

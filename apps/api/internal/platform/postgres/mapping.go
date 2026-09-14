@@ -25,6 +25,12 @@ import (
 const (
 	uniqueViolation     = "23505"
 	foreignKeyViolation = "23503"
+	// The two ways Postgres says "those bytes cannot live in this column":
+	// 22021 for a byte sequence a text column cannot encode, 22P05 for the
+	// escape a jsonb column will not take. They need no constraint name —
+	// there is no constraint, only the encoding.
+	characterNotInRepertoire = "22021"
+	unsupportedUnicodeEscape = "22P05"
 )
 
 // isNoRows reports whether the error means "nothing matched".
@@ -52,6 +58,35 @@ func isForeignKeyViolation(err error, constraint string) bool {
 	}
 
 	return constraint == "" || pgErr.ConstraintName == constraint
+}
+
+// asUnstorableText turns those two SQLSTATEs into library.ErrUnstorableText,
+// and returns nil for anything else.
+//
+// It is the belt to the domain's braces, and the reason it exists is a score
+// rather than a fear: three rounds of review found three different ways for
+// client bytes to meet a storage constraint the domain had not modelled — an
+// int4 ceiling, U+0000, invalid UTF-8 — and all three reached the caller as a
+// 500. The domain rules are still the primary defence, because they answer
+// precisely and they sit where every caller passes; what they cannot do is
+// cover the kind nobody has thought of yet.
+//
+// So this is not expected to fire. If it does, the domain is missing a rule,
+// and the two things that follow from that are both deliberate: the caller
+// gets a 400, because the request really was unusable and a 500 would blame
+// the wrong side, and the log keeps the SQLSTATE so whoever reads it knows
+// which rule to go and write.
+func asUnstorableText(err error) error {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return nil
+	}
+
+	if pgErr.Code != characterNotInRepertoire && pgErr.Code != unsupportedUnicodeEscape {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %s (SQLSTATE %s)", library.ErrUnstorableText, pgErr.Message, pgErr.Code)
 }
 
 func toTime(value pgtype.Timestamptz) time.Time {

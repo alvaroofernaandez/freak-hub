@@ -79,6 +79,12 @@ var errorRules = []errorRule{
 		"La dirección de la portada contiene un carácter que no se puede guardar."},
 	{library.ErrInvalidMetadata, http.StatusBadRequest, httpx.CodeInvalidPayload,
 		"Los datos de categoría contienen un carácter que no se puede guardar."},
+	// The backstop the adapter raises when a domain rule did not catch the
+	// bytes first. It sits last among the library rules on purpose: every
+	// precise answer above wins over it, and reaching it at all means one of
+	// them is missing.
+	{library.ErrUnstorableText, http.StatusBadRequest, httpx.CodeInvalidPayload,
+		"La petición contiene texto que no se puede guardar."},
 	{library.ErrInvalidFilter, http.StatusBadRequest, httpx.CodeInvalidFilter,
 		"Ese filtro no es válido."},
 	{library.ErrInvalidLimit, http.StatusBadRequest, httpx.CodeInvalidLimit,
