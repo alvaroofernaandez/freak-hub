@@ -55,6 +55,144 @@ func (ns NullInvitationStatus) Value() (driver.Value, error) {
 	return string(ns.InvitationStatus), nil
 }
 
+type LibraryStatus string
+
+const (
+	LibraryStatusWishlist   LibraryStatus = "wishlist"
+	LibraryStatusPending    LibraryStatus = "pending"
+	LibraryStatusInProgress LibraryStatus = "in_progress"
+	LibraryStatusCompleted  LibraryStatus = "completed"
+	LibraryStatusDropped    LibraryStatus = "dropped"
+	LibraryStatusOnHold     LibraryStatus = "on_hold"
+)
+
+func (e *LibraryStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LibraryStatus(s)
+	case string:
+		*e = LibraryStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LibraryStatus: %T", src)
+	}
+	return nil
+}
+
+type NullLibraryStatus struct {
+	LibraryStatus LibraryStatus
+	Valid         bool // Valid is true if LibraryStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLibraryStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.LibraryStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LibraryStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLibraryStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LibraryStatus), nil
+}
+
+type WorkCategory string
+
+const (
+	WorkCategoryAnime     WorkCategory = "anime"
+	WorkCategoryManga     WorkCategory = "manga"
+	WorkCategoryGame      WorkCategory = "game"
+	WorkCategoryFilm      WorkCategory = "film"
+	WorkCategoryBoardgame WorkCategory = "boardgame"
+	WorkCategoryTcg       WorkCategory = "tcg"
+)
+
+func (e *WorkCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = WorkCategory(s)
+	case string:
+		*e = WorkCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for WorkCategory: %T", src)
+	}
+	return nil
+}
+
+type NullWorkCategory struct {
+	WorkCategory WorkCategory
+	Valid        bool // Valid is true if WorkCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullWorkCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.WorkCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.WorkCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullWorkCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.WorkCategory), nil
+}
+
+type WorkSource string
+
+const (
+	WorkSourceAnilist  WorkSource = "anilist"
+	WorkSourceTmdb     WorkSource = "tmdb"
+	WorkSourceIgdb     WorkSource = "igdb"
+	WorkSourceBgg      WorkSource = "bgg"
+	WorkSourceScryfall WorkSource = "scryfall"
+	WorkSourceManual   WorkSource = "manual"
+)
+
+func (e *WorkSource) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = WorkSource(s)
+	case string:
+		*e = WorkSource(s)
+	default:
+		return fmt.Errorf("unsupported scan type for WorkSource: %T", src)
+	}
+	return nil
+}
+
+type NullWorkSource struct {
+	WorkSource WorkSource
+	Valid      bool // Valid is true if WorkSource is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullWorkSource) Scan(value interface{}) error {
+	if value == nil {
+		ns.WorkSource, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.WorkSource.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullWorkSource) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.WorkSource), nil
+}
+
 type Invitation struct {
 	ID                uuid.UUID
 	ClerkInvitationID string
@@ -65,6 +203,22 @@ type Invitation struct {
 	AcceptedAt        pgtype.Timestamptz
 }
 
+type LibraryEntry struct {
+	ID          uuid.UUID
+	MemberID    uuid.UUID
+	WorkID      uuid.UUID
+	Status      LibraryStatus
+	Progress    int32
+	Rating      *int32
+	IsFavourite bool
+	Owned       bool
+	Note        *string
+	StartedAt   pgtype.Timestamptz
+	FinishedAt  pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type Member struct {
 	ID          uuid.UUID
 	ClerkUserID string
@@ -73,6 +227,21 @@ type Member struct {
 	AvatarUrl   string
 	Email       string
 	InvitedBy   *uuid.UUID
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+type Work struct {
+	ID          uuid.UUID
+	Title       string
+	Category    WorkCategory
+	Source      WorkSource
+	SourceID    *string
+	CoverUrl    *string
+	Synopsis    *string
+	Year        *int32
+	Metadata    []byte
+	ExpansionOf *uuid.UUID
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
 }
