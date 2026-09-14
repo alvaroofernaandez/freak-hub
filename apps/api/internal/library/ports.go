@@ -13,6 +13,9 @@ import (
 // history. A rule enforced by the absence of a method cannot be broken by
 // forgetting to check it.
 type WorkRepository interface {
+	// Create returns ErrWorkAlreadyImported when an imported work with the
+	// same (source, source_id) is already in the catalogue. Manual works
+	// carry no source id and are never refused for that reason.
 	Create(ctx context.Context, work Work) (Work, error)
 	// ByID returns ErrWorkNotFound when no work carries that id.
 	ByID(ctx context.Context, id uuid.UUID) (Work, error)
@@ -30,6 +33,10 @@ type WorkRepository interface {
 // Every lookup that can reach somebody else's entry takes the member as well,
 // so a forgotten owner check is a compile error rather than a leak.
 type EntryRepository interface {
+	// Create returns ErrAlreadyInLibrary when that member already keeps that
+	// work (domain rule 1). The service checks first, but checking and
+	// creating are two steps and two requests can interleave between them,
+	// so the storage layer is where the rule is actually held.
 	Create(ctx context.Context, entry Entry) (Entry, error)
 	// ByID returns ErrEntryNotFound when no entry carries that id. It does
 	// not filter by owner: the service is what decides that somebody else's

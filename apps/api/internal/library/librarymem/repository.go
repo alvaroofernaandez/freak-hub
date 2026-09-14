@@ -58,13 +58,24 @@ func (r *WorkRepository) Seed(work library.Work) library.Work {
 	return work
 }
 
-// Create implements library.WorkRepository.
+// Create implements library.WorkRepository, holding the partial unique index
+// the schema will: imported works are unique by (source, source_id), and
+// manual works — whose source id is empty by definition — are not
+// deduplicated at all.
 func (r *WorkRepository) Create(_ context.Context, work library.Work) (library.Work, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.CreateErr != nil {
 		return library.Work{}, r.CreateErr
+	}
+
+	if work.SourceID != "" {
+		for _, item := range r.items {
+			if item.Source == work.Source && item.SourceID == work.SourceID {
+				return library.Work{}, library.ErrWorkAlreadyImported
+			}
+		}
 	}
 
 	work.ID = uuid.New()
@@ -252,13 +263,25 @@ func (r *EntryRepository) Seed(entry library.Entry) library.Entry {
 	return entry
 }
 
-// Create implements library.EntryRepository.
+// Create implements library.EntryRepository, holding the unique index over
+// (member_id, work_id) that domain rule 1 rests on.
+//
+// The service checks with ByMemberAndWork before calling this, but checking
+// and creating are two steps: two interleaved requests both pass the check.
+// Refusing here is what turns that race into ErrAlreadyInLibrary — a 409 —
+// instead of whatever the storage engine would have raised on its own.
 func (r *EntryRepository) Create(_ context.Context, entry library.Entry) (library.Entry, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if r.CreateErr != nil {
 		return library.Entry{}, r.CreateErr
+	}
+
+	for _, item := range r.items {
+		if item.MemberID == entry.MemberID && item.WorkID == entry.WorkID {
+			return library.Entry{}, library.ErrAlreadyInLibrary
+		}
 	}
 
 	entry.ID = uuid.New()

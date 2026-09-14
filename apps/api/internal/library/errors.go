@@ -20,6 +20,13 @@ import "errors"
 //	ErrInvalidLimit      → 400 invalid_limit
 //	ErrMissingMember     → 401 unauthorized
 //
+// ErrWorkAlreadyImported is the one error with no code yet, and deliberately
+// so: POST /v1/works only creates manual works, which are not deduplicated,
+// so nothing can raise it across the wire today. The importer that will —
+// the one that turns an AniList id into a shared Work — needs a code of its
+// own in the contract before it ships, and this is where that conversation
+// starts rather than where it is quietly settled.
+//
 // Nothing else escapes this package unwrapped: a repository failure travels
 // out wrapped with %w, so a caller can still tell it apart with errors.Is
 // while the transport layer answers 500.
@@ -29,6 +36,12 @@ var (
 	ErrAlreadyInLibrary = errors.New("this work is already in the member's library")
 	// ErrWorkNotFound means no work carries that id.
 	ErrWorkNotFound = errors.New("work not found")
+	// ErrWorkAlreadyImported means that catalogue record is already in the
+	// shared catalogue: imported works are unique by (source, source_id),
+	// which is what makes two members importing the same anime land on one
+	// row. It does not apply to manual works, whose source id is empty by
+	// definition and which are deliberately not deduplicated.
+	ErrWorkAlreadyImported = errors.New("that catalogue record is already in the shared catalogue")
 	// ErrEntryNotFound means the caller has no entry with that id. Somebody
 	// else's entry answers with this too: whose library holds what is nobody
 	// else's business, so the answer is 404 and never 403.
