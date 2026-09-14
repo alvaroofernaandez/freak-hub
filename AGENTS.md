@@ -112,6 +112,7 @@ make -C apps/api help        # todos los targets del backend
 | `auth()` sin `await` | Siempre se espera |
 | Editar `sqlcgen/` | Es generado. Cambia `db/queries/` y regenera |
 | Editar una migración ya aplicada | Nunca. Se escribe otra |
+| El número que da `migrate-new` sirve | Usa la hora real. Si queda por debajo de una migración ya aplicada, goose **aborta todo `up` incremental**: `found N missing migrations before current version`. Renómbrala antes de escribir SQL |
 | Tocar `.env.local` | Contiene claves reales. Documenta en `.env.example` |
 
 ## Mapa rápido

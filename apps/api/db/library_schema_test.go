@@ -1,0 +1,407 @@
+package db_test
+
+import (
+	"database/sql"
+	"strings"
+	"testing"
+
+	"github.com/pressly/goose/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// The library schema is the first migration in this repository whose value is
+// almost entirely in its constraints: three unique or referential invariants
+// that domain.md says the database has to hold, because Go cannot hold them
+// against two concurrent writes. A constraint nobody exercises is a comment,
+// so every one of them gets a row that must be refused here.
+//
+// Like the backfill tests above, these need a throwaway Postgres and skip
+// without TEST_DATABASE_URL. The `migrations` CI job sets it.
+const (
+	versionBeforeLibrary int64 = 20260914120000
+	versionLibrary       int64 = 20260914130000
+)
+
+const (
+	memberID     = "11111111-1111-1111-1111-111111111111"
+	otherMember  = "22222222-2222-2222-2222-222222222222"
+	importedWork = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+	manualWork   = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+	baseGame     = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	expansion    = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+	accentedWork = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
+	percentWork  = "ffffffff-ffff-ffff-ffff-ffffffffffff"
+)
+
+// seedLibrary rebuilds the schema from zero up to the library migration and
+// fills it with the shapes the constraints have to tell apart.
+func seedLibrary(t *testing.T, connection *sql.DB) {
+	t.Helper()
+
+	require.NoError(t, goose.DownToContext(t.Context(), connection, "migrations", 0))
+	require.NoError(t, goose.UpToContext(t.Context(), connection, "migrations", versionLibrary))
+
+	_, err := connection.ExecContext(t.Context(), `
+INSERT INTO members (id, clerk_user_id, username, display_name) VALUES
+  ('`+memberID+`', 'user_a', 'alvaro', 'Álvaro'),
+  ('`+otherMember+`', 'user_b', 'alex',  'Alex');
+
+INSERT INTO works (id, title, category, source, source_id) VALUES
+  ('`+importedWork+`', 'Fullmetal Alchemist: Brotherhood', 'anime', 'anilist', '5114'),
+  ('`+manualWork+`',   'Un fanzine que no cataloga nadie', 'manga', 'manual',  NULL),
+  ('`+baseGame+`',     'Terraforming Mars',                'boardgame', 'bgg', '167791'),
+  ('`+accentedWork+`', 'Pokémon: Índigo',                  'anime', 'anilist', '527'),
+  ('`+percentWork+`',  '100% Teacher',                     'manga', 'manual',  NULL);
+
+INSERT INTO works (id, title, category, source, source_id, expansion_of) VALUES
+  ('`+expansion+`', 'Terraforming Mars: Preludio', 'boardgame', 'bgg', '247030', '`+baseGame+`');
+
+INSERT INTO library_entries (member_id, work_id, status) VALUES
+  ('`+memberID+`', '`+importedWork+`', 'in_progress');
+`)
+	require.NoError(t, err)
+}
+
+func TestLibrarySchemaHoldsTheInvariantsTheDomainCannot(t *testing.T) {
+	connection := migrationsDB(t)
+	seedLibrary(t, connection)
+
+	exec := func(statement string) error {
+		_, err := connection.ExecContext(t.Context(), statement)
+
+		return err
+	}
+
+	t.Run("a member holds at most one entry per work", func(t *testing.T) {
+		err := exec(`INSERT INTO library_entries (member_id, work_id, status)
+                     VALUES ('` + memberID + `', '` + importedWork + `', 'completed')`)
+		require.Error(t, err, "domain rule 1: a second entry for the same pair must be refused by the database")
+		assert.Contains(t, err.Error(), "library_entries_member_work_idx")
+	})
+
+	t.Run("another member may keep the same work", func(t *testing.T) {
+		assert.NoError(t, exec(`INSERT INTO library_entries (member_id, work_id, status)
+                                VALUES ('`+otherMember+`', '`+importedWork+`', 'wishlist')`),
+			"one shared work with one row per person is the whole point of the split")
+	})
+
+	t.Run("an imported work is unique by source and source_id", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('FMA:B otra vez', 'anime', 'anilist', '5114')`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "works_source_idx")
+	})
+
+	t.Run("the same source_id in another catalogue is a different work", func(t *testing.T) {
+		assert.NoError(t, exec(`INSERT INTO works (title, category, source, source_id)
+                                VALUES ('Algo en TMDB', 'film', 'tmdb', '5114')`),
+			"the uniqueness is over the pair, not over source_id alone")
+	})
+
+	t.Run("manual works are not deduplicated", func(t *testing.T) {
+		assert.NoError(t, exec(`INSERT INTO works (title, category, source, source_id)
+                                VALUES ('Un fanzine que no cataloga nadie', 'manga', 'manual', NULL)`),
+			"source_id is NULL for manual entries and the partial index leaves them out on purpose")
+	})
+
+	t.Run("an imported work must carry the id it was imported by", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('Ghost import', 'anime', 'anilist', NULL)`)
+		require.Error(t, err,
+			"an imported work with a null source_id is invisible to the partial unique index, "+
+				"so deduplication would silently stop working")
+		assert.Contains(t, err.Error(), "works_source_id_matches_source")
+	})
+
+	t.Run("an imported work cannot carry a blank external id", func(t *testing.T) {
+		// The mirror image of the null case, and worse: an empty source_id IS
+		// indexed, so two different anime imported with a blank id collide on
+		// ('anilist', ''). An importer that looks before inserting would find
+		// the first and hand somebody a library entry pointing at a different
+		// anime, silently. Whitespace-only brings back the original bug from a
+		// third door, since '  ' and '   ' never collide with each other.
+		for _, blank := range []string{"", " ", "   ", "\t", "\n"} {
+			err := exec(`INSERT INTO works (title, category, source, source_id)
+                         VALUES ('Ghost blank', 'anime', 'anilist', '` + blank + `')`)
+			require.Errorf(t, err, "a blank source_id (%q) is 'unknown' dressed as an identifier", blank)
+			assert.Contains(t, err.Error(), "works_source_id_matches_source")
+		}
+	})
+
+	t.Run("an external id may not be padded with whitespace", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('Padded import', 'anime', 'anilist', ' 5114 ')`)
+		require.Error(t, err,
+			"' 5114' and '5114' are different strings, so both would go in and never collide")
+		assert.Contains(t, err.Error(), "works_source_id_matches_source")
+	})
+
+	t.Run("a manual work cannot claim an external id", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('Fake manual', 'anime', 'manual', '5114')`)
+		require.Error(t, err, "the other direction of the same rule")
+		assert.Contains(t, err.Error(), "works_source_id_matches_source")
+	})
+
+	t.Run("a work cannot expand itself", func(t *testing.T) {
+		err := exec(`UPDATE works SET expansion_of = id WHERE id = '` + baseGame + `'`)
+		require.Error(t, err, "the foreign key accepts it happily: it points back into the same table")
+		assert.Contains(t, err.Error(), "works_expansion_of_is_another_work")
+	})
+
+	t.Run("a work in somebody's library cannot be deleted", func(t *testing.T) {
+		err := exec(`DELETE FROM works WHERE id = '` + importedWork + `'`)
+		require.Error(t, err, "domain rule 3: a work is shared history and is never deleted")
+		assert.Contains(t, err.Error(), "library_entries_work_id_fkey")
+	})
+
+	t.Run("a base game cannot be deleted while an expansion points at it", func(t *testing.T) {
+		err := exec(`DELETE FROM works WHERE id = '` + baseGame + `'`)
+		require.Error(t, err, "ADR-0006: an expansion linked to nothing is worse than no expansion")
+		assert.Contains(t, err.Error(), "works_expansion_of_fkey")
+	})
+
+	t.Run("progress cannot go backwards past zero", func(t *testing.T) {
+		err := exec(`UPDATE library_entries SET progress = -1 WHERE member_id = '` + memberID + `'`)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "library_entries_progress_check")
+	})
+
+	t.Run("a rating outside one to ten is refused", func(t *testing.T) {
+		for _, rating := range []string{"0", "11"} {
+			err := exec(`UPDATE library_entries SET rating = ` + rating + ` WHERE member_id = '` + memberID + `'`)
+			require.Errorf(t, err, "rating %s is outside the scale", rating)
+			assert.Contains(t, err.Error(), "library_entries_rating_check")
+		}
+	})
+
+	t.Run("a rating is accepted whatever the status", func(t *testing.T) {
+		assert.NoError(t, exec(`UPDATE library_entries SET rating = 9, status = 'wishlist'
+                                WHERE member_id = '`+memberID+`'`),
+			"domain rule 2 belongs to the service: the schema owns the 1..10 scale and nothing more")
+	})
+
+	t.Run("metadata defaults to an empty object and is never null", func(t *testing.T) {
+		var metadata string
+		require.NoError(t, connection.QueryRowContext(t.Context(),
+			`SELECT metadata::text FROM works WHERE id = '`+manualWork+`'`).Scan(&metadata))
+		assert.Equal(t, "{}", metadata)
+
+		assert.Error(t, exec(`UPDATE works SET metadata = NULL WHERE id = '`+manualWork+`'`))
+	})
+
+	t.Run("leaving the group takes your entries and leaves the catalogue", func(t *testing.T) {
+		require.NoError(t, exec(`DELETE FROM members WHERE id = '`+memberID+`'`))
+
+		var entries, works int
+		require.NoError(t, connection.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM library_entries WHERE member_id = '`+memberID+`'`).Scan(&entries))
+		require.NoError(t, connection.QueryRowContext(t.Context(),
+			`SELECT count(*) FROM works WHERE id = '`+importedWork+`'`).Scan(&works))
+
+		assert.Zero(t, entries, "domain rule 4: a member's entries go with them")
+		assert.Equal(t, 1, works, "domain rule 3: their works stay")
+	})
+}
+
+// The contract promises the title search is case- AND accent-insensitive, which
+// in a Spanish-language product is the difference between finding Pokémon and
+// not finding it. The folding happens in the schema — immutable_unaccent over
+// an installed extension — so it is the schema that has to prove it works.
+func TestTheTitleSearchFoldsCaseAndAccents(t *testing.T) {
+	connection := migrationsDB(t)
+	seedLibrary(t, connection)
+
+	// The same expression works_title_search_idx indexes and ListWorks spells,
+	// with the term escaped so a % from the caller stays a literal percent.
+	const search = `
+SELECT title FROM works
+WHERE immutable_unaccent(lower(title)) LIKE
+      '%' || replace(replace(replace(
+          immutable_unaccent(lower($1)), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+ORDER BY title`
+
+	found := func(term string) []string {
+		rows, err := connection.QueryContext(t.Context(), search, term)
+		require.NoError(t, err)
+		defer func() { assert.NoError(t, rows.Close()) }()
+
+		titles := []string{}
+		for rows.Next() {
+			var title string
+			require.NoError(t, rows.Scan(&title))
+			titles = append(titles, title)
+		}
+		require.NoError(t, rows.Err())
+
+		return titles
+	}
+
+	assert.Equal(t, []string{"Pokémon: Índigo"}, found("pokemon"),
+		"typing without accents is how most people type, and it has to find the work")
+	assert.Equal(t, []string{"Pokémon: Índigo"}, found("POKÉMON"),
+		"and so does typing with them, in any case")
+	assert.Equal(t, []string{"Pokémon: Índigo"}, found("indigo"),
+		"the fold applies to every accented character, not just the first")
+	assert.Equal(t, []string{"Terraforming Mars", "Terraforming Mars: Preludio"}, found("terraforming"),
+		"a substring match, not a prefix one")
+
+	assert.Equal(t, []string{"100% Teacher"}, found("100%"),
+		"a % from the caller is a percent sign, never a wildcard")
+	assert.Empty(t, found("100%Teacher"),
+		"and if it were a wildcard this would match, which is exactly the bug the escaping prevents")
+	assert.Empty(t, found("_"), "the same goes for the single-character wildcard")
+
+	// The ones that no ASCII test reaches: unaccent itself emits wildcards.
+	// Six codepoints fold onto LIKE's own metacharacters, so if the escaping
+	// ran before the folding instead of around it, a term carrying one of them
+	// would arrive at the pattern with a live wildcard in it.
+	//
+	// The protection is universal by construction — the escaping wraps the
+	// folding, so it cannot matter which character the fold produces — and
+	// these cases pin it rather than enumerate it. The two that fold to % and
+	// the one that folds to _ are the sharp ones: unescaped they would match
+	// "100% Teacher", escaped they must not. The three that fold to a
+	// backslash cannot be made sharp in the same way, because a stray
+	// backslash in a pattern mostly degrades into escaping whatever follows
+	// it; they assert the weaker but still useful claim that the term stays a
+	// literal and nothing errors.
+	for _, folded := range []struct{ name, term string }{
+		{"U+FF05 ％ folds to %", "100\uff05Teach"},
+		{"U+FE6A ﹪ folds to %", "100\ufe6aTeach"},
+		{"U+FF3F ＿ folds to _", "100\uff3f Teach"},
+		{"U+FF3C ＼ folds to a backslash", "100\uff3c% Teach"},
+		{"U+FE68 ﹨ folds to a backslash", "100\ufe68% Teach"},
+		{"U+2216 ∖ folds to a backslash", "100\u2216% Teach"},
+		{"a mixed term", "AAA\uff05%BBB"},
+		{"another mixed term", "A\uff3f_A"},
+	} {
+		assert.Emptyf(t, found(folded.term),
+			"%s: escaping wraps folding, never the other way round", folded.name)
+	}
+
+	assert.Equal(t, []string{"100% Teacher"}, found("100\uff05"),
+		"and a folded wildcard still finds what somebody typing it actually meant")
+}
+
+// The risk the issue names out loud: a Down that drops the tables and forgets
+// the enum types leaves a database where the migration can never be applied
+// again, and `CREATE TYPE` is the statement that says so. Rolling forward,
+// back and forward again is the only way to find out.
+func TestLibraryMigrationRollsBackIncludingItsEnumTypes(t *testing.T) {
+	connection := migrationsDB(t)
+	seedLibrary(t, connection)
+
+	exists := func(query, name string) bool {
+		var found bool
+		require.NoError(t, connection.QueryRowContext(t.Context(), query, name).Scan(&found))
+
+		return found
+	}
+
+	const (
+		tableExists = `SELECT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = $1)`
+		typeExists  = `SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = $1)`
+	)
+
+	require.True(t, exists(tableExists, "works"))
+	require.True(t, exists(tableExists, "library_entries"))
+
+	require.NoError(t, goose.DownToContext(t.Context(), connection, "migrations", versionBeforeLibrary))
+
+	assert.False(t, exists(tableExists, "library_entries"), "the Down must drop the table")
+	assert.False(t, exists(tableExists, "works"), "the Down must drop the table")
+	for _, enum := range []string{"work_category", "work_source", "library_status"} {
+		assert.Falsef(t, exists(typeExists, enum), "the Down must drop the %s type too", enum)
+	}
+
+	assert.True(t, exists(typeExists, "invitation_status"), "and must not touch a type it did not create")
+
+	require.NoError(t, goose.UpToContext(t.Context(), connection, "migrations", versionLibrary),
+		"re-applying is what proves the Down left nothing behind")
+	assert.True(t, exists(tableExists, "library_entries"))
+}
+
+// ADR-0011 only works if the index serves the whole ORDER BY. With three rows
+// Postgres will always pick a sequential scan, so seqscan is turned off to ask
+// the planner a different question: given the choice, can this index answer the
+// keyset without sorting? A missing id tiebreak or a wrong column order shows
+// up here as a Sort node.
+func TestTheLibraryKeysetWalksItsIndex(t *testing.T) {
+	connection := migrationsDB(t)
+	seedLibrary(t, connection)
+
+	_, err := connection.ExecContext(t.Context(), `SET enable_seqscan = off`)
+	require.NoError(t, err)
+
+	plan := func(query string) string {
+		rows, err := connection.QueryContext(t.Context(), "EXPLAIN "+query)
+		require.NoError(t, err)
+		defer func() { assert.NoError(t, rows.Close()) }()
+
+		var explained strings.Builder
+		for rows.Next() {
+			var line string
+			require.NoError(t, rows.Scan(&line))
+			explained.WriteString(line + "\n")
+		}
+		require.NoError(t, rows.Err())
+
+		return explained.String()
+	}
+
+	t.Run("the caller's own library, newest first", func(t *testing.T) {
+		explained := plan(`
+SELECT * FROM library_entries
+WHERE member_id = '` + memberID + `'
+  AND (created_at, id) < (now(), '` + importedWork + `')
+ORDER BY created_at DESC, id DESC
+LIMIT 26`)
+
+		assert.Contains(t, explained, "library_entries_member_created_idx")
+		assert.NotContains(t, explained, "Sort", "the index already delivers the order the keyset walks")
+	})
+
+	t.Run("the shared catalogue by category", func(t *testing.T) {
+		explained := plan(`
+SELECT * FROM works
+WHERE category = 'anime'
+  AND (created_at, id) < (now(), '` + importedWork + `')
+ORDER BY created_at DESC, id DESC
+LIMIT 26`)
+
+		assert.Contains(t, explained, "works_category_created_idx")
+		assert.NotContains(t, explained, "Sort")
+	})
+
+	t.Run("the title search", func(t *testing.T) {
+		explained := plan(`
+SELECT * FROM works
+WHERE immutable_unaccent(lower(title)) LIKE '%pokemon%'`)
+
+		assert.Contains(t, explained, "works_title_search_idx",
+			"a GIN trigram index is the only thing that answers a substring match without reading every row")
+	})
+
+	t.Run("filtering the library by status", func(t *testing.T) {
+		// The shape ListLibraryEntries really emits: the status filter AND the
+		// keyset ORDER BY together. Asserting on a bare SELECT without the
+		// ORDER BY was false comfort — it is a query this codebase never
+		// sends, and it hid that a plain (member_id, status) index is never
+		// chosen, because it cannot deliver the order and the other index can.
+		explained := plan(`
+SELECT le.*, w.*
+FROM library_entries le
+JOIN works w ON w.id = le.work_id
+WHERE le.member_id = '` + memberID + `'
+  AND le.status = 'in_progress'
+ORDER BY le.created_at DESC, le.id DESC
+LIMIT 26`)
+
+		assert.Contains(t, explained, "library_entries_member_status_idx",
+			"the status index only earns its place if the planner picks it for the real query")
+		assert.NotContains(t, explained, "Sort",
+			"and it only gets picked because it carries the keyset columns after (member_id, status)")
+	})
+}
