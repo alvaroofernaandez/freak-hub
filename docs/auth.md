@@ -123,7 +123,7 @@ Clerk entrega los eventos en `POST /webhooks/clerk`, firmados con Svix.
 | Evento | Efecto |
 | :--- | :--- |
 | `user.created` | Crea el miembro anotando quién lo invitó y marca la invitación aceptada |
-| `user.updated` | Refresca nombre, usuario y avatar |
+| `user.updated` | Refresca nombre, usuario y avatar. Pasa por el mismo camino que `user.created`, así que también busca y cierra una invitación pendiente para ese correo |
 | `user.deleted` | Borra el miembro |
 | cualquier otro | Se responde 204 y se ignora |
 

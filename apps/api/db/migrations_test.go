@@ -3,6 +3,7 @@ package db_test
 import (
 	"database/sql"
 	"io/fs"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -82,15 +83,27 @@ const (
 
 // migrationsDB opens the database the backfill tests run against, or skips
 // them. It also leaves goose configured against the embedded migrations.
+//
+// These tests start by rolling every migration back to zero, which drops the
+// members and invitations tables outright. Pointed at the development database
+// that `pnpm infra:up` starts, they would quietly delete the developer's own
+// data on every `make test`. So the name has to end in `_test`: a throwaway
+// database says so in its name, and `freakhub` does not.
 func migrationsDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	url := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
-	if url == "" {
-		t.Skip("TEST_DATABASE_URL is not set: this test needs a real Postgres (pnpm infra:up)")
+	rawURL := strings.TrimSpace(os.Getenv("TEST_DATABASE_URL"))
+	if rawURL == "" {
+		t.Skip(
+			"TEST_DATABASE_URL is not set: these tests need a throwaway Postgres " +
+				"whose database name ends in _test. They drop every table, so do not " +
+				"point this at the database `pnpm infra:up` starts.",
+		)
 	}
 
-	connection, err := sql.Open("pgx", url)
+	requireThrowawayDatabase(t, rawURL)
+
+	connection, err := sql.Open("pgx", rawURL)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, connection.Close()) })
 
@@ -101,6 +114,26 @@ func migrationsDB(t *testing.T) *sql.DB {
 	require.NoError(t, goose.SetDialect("postgres"))
 
 	return connection
+}
+
+// requireThrowawayDatabase fails the run when TEST_DATABASE_URL names anything
+// but a database whose name ends in `_test`. Failing is deliberate: skipping
+// would let a mistyped URL pass unnoticed, and the mistake this guards against
+// destroys data.
+func requireThrowawayDatabase(t *testing.T, rawURL string) {
+	t.Helper()
+
+	parsed, err := url.Parse(rawURL)
+	require.NoError(t, err, "TEST_DATABASE_URL must be a valid connection URL")
+
+	name := strings.TrimPrefix(parsed.Path, "/")
+	require.True(
+		t,
+		strings.HasSuffix(name, "_test"),
+		"TEST_DATABASE_URL points at %q, and these tests drop every table. "+
+			"Use a throwaway database whose name ends in _test.",
+		name,
+	)
 }
 
 // seedPreBackfill rebuilds the schema up to just before the backfill and fills
