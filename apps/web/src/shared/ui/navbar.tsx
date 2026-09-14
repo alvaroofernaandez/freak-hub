@@ -86,12 +86,19 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
             Añadir
           </button>
           {pendingRecommendations ? (
-            <output
+            /*
+             * The only notification badge in the product (docs/screens.md), so
+             * it has to lead somewhere: the screen that lists what is waiting
+             * on you. A count you cannot act on is a decoration.
+             */
+            <Link
+              href="/recomendaciones"
               aria-label={`${pendingRecommendations} recomendaciones pendientes`}
-              className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium text-accent-ink"
+              aria-current={isCurrent("/recomendaciones") ? "page" : undefined}
+              className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium text-accent-ink transition-opacity duration-150 hover:opacity-90"
             >
               {pendingRecommendations}
-            </output>
+            </Link>
           ) : null}
           {userSlot}
         </div>
