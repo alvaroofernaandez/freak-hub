@@ -20,12 +20,12 @@ var (
 	ErrAlreadyMember  = errors.New("this email already belongs to a member")
 	ErrNotFound       = errors.New("invitation not found")
 	ErrMissingInviter = errors.New("inviter is required")
-	// ErrInvalidLimit is returned by ListGroup when limit falls outside
-	// [MinListLimit, MaxListLimit] (ADR-0011).
+	// ErrInvalidLimit is returned by ListMine and ListGroup when limit falls
+	// outside [MinListLimit, MaxListLimit] (ADR-0011).
 	ErrInvalidLimit = errors.New("limit must be between 1 and 100")
 )
 
-// ListGroup page bounds (ADR-0011:
+// Page bounds every invitation listing shares (ADR-0011:
 // docs/decisions/0011-paginacion-por-cursor.md).
 const (
 	MinListLimit     = 1
@@ -55,9 +55,9 @@ type Invitation struct {
 	AcceptedAt        *time.Time
 }
 
-// Cursor is an invitation's position in the stable group order ListGroup
-// uses for keyset pagination: created_at descending (newest first), tie-broken
-// by id descending (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md).
+// Cursor is an invitation's position in the stable order both listings use
+// for keyset pagination: created_at descending (newest first), tie-broken by
+// id descending (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md).
 type Cursor struct {
 	CreatedAt time.Time
 	ID        uuid.UUID

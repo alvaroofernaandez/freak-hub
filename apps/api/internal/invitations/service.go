@@ -89,13 +89,36 @@ func (s *Service) Invite(ctx context.Context, inviterID uuid.UUID, rawEmail stri
 	return invitation, nil
 }
 
-// ListMine returns the invitations a member has sent.
-func (s *Service) ListMine(ctx context.Context, inviterID uuid.UUID) ([]Invitation, error) {
+// ListMine returns a page of the invitations a member has sent, newest first
+// (ADR-0011), and the cursor to fetch the next page, or nil when this is the
+// last one. Every status is included — an accepted invitation is still part
+// of the trail of who invited whom, so it is not this listing's job to hide
+// it.
+func (s *Service) ListMine(ctx context.Context, inviterID uuid.UUID, after *Cursor, limit int) ([]Invitation, *Cursor, error) {
 	if inviterID == uuid.Nil {
-		return nil, ErrMissingInviter
+		return nil, nil, ErrMissingInviter
 	}
 
-	return s.repo.ListByInviter(ctx, inviterID)
+	if limit < MinListLimit || limit > MaxListLimit {
+		return nil, nil, ErrInvalidLimit
+	}
+
+	// Ask for one extra row: its presence, not a COUNT(*), is what tells us
+	// whether another page follows (ADR-0011).
+	rows, err := s.repo.ListByInviter(ctx, inviterID, after, limit+1)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list invitations sent by %s: %w", inviterID, err)
+	}
+
+	if len(rows) <= limit {
+		return rows, nil, nil
+	}
+
+	rows = rows[:limit]
+	last := rows[len(rows)-1]
+	next := Cursor{CreatedAt: last.CreatedAt, ID: last.ID}
+
+	return rows, &next, nil
 }
 
 // ListGroup returns a page of every invitation the group has ever sent,

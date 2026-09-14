@@ -280,7 +280,7 @@ func TestCreateInvitationSendsIt(t *testing.T) {
 	assert.Equal(t, "pending", body["status"])
 	assert.Equal(t, []string{"amigo@correo.com"}, s.sender.Emails)
 
-	stored, err := s.inviteRepo.ListByInviter(context.Background(), inviter.ID)
+	stored, err := s.inviteRepo.ListByInviter(context.Background(), inviter.ID, nil, invitations.MaxListLimit)
 	require.NoError(t, err)
 	require.Len(t, stored, 1)
 	assert.Equal(t, inviter.ID, stored[0].InviterID)
@@ -328,7 +328,23 @@ func TestCreateInvitationRejectsAnUnknownField(t *testing.T) {
 	assert.Empty(t, s.sender.Emails)
 }
 
-func TestListMyInvitations(t *testing.T) {
+type invitationPageBody struct {
+	Items      []map[string]any `json:"items"`
+	NextCursor *string          `json:"next_cursor"`
+}
+
+func TestListMyInvitationsRequiresASession(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodGet, "/v1/invitations", "", nil)
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+}
+
+// TestListMyInvitationsAnswersThePageEnvelope is the ADR-0011 envelope on the
+// one listing that used to answer with a bare `items` object: `next_cursor`
+// is part of the contract even on the last page, where it is null.
+func TestListMyInvitationsAnswersThePageEnvelope(t *testing.T) {
 	t.Parallel()
 
 	s := newSuite(t)
@@ -339,10 +355,89 @@ func TestListMyInvitations(t *testing.T) {
 	recorder := s.do(t, http.MethodGet, "/v1/invitations", "valid-user_123", nil)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
-	body := decode[struct {
-		Items []map[string]any `json:"items"`
-	}](t, recorder)
+	assert.Contains(t, recorder.Body.String(), "next_cursor",
+		"the envelope carries next_cursor even when it is null")
+
+	body := decode[invitationPageBody](t, recorder)
 	assert.Len(t, body.Items, 2)
+	assert.Nil(t, body.NextCursor, "two invitations fit in one page")
+}
+
+func TestListMyInvitationsPaginatesNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_1", "alvaro")
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.Equal(t, http.StatusCreated, s.createInvitationAt(t, "valid-user_1", "a@correo.com", base).Code)
+	require.Equal(t, http.StatusCreated, s.createInvitationAt(t, "valid-user_1", "b@correo.com", base.Add(time.Hour)).Code)
+	require.Equal(t, http.StatusCreated, s.createInvitationAt(t, "valid-user_1", "c@correo.com", base.Add(2*time.Hour)).Code)
+
+	first := s.do(t, http.MethodGet, "/v1/invitations?limit=2", "valid-user_1", nil)
+	require.Equal(t, http.StatusOK, first.Code)
+	firstBody := decode[invitationPageBody](t, first)
+	require.Len(t, firstBody.Items, 2)
+	require.NotNil(t, firstBody.NextCursor)
+	assert.Equal(t, "c@correo.com", firstBody.Items[0]["email"])
+	assert.Equal(t, "b@correo.com", firstBody.Items[1]["email"])
+
+	second := s.do(t, http.MethodGet,
+		"/v1/invitations?limit=2&cursor="+url.QueryEscape(*firstBody.NextCursor), "valid-user_1", nil)
+	require.Equal(t, http.StatusOK, second.Code)
+	secondBody := decode[invitationPageBody](t, second)
+	require.Len(t, secondBody.Items, 1)
+	assert.Equal(t, "a@correo.com", secondBody.Items[0]["email"])
+	assert.Nil(t, secondBody.NextCursor)
+}
+
+// TestListMyInvitationsIsScopedToTheCaller is what separates this listing
+// from /v1/invitations/group: paginating it must not widen it.
+func TestListMyInvitationsIsScopedToTheCaller(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_1", "alvaro")
+	s.seedMember(t, "user_2", "bea")
+
+	require.Equal(t, http.StatusCreated,
+		s.do(t, http.MethodPost, "/v1/invitations", "valid-user_1", map[string]string{"email": "a@correo.com"}).Code)
+	require.Equal(t, http.StatusCreated,
+		s.do(t, http.MethodPost, "/v1/invitations", "valid-user_2", map[string]string{"email": "b@correo.com"}).Code)
+
+	recorder := s.do(t, http.MethodGet, "/v1/invitations", "valid-user_1", nil)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	body := decode[invitationPageBody](t, recorder)
+	require.Len(t, body.Items, 1)
+	assert.Equal(t, "a@correo.com", body.Items[0]["email"])
+}
+
+func TestListMyInvitationsRejectsAnInvalidLimit(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_1", "alvaro")
+
+	for _, limit := range []string{"0", "101", "not-a-number"} {
+		recorder := s.do(t, http.MethodGet, "/v1/invitations?limit="+limit, "valid-user_1", nil)
+
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code, "limit=%s", limit)
+		assert.Equalf(t, "invalid_limit", errorCode(t, recorder),
+			"limit=%s must be refused, never clamped in silence", limit)
+	}
+}
+
+func TestListMyInvitationsRejectsAnInvalidCursor(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_1", "alvaro")
+
+	recorder := s.do(t, http.MethodGet, "/v1/invitations?cursor=not-a-valid-cursor", "valid-user_1", nil)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_cursor", errorCode(t, recorder))
 }
 
 type groupInvitationPageBody struct {

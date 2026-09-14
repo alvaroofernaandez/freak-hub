@@ -58,9 +58,24 @@ func (r *InvitationRepository) Create(ctx context.Context, invitation invitation
 	return toDomainInvitation(row), nil
 }
 
-// ListByInviter returns a member's invitations, newest first.
-func (r *InvitationRepository) ListByInviter(ctx context.Context, inviterID uuid.UUID) ([]invitations.Invitation, error) {
-	rows, err := r.queries.InvitationsByInviter(ctx, inviterID)
+// ListByInviter returns a page of one member's invitations, newest first
+// (ADR-0011). The opaque cursor is decoded before it gets here: this adapter
+// only ever sees the (created_at, id) position it points at.
+func (r *InvitationRepository) ListByInviter(
+	ctx context.Context, inviterID uuid.UUID, after *invitations.Cursor, limit int,
+) ([]invitations.Invitation, error) {
+	if limit < 0 || limit > math.MaxInt32 {
+		return nil, fmt.Errorf("list invitations by inviter: limit %d out of range", limit)
+	}
+
+	params := sqlcgen.InvitationsByInviterParams{InviterID: inviterID, PageLimit: int32(limit)}
+	if after != nil {
+		params.AfterCreatedAt = pgtype.Timestamptz{Time: after.CreatedAt, Valid: true}
+		id := after.ID
+		params.AfterID = &id
+	}
+
+	rows, err := r.queries.InvitationsByInviter(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("select invitations by inviter: %w", err)
 	}

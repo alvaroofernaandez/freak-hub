@@ -83,19 +83,22 @@ func (r *Repository) Create(_ context.Context, invitation invitations.Invitation
 	return invitation, nil
 }
 
-// ListByInviter implements invitations.Repository.
-func (r *Repository) ListByInviter(_ context.Context, inviterID uuid.UUID) ([]invitations.Invitation, error) {
+// ListByInviter implements invitations.Repository. It applies the same
+// keyset order as ListGroup, narrowed to one inviter (ADR-0011).
+func (r *Repository) ListByInviter(
+	_ context.Context, inviterID uuid.UUID, after *invitations.Cursor, limit int,
+) ([]invitations.Invitation, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var found []invitations.Invitation
+	mine := make([]invitations.Invitation, 0, len(r.items))
 	for _, item := range r.items {
 		if item.InviterID == inviterID {
-			found = append(found, item)
+			mine = append(mine, item)
 		}
 	}
 
-	return found, nil
+	return pageOf(mine, after, limit), nil
 }
 
 // MarkAccepted implements invitations.Repository.
@@ -121,26 +124,10 @@ func (r *Repository) ListGroup(_ context.Context, after *invitations.Cursor, lim
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	sorted := make([]invitations.Invitation, len(r.items))
-	copy(sorted, r.items)
-	sort.Slice(sorted, func(i, j int) bool {
-		return isBeforeInGroupOrder(sorted[i], sorted[j])
-	})
+	rows := pageOf(r.items, after, limit)
 
-	start := 0
-	if after != nil {
-		start = sort.Search(len(sorted), func(i int) bool {
-			return isAfterGroupCursor(sorted[i], *after)
-		})
-	}
-
-	end := start + limit
-	if end > len(sorted) {
-		end = len(sorted)
-	}
-
-	page := make([]invitations.GroupEntry, 0, end-start)
-	for _, item := range sorted[start:end] {
+	page := make([]invitations.GroupEntry, 0, len(rows))
+	for _, item := range rows {
 		summary, ok := r.members[item.InviterID]
 		if !ok {
 			summary = invitations.InviterSummary{ID: item.InviterID}
@@ -152,9 +139,39 @@ func (r *Repository) ListGroup(_ context.Context, after *invitations.Cursor, lim
 	return page, nil
 }
 
-// isBeforeInGroupOrder reports whether a sorts strictly before b in the
-// stable group order (ADR-0011): created_at descending, id as tiebreak.
-func isBeforeInGroupOrder(a, b invitations.Invitation) bool {
+// pageOf is the keyset walk both listings share: sort into the stable order
+// ADR-0011 fixes, skip everything up to and including after, and hand back at
+// most limit rows. Doing it once is what keeps the two doubles from drifting
+// apart in a way the Postgres adapter never would.
+func pageOf(items []invitations.Invitation, after *invitations.Cursor, limit int) []invitations.Invitation {
+	sorted := make([]invitations.Invitation, len(items))
+	copy(sorted, items)
+	sort.Slice(sorted, func(i, j int) bool {
+		return isBeforeInListOrder(sorted[i], sorted[j])
+	})
+
+	start := 0
+	if after != nil {
+		start = sort.Search(len(sorted), func(i int) bool {
+			return isAfterCursor(sorted[i], *after)
+		})
+	}
+
+	end := start + limit
+	if end > len(sorted) {
+		end = len(sorted)
+	}
+
+	if end < start {
+		end = start
+	}
+
+	return sorted[start:end]
+}
+
+// isBeforeInListOrder reports whether a sorts strictly before b in the stable
+// listing order (ADR-0011): created_at descending, id as tiebreak.
+func isBeforeInListOrder(a, b invitations.Invitation) bool {
 	if !a.CreatedAt.Equal(b.CreatedAt) {
 		return a.CreatedAt.After(b.CreatedAt)
 	}
@@ -162,9 +179,9 @@ func isBeforeInGroupOrder(a, b invitations.Invitation) bool {
 	return a.ID.String() > b.ID.String()
 }
 
-// isAfterGroupCursor reports whether item comes strictly after cursor in
-// that same order.
-func isAfterGroupCursor(item invitations.Invitation, cursor invitations.Cursor) bool {
+// isAfterCursor reports whether item comes strictly after cursor in that same
+// order.
+func isAfterCursor(item invitations.Invitation, cursor invitations.Cursor) bool {
 	if !item.CreatedAt.Equal(cursor.CreatedAt) {
 		return item.CreatedAt.Before(cursor.CreatedAt)
 	}
