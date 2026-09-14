@@ -99,7 +99,14 @@ export default defineConfig({
       testMatch: /\.signed-in\.spec\.ts$/,
       dependencies: ["setup"],
       retries: 0,
-      use: { ...chrome, storageState: STORAGE_STATE },
+      /*
+       * `retries: 0` alone is not enough to keep a trace out of here. A CLI
+       * `--retries=1` overrides it, `on-first-retry` arms, and the trace picks
+       * the session up out of the injected storageState — measured: two
+       * `__session`, two `__client`, two JWTs. This project never needs a
+       * trace, so it never gets one, and the flag has nothing left to re-arm.
+       */
+      use: { ...chrome, storageState: STORAGE_STATE, trace: "off" },
     },
   ],
   webServer: {
