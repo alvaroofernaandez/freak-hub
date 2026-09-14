@@ -186,19 +186,43 @@ que quedan caracteres cuando la API ya rechaza, o al revés. Si alguna pantalla
 llega a mostrar un contador, que use `[...texto].length`, que sí cuenta puntos
 de código.
 
-#### U+0000 no se guarda en ninguna parte
+#### Bytes que ninguna columna puede guardar
 
-El carácter nulo es el único que Postgres no acepta en una columna `text`
-—error `22021`— ni como secuencia de escape dentro de `jsonb` —`22P05`—. Go lo
-lleva dentro de una cadena tan tranquilo: la longitud cuadra, la codificación
-es UTF-8 válida, y la petición solo falla cuando ya ha llegado a la base de
-datos. Así que se rechaza en el dominio, en las ocho puertas por las que entra
-texto del cliente: `title`, `synopsis`, `cover_url`, `metadata` (a cualquier
-profundidad, en claves y en valores), `note` —al crear y al actualizar— y `q`.
+Postgres no acepta el carácter nulo en una columna `text` —error `22021`— ni
+como secuencia de escape dentro de `jsonb` —`22P05`—, y tampoco acepta una
+secuencia que no sea UTF-8 válido. Go lleva las dos cosas dentro de una cadena
+tan tranquilo: la longitud cuadra y la petición solo falla cuando ya ha llegado
+a la base de datos.
 
-Lo de «a cualquier profundidad» no es celo: `metadata` es la única parte de una
-obra cuya forma no declara nadie, así que una comprobación que solo mirara el
-primer nivel sería una comprobación que se esquiva anidando.
+El nulo se rechaza en las ocho puertas por las que entra texto del cliente:
+`title`, `synopsis`, `cover_url`, `metadata` (a cualquier profundidad, en claves
+y en valores), `note` —al crear y al actualizar— y `q`. Lo de «a cualquier
+profundidad» no es celo: `metadata` es la única parte de una obra cuya forma no
+declara nadie, así que una comprobación que solo mirara el primer nivel se
+esquiva anidando.
+
+La **validez del UTF-8** se comprueba solo en `q`, y esa asimetría es
+deliberada. Todo el texto que llega por el cuerpo pasa antes por
+`encoding/json`, que sustituye una secuencia inválida por U+FFFD: por eso un
+sustituto suelto en `synopsis` responde 201 y guarda `�`, y por eso
+comprobarlo ahí sería código muerto. La cadena de consulta es distinta en
+naturaleza —bytes crudos a través de `net/url`, que no sanea nada—, así que es
+la única entrada que necesita las dos comprobaciones.
+
+#### Y una red debajo, por si falta una regla
+
+Las reglas de dominio son la defensa principal: responden con precisión, nombran
+el campo y viven donde pasan todos los llamantes. Pero solo cubren lo que
+alguien anticipó, y en tres revisiones aparecieron tres formas distintas de que
+los bytes del cliente chocaran con una restricción de almacenamiento que el
+dominio no modelaba —el techo de `int4`, U+0000 y el UTF-8 inválido—, las tres
+llegando como 500.
+
+Por eso el adaptador traduce además `22021` y `22P05` a un
+`400 invalid_payload`. **No se espera que salte**: si salta, es que falta una
+regla de dominio. Lo que garantiza es que la cuarta forma, sea cual sea, llegue
+como 4xx y no como 500, y que el log lleve el SQLSTATE para que quien lo lea
+sepa qué regla escribir.
 
 ## El sobre de error
 
