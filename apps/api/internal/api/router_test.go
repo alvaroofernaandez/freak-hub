@@ -923,10 +923,21 @@ func TestEveryRouteUnderV1RefusesARequestWithNoSession(t *testing.T) {
 	require.NoError(t, chi.Walk(routes, func(
 		method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler,
 	) error {
-		// The bare "/v1" is checked too, and the slash is not a detail: a
-		// prefix test alone skips a handler mounted on exactly that path,
-		// which is a route of the product surface that nothing would have
-		// looked at.
+		// The bare "/v1" is checked too, and the slash is not a detail. A
+		// handler mounted on exactly that path escapes the session guard
+		// outright: chi.Walk reports it, a request with no session runs it,
+		// and only the accident of which handler sits there decides what
+		// leaks. Measured — GET /v1 with no session reached listWorks and
+		// would have answered the catalogue to an anonymous caller.
+		//
+		// Two details make this easy to measure wrong, and both cost an
+		// afternoon here. Registration ORDER decides everything: declared
+		// after router.Route("/v1", …) the route is live and walked;
+		// declared before it, Mount absorbs the node, Walk never reports it
+		// and the request goes through the subrouter to a 401. And the
+		// TRAILING SLASH is a different chi route: GET /v1/ answers 401
+		// whatever is mounted on GET /v1, so probing with the slash proves
+		// nothing about the path without it.
 		if route != "/v1" && !strings.HasPrefix(route, "/v1/") {
 			return nil
 		}
