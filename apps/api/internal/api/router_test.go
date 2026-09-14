@@ -10,9 +10,11 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -876,3 +878,66 @@ func TestCORSRejectsAnUnknownOrigin(t *testing.T) {
 }
 
 var _ = uuid.Nil
+
+// v1Surface is every route mounted under /v1, listed so that removing one
+// from the router is a failing test rather than a silent loss of an
+// endpoint. The check below walks the router instead of reading this list,
+// so a route added and *not* listed here still has to answer 401 without a
+// session — the list is a floor, never the whole rule.
+var v1Surface = []string{
+	"GET /v1/me",
+	"PATCH /v1/me",
+	"POST /v1/me/avatar",
+	"GET /v1/members",
+	"GET /v1/invitations",
+	"POST /v1/invitations",
+	"GET /v1/invitations/group",
+	"GET /v1/works",
+	"POST /v1/works",
+	"GET /v1/works/{id}",
+	"GET /v1/library",
+	"POST /v1/library",
+	"GET /v1/library/{id}",
+	"PATCH /v1/library/{id}",
+	"DELETE /v1/library/{id}",
+}
+
+// TestEveryRouteUnderV1RefusesARequestWithNoSession is the guard AGENTS.md
+// rule 5 asks for, written as a walk of the router rather than as a test per
+// route: a route added tomorrow and forgotten is caught the same day it is
+// mounted, which a hand-written list of cases cannot promise.
+//
+// It checks the route is behind auth.Middleware by asking it, not by reading
+// the middleware chain: a middleware present but wired in the wrong order
+// would satisfy the second and fail this.
+func TestEveryRouteUnderV1RefusesARequestWithNoSession(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+
+	routes, ok := s.router.(chi.Routes)
+	require.True(t, ok, "the router has to be walkable for this guard to mean anything")
+
+	walked := make([]string, 0, len(v1Surface))
+
+	require.NoError(t, chi.Walk(routes, func(
+		method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler,
+	) error {
+		if !strings.HasPrefix(route, "/v1/") {
+			return nil
+		}
+
+		walked = append(walked, method+" "+route)
+
+		path := strings.ReplaceAll(route, "{id}", uuid.NewString())
+		recorder := s.do(t, method, path, "", map[string]any{})
+
+		assert.Equalf(t, http.StatusUnauthorized, recorder.Code,
+			"%s %s answered without a session", method, route)
+		assert.Equalf(t, "missing_token", errorCode(t, recorder), "%s %s", method, route)
+
+		return nil
+	}))
+
+	assert.Subset(t, walked, v1Surface, "a route of the documented surface is no longer mounted")
+}
