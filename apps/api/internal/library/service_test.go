@@ -1591,3 +1591,31 @@ func TestSearchWorksRefusesAQueryCarryingANullCharacter(t *testing.T) {
 
 	require.ErrorIs(t, err, library.ErrInvalidFilter)
 }
+
+// TestSearchWorksRefusesAQueryThatIsNotValidUTF8 is the ninth door, and the
+// one the null-character check did not cover.
+//
+// A query string is raw bytes and passes through no JSON decoder. In a body,
+// encoding/json replaces invalid UTF-8 with U+FFFD, which is why the same
+// surrogate in a synopsis is stored as a replacement character and answers
+// 201. net/url does nothing of the sort, so r.URL.Query().Get("q") hands the
+// driver bytes Postgres refuses outright.
+func TestSearchWorksRefusesAQueryThatIsNotValidUTF8(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	sequences := map[string]string{
+		"a lone surrogate":       "\xed\xa0\x80",
+		"a byte no encoding has": "\xff",
+		"a truncated multibyte":  "\xc3",
+		"an overlong encoding":   "\xc0\xaf",
+	}
+
+	for name, query := range sequences {
+		_, _, err := h.service.SearchWorks(context.Background(),
+			library.WorkFilter{Query: query}, nil, 25)
+
+		require.ErrorIsf(t, err, library.ErrInvalidFilter, "%s", name)
+	}
+}

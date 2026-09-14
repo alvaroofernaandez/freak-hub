@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -453,8 +454,8 @@ func (s *Service) SearchWorks(
 	}
 
 	filter.Query = strings.TrimSpace(filter.Query)
-	if len([]rune(filter.Query)) > MaxQueryLength || carriesNullCharacter(filter.Query) {
-		return nil, nil, ErrInvalidFilter
+	if err := validateQuery(filter.Query); err != nil {
+		return nil, nil, err
 	}
 
 	// Ask for one extra row: its presence, not a COUNT(*), is what tells us
@@ -507,6 +508,27 @@ func validateNote(note *string) error {
 func validateSynopsis(synopsis string) error {
 	if len([]rune(synopsis)) > MaxSynopsisLength || carriesNullCharacter(synopsis) {
 		return ErrInvalidSynopsis
+	}
+
+	return nil
+}
+
+// validateQuery holds the free-text search to what a column can hold.
+//
+// Validity is checked here and nowhere else on purpose. Every other piece of
+// client text arrives through encoding/json, which replaces invalid UTF-8
+// with U+FFFD before the domain ever sees it — so the same lone surrogate is
+// stored as a replacement character in a synopsis and is simply not
+// reachable there. A query string is different in kind: raw bytes, through
+// net/url, which sanitises nothing and hands the driver exactly what the
+// client sent.
+func validateQuery(query string) error {
+	if len([]rune(query)) > MaxQueryLength {
+		return ErrInvalidFilter
+	}
+
+	if carriesNullCharacter(query) || !utf8.ValidString(query) {
+		return ErrInvalidFilter
 	}
 
 	return nil

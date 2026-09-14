@@ -1496,3 +1496,27 @@ func TestCreateWorkRejectsASecondDocumentAfterTheBody(t *testing.T) {
 		"a partial success that looks like a whole one is what principle 4 exists to prevent")
 	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
 }
+
+// TestListWorksRejectsASearchQueryThatIsNotValidUTF8 is the same door seen
+// from the wire, where the bytes actually arrive percent-encoded.
+func TestListWorksRejectsASearchQueryThatIsNotValidUTF8(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	sequences := map[string]string{
+		"a lone surrogate":       "%ED%A0%80",
+		"a byte no encoding has": "%FF",
+		"a truncated multibyte":  "%C3",
+		"an overlong encoding":   "%C0%AF",
+	}
+
+	for name, encoded := range sequences {
+		recorder := s.do(t, http.MethodGet, "/v1/works?q="+encoded, "valid-user_alex", nil)
+
+		assert.NotEqualf(t, http.StatusInternalServerError, recorder.Code, "%s answered 500", name)
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code, "%s: %s", name, recorder.Body.String())
+		assert.Equalf(t, "invalid_filter", errorCode(t, recorder), "%s", name)
+	}
+}

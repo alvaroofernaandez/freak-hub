@@ -296,9 +296,14 @@ func TestAWellFormedRequestNeverReachesTheInt4CeilingAsA500(t *testing.T) {
 // catch: a Go string holds U+0000 perfectly happily, so only a real column
 // refuses it — text with 22021, jsonb with 22P05 for the escape sequence.
 //
-// Eight requests, because eight is how many places client text reaches a
-// text or jsonb column across these routes, and the last of them is a read:
-// nothing is written and the 500 happens anyway.
+// Twelve requests: the eight places client text reaches a text or jsonb
+// column, plus four byte sequences that are not valid UTF-8 at all. The
+// last five are all the same door — the query string — and it is the one
+// that needs both checks, because it is the only client text that reaches
+// the driver through no JSON decoder. encoding/json would have replaced an
+// invalid sequence with U+FFFD; net/url hands it over untouched.
+//
+// It is also a read. Nothing is written and the 500 happened anyway.
 func TestNoClientTextReachesAColumnAsA500(t *testing.T) {
 	pool := libraryDB(t, nil)
 	base := journeyAPI(t, pool)
@@ -347,13 +352,21 @@ func TestNoClientTextReachesAColumnAsA500(t *testing.T) {
 			map[string]any{"note": nul}, "invalid_payload"},
 		// The read path. Nothing is written and the 500 happened anyway.
 		{"a search query", http.MethodGet, "/v1/works?q=a%00b", nil, "invalid_filter"},
+		// And the ninth door, which the null-character check does not cover.
+		// A query string is raw bytes through no JSON decoder: encoding/json
+		// would have replaced these with U+FFFD, net/url hands them straight
+		// to the driver.
+		{"a lone surrogate in the query", http.MethodGet, "/v1/works?q=%ED%A0%80", nil, "invalid_filter"},
+		{"a byte no encoding has", http.MethodGet, "/v1/works?q=%FF", nil, "invalid_filter"},
+		{"a truncated multibyte", http.MethodGet, "/v1/works?q=%C3", nil, "invalid_filter"},
+		{"an overlong encoding", http.MethodGet, "/v1/works?q=%C0%AF", nil, "invalid_filter"},
 	}
 
 	for _, probe := range probes {
 		status, problem := alvaro.call(probe.method, probe.path, probe.body)
 
 		assert.NotEqualf(t, http.StatusInternalServerError, status,
-			"a null character in %s answered 500: %v", probe.name, problem)
+			"unstorable bytes in %s answered 500: %v", probe.name, problem)
 		assert.Equalf(t, http.StatusBadRequest, status, "%s: %v", probe.name, problem)
 		assert.Equalf(t, probe.code, problem["code"], "%s", probe.name)
 	}
