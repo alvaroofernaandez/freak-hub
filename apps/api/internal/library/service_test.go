@@ -1279,3 +1279,66 @@ func TestAnUnairedAnimeImportedWithZeroEpisodesStillAcceptsTheFirstOne(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, 1, entry.Progress)
 }
+
+// TestEveryPatchableFieldCountsAsAChange walks the eight fields of
+// EntryPatch one at a time, because IsEmpty enumerates them by hand and a
+// hand-written list of fields rots the same way a hand-written list of
+// transitions does — only worse, because this one fails silently.
+//
+// Forget a field there and a PATCH carrying only that field reads as empty,
+// short-circuits, and answers 200 with the entry untouched: the write
+// evaporates with a success code. The short-circuit is what makes an empty
+// body leave updated_at alone, so the guard against forgetting has to be as
+// strong as the reason the short-circuit exists.
+//
+// Every case uses a value that is either the zero value or an explicit null,
+// which is the half most likely to be got wrong: Set(false) and
+// Set[*int](nil) are fields a caller sent, not fields a caller omitted.
+//
+// The count assertion is what catches a ninth field added to EntryPatch and
+// to applyPatch but not to IsEmpty — and not to this table either.
+func TestEveryPatchableFieldCountsAsAChange(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		field string
+		patch library.EntryPatch
+	}{
+		{"Status", library.EntryPatch{Status: library.Set(library.StatusInProgress)}},
+		{"Progress", library.EntryPatch{Progress: library.Set(0)}},
+		{"Rating", library.EntryPatch{Rating: library.Set[*int](nil)}},
+		{"IsFavourite", library.EntryPatch{IsFavourite: library.Set(false)}},
+		{"Owned", library.EntryPatch{Owned: library.Set(false)}},
+		{"Note", library.EntryPatch{Note: library.Set[*string](nil)}},
+		{"StartedAt", library.EntryPatch{StartedAt: library.Set[*time.Time](nil)}},
+		{"FinishedAt", library.EntryPatch{FinishedAt: library.Set[*time.Time](nil)}},
+	}
+
+	require.Equal(t, reflect.TypeOf(library.EntryPatch{}).NumField(), len(cases),
+		"a new patchable field needs a row here, or IsEmpty can forget it and a write vanishes behind a 200")
+
+	assert.True(t, library.EntryPatch{}.IsEmpty(), "and a patch with nothing in it is still empty")
+
+	for _, testCase := range cases {
+		t.Run(testCase.field, func(t *testing.T) {
+			t.Parallel()
+
+			assert.False(t, testCase.patch.IsEmpty(),
+				"a field the caller sent is a field the caller sent, whatever its value")
+
+			h := newHarness(t)
+			member := uuid.New()
+			entry := h.addEntry(t, member, h.anime("Frieren", 28), library.AddToLibraryInput{
+				Status: library.StatusPending,
+			})
+
+			h.clock = h.clock.Add(48 * time.Hour)
+
+			updated, err := h.service.UpdateEntry(context.Background(), member, entry.ID, testCase.patch)
+
+			require.NoError(t, err)
+			assert.True(t, updated.UpdatedAt.After(entry.UpdatedAt),
+				"the write reached the repository instead of being swallowed as a no-op")
+		})
+	}
+}
