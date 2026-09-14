@@ -1,5 +1,6 @@
 import type { Recommendation } from "@/features/profile/lib/recommendation";
 import { EmptyState } from "@/shared/ui/empty-state";
+import { RecommendationCard } from "./recommendation-card";
 
 type RecommendationsSectionProps = {
   recommendations: Recommendation[];
@@ -22,26 +23,13 @@ export function RecommendationsSection({
 
   return (
     <ul className="space-y-3">
-      {recommendations.map((recommendation) => {
-        const sentByOwner = recommendation.fromUsername === ownerUsername;
-
-        return (
-          <li
-            key={recommendation.id}
-            className="rounded-lg border border-border bg-surface-raised p-4"
-          >
-            <p className="font-mono text-xs uppercase tracking-widest text-ink-muted">
-              {sentByOwner
-                ? `Enviada a @${recommendation.toUsername}`
-                : `Recibida de @${recommendation.fromUsername}`}
-            </p>
-            <p className="mt-1 font-medium">{recommendation.workTitle}</p>
-            <p className="mt-1 text-sm text-ink-muted">
-              {recommendation.reason}
-            </p>
-          </li>
-        );
-      })}
+      {recommendations.map((recommendation) => (
+        <RecommendationCard
+          key={recommendation.id}
+          recommendation={recommendation}
+          viewerUsername={ownerUsername}
+        />
+      ))}
     </ul>
   );
 }

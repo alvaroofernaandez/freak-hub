@@ -207,6 +207,14 @@ describe("Navbar", () => {
     ).toBeInTheDocument();
   });
 
+  it("takes the pending-recommendations badge to the screen that lists them", () => {
+    render(<Navbar pendingRecommendations={3} />);
+
+    expect(
+      screen.getByRole("link", { name: "3 recomendaciones pendientes" }),
+    ).toHaveAttribute("href", "/recomendaciones");
+  });
+
   it("renders the user slot", () => {
     render(<Navbar userSlot={<span>slot-de-usuario</span>} />);
 

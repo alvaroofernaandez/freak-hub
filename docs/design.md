@@ -242,9 +242,11 @@ Sigue el patrón *menu button* de WAI-ARIA, y eso no es opcional:
 | Cierre por puntero | Un clic fuera lo cierra |
 | Capas | `z-40`: por encima del contenido, por debajo del modal (`z-50`) |
 
-No enlaza a rutas que no existen. `/recomendaciones` sigue pendiente (issue
-#36); hasta que exista, el menú no la ofrece. `/ajustes` sí existe desde la
-issue #37, así que el menú la enlaza —y además lleva el tema, como fija
+No enlaza a rutas que no existen. `/recomendaciones` existe desde la issue
+#36, pero el menú sigue sin ofrecerla: no es suya. [screens.md](screens.md#navegación)
+le da dos entradas —el badge de pendientes de la navbar y la barra inferior del
+móvil— y una tercera en el menú solo repetiría lo que ya está a un clic.
+`/ajustes` existe desde la issue #37, así que el menú la enlaza —y además lleva el tema, como fija
 [screens.md](screens.md#navegación)— con un elemento de tipo
 `menuitemcheckbox`, que es el que anuncia un estado; se queda abierto al
 pulsarlo, porque cambiar de tema no es motivo para perder el sitio.
@@ -591,9 +593,9 @@ cinco sin que cada una invente su propio lenguaje visual.
 ### Qué se puede extender, y qué no
 
 - **Se puede** componer piezas de la tabla anterior en un layout nuevo. Una
-  pantalla que no existe todavía (Ajustes, Recomendaciones) no tiene una
-  maqueta que copiar a píxel, pero sí un catálogo cerrado de piezas del que
-  partir.
+  pantalla sin maqueta no tiene nada que copiar a píxel, pero sí un catálogo
+  cerrado de piezas del que partir: así se construyeron Ajustes (issue #37) y
+  Recomendaciones (issue #36).
 - **Se puede** usar un color de categoría (`--cat-*`) cuando la pantalla
   agrupa por categoría — siempre acompañado de su etiqueta de texto, nunca
   solo (misma regla que [el estado de una entrada](#el-estado-de-una-entrada-no-usa-color)).
@@ -941,3 +943,21 @@ Definition of Done de la épica #18.
   de verificación detrás. Exportar y borrar se quedan visibles y apagados,
   porque la API todavía no los expone y un botón que finge exportar es peor que
   ninguno.
+- **2026-09-14** · `/recomendaciones` existe (issue #36), con los dos bloques de
+  `screens.md`: recibidas pendientes y enviadas. Compone lo que autoriza el
+  [criterio de extensión](#criterio-de-extensión-para-pantallas-sin-maqueta) —
+  título de pantalla, `SectionHeading` por bloque, tarjeta neutra, moldura como
+  separador y estado vacío `inline` en cada bloque— y no inventa ninguna pieza:
+  el estado de una recomendación se marca con `RecommendationStatusBadge`, que
+  es `StatusMark` con su propio vocabulario (reloj «Pendiente», check
+  «Aceptada», cruz «Descartada»), igual que ya hacían las entradas de
+  biblioteca y las invitaciones. La fila de recomendación del perfil sale a
+  `RecommendationCard` para que el perfil y la pantalla no acaben con dos
+  tarjetas distintas para lo mismo. La pantalla es solo de lectura: aceptar o
+  descartar necesita el endpoint que todavía no existe, y un botón que finge
+  contestar es peor que ninguno.
+- **2026-09-14** · El badge de recomendaciones pendientes de la navbar pasa de
+  `<output>` a enlace hacia `/recomendaciones`. Es el único badge de
+  notificación del producto, así que contar algo sin ofrecer dónde atenderlo lo
+  dejaba en decoración. Sin motion nueva: hereda el `transition-opacity` de sus
+  vecinos, porque la navbar se pulsa cientos de veces al día.
