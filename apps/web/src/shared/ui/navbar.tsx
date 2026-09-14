@@ -54,7 +54,7 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
        * and hands the destinations to the bottom bar.
        *
        * The metrics follow the three artboards: 56/16/12 at 390 px,
-       * 58/22/20 at 1024 px and 64/28/32 at 1440 px. Desktop starts at `xl`
+       * 58/22/22 at 1024 px and 64/28/32 at 1440 px. Desktop starts at `xl`
        * (1280 px) and not at `lg` (1024 px), because 1024 px *is* the tablet
        * artboard: the tablet variant never rendered at the width it was drawn
        * for. The whole app follows that rule now, and
@@ -62,7 +62,7 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
        */}
       <nav
         aria-label="Navegación principal"
-        className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 md:h-[58px] md:gap-5 md:px-[22px] xl:h-16 xl:gap-8 xl:px-7"
+        className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 md:h-[58px] md:gap-[22px] md:px-[22px] xl:h-16 xl:gap-8 xl:px-7"
       >
         <Link
           href="/inicio"

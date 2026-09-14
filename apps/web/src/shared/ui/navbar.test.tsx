@@ -359,7 +359,7 @@ describe("Navbar", () => {
     });
 
     expect(topNav).toHaveClass("h-14", "px-4", "gap-3");
-    expect(topNav).toHaveClass("md:h-[58px]", "md:px-[22px]", "md:gap-5");
+    expect(topNav).toHaveClass("md:h-[58px]", "md:px-[22px]", "md:gap-[22px]");
     expect(topNav).toHaveClass("xl:h-16", "xl:px-7", "xl:gap-8");
     /*
      * `lg:` starts at 1024 px, which is exactly the width of the tablet
