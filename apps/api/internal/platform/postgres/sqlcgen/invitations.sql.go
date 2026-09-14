@@ -47,12 +47,34 @@ func (q *Queries) CreateInvitation(ctx context.Context, arg CreateInvitationPara
 
 const invitationsByInviter = `-- name: InvitationsByInviter :many
 SELECT id, clerk_invitation_id, email, inviter_id, status, created_at, accepted_at FROM invitations
-WHERE inviter_id = $1
-ORDER BY created_at DESC
+WHERE inviter_id = $1::uuid
+  AND (
+    $2::timestamptz IS NULL
+    OR (created_at, id) < ($2::timestamptz, $3::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT $4::int
 `
 
-func (q *Queries) InvitationsByInviter(ctx context.Context, inviterID uuid.UUID) ([]Invitation, error) {
-	rows, err := q.db.Query(ctx, invitationsByInviter, inviterID)
+type InvitationsByInviterParams struct {
+	InviterID      uuid.UUID
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        *uuid.UUID
+	PageLimit      int32
+}
+
+// A page of the invitations one member has sent, newest first,
+// keyset-paginated (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md).
+// Pass a NULL after_created_at to fetch the first page. The
+// (inviter_id, created_at DESC, id DESC) index serves the whole ORDER BY, so
+// no COUNT(*) and no OFFSET are needed to walk the list.
+func (q *Queries) InvitationsByInviter(ctx context.Context, arg InvitationsByInviterParams) ([]Invitation, error) {
+	rows, err := q.db.Query(ctx, invitationsByInviter,
+		arg.InviterID,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

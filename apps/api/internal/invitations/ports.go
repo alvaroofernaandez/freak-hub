@@ -17,7 +17,11 @@ type Repository interface {
 	// PendingByEmail returns ErrNotFound when nothing is pending for that email.
 	PendingByEmail(ctx context.Context, email string) (Invitation, error)
 	Create(ctx context.Context, invitation Invitation) (Invitation, error)
-	ListByInviter(ctx context.Context, inviterID uuid.UUID) ([]Invitation, error)
+	// ListByInviter returns a page of the invitations one member has sent,
+	// newest first. after is nil for the first page; otherwise only rows
+	// strictly after that position are returned. It returns at most limit
+	// rows (ADR-0011).
+	ListByInviter(ctx context.Context, inviterID uuid.UUID, after *Cursor, limit int) ([]Invitation, error)
 	MarkAccepted(ctx context.Context, email string) error
 	// ListGroup returns a page of every invitation the group has ever sent,
 	// newest first, joined with the identity of whoever sent it. after is

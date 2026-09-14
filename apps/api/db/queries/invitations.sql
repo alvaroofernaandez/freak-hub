@@ -9,9 +9,19 @@ VALUES ($1, $2, $3, $4)
 RETURNING *;
 
 -- name: InvitationsByInviter :many
+-- A page of the invitations one member has sent, newest first,
+-- keyset-paginated (ADR-0011: docs/decisions/0011-paginacion-por-cursor.md).
+-- Pass a NULL after_created_at to fetch the first page. The
+-- (inviter_id, created_at DESC, id DESC) index serves the whole ORDER BY, so
+-- no COUNT(*) and no OFFSET are needed to walk the list.
 SELECT * FROM invitations
-WHERE inviter_id = $1
-ORDER BY created_at DESC;
+WHERE inviter_id = sqlc.arg(inviter_id)::uuid
+  AND (
+    sqlc.narg(after_created_at)::timestamptz IS NULL
+    OR (created_at, id) < (sqlc.narg(after_created_at)::timestamptz, sqlc.narg(after_id)::uuid)
+  )
+ORDER BY created_at DESC, id DESC
+LIMIT sqlc.arg(page_limit)::int;
 
 -- name: MarkInvitationAccepted :exec
 UPDATE invitations

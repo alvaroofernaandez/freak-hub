@@ -263,13 +263,36 @@ func (h *handlers) createInvitation(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, toInvitationResponse(invitation))
 }
 
+// listInvitations answers the invitations the caller has sent,
+// keyset-paginated per ADR-0011. The opaque cursor is decoded here and never
+// reaches the domain: invitations.Cursor is a (created_at, id) position, not
+// a wire format.
 func (h *handlers) listInvitations(w http.ResponseWriter, r *http.Request) {
 	inviter, ok := h.resolveCaller(w, r)
 	if !ok {
 		return
 	}
 
-	sent, err := h.invitations.ListMine(r.Context(), inviter.ID)
+	limit, err := httpx.ParseLimit(r.URL.Query().Get("limit"), invitations.DefaultListLimit)
+	if err != nil {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidLimit,
+			"El parámetro limit no es válido.")
+		return
+	}
+
+	var after *invitations.Cursor
+	if raw := r.URL.Query().Get("cursor"); raw != "" {
+		decoded, err := httpx.DecodeCursor(raw)
+		if err != nil {
+			httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidCursor,
+				"El parámetro cursor no es válido.")
+			return
+		}
+
+		after = &invitations.Cursor{CreatedAt: decoded.CreatedAt, ID: decoded.ID}
+	}
+
+	sent, next, err := h.invitations.ListMine(r.Context(), inviter.ID, after, limit)
 	if err != nil {
 		h.fail(w, r, "list invitations", err)
 		return
@@ -280,7 +303,13 @@ func (h *handlers) listInvitations(w http.ResponseWriter, r *http.Request) {
 		items = append(items, toInvitationResponse(invitation))
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+	var nextCursor *string
+	if next != nil {
+		encoded := httpx.EncodeCursor(httpx.PageCursor{CreatedAt: next.CreatedAt, ID: next.ID})
+		nextCursor = &encoded
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, httpx.Page[invitationResponse]{Items: items, NextCursor: nextCursor})
 }
 
 type inviterResponse struct {

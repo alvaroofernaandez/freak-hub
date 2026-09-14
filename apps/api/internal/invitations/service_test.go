@@ -62,7 +62,7 @@ func (r *stubRepository) Create(_ context.Context, invitation invitations.Invita
 	return invitation, nil
 }
 
-func (r *stubRepository) ListByInviter(_ context.Context, _ uuid.UUID) ([]invitations.Invitation, error) {
+func (r *stubRepository) ListByInviter(_ context.Context, _ uuid.UUID, _ *invitations.Cursor, _ int) ([]invitations.Invitation, error) {
 	return r.created, nil
 }
 
@@ -220,10 +220,10 @@ func TestInviteImposesNoQuotaOnAMember(t *testing.T) {
 	assert.Len(t, h.repo.created, 4)
 }
 
-// newGroupService builds a Service on top of the real invitationsmem
+// newMemBackedService builds a Service on top of the real invitationsmem
 // repository, which is what actually implements the keyset order ADR-0011
-// requires for ListGroup, unlike the local stubRepository above.
-func newGroupService(t *testing.T) (*invitations.Service, *invitationsmem.Repository) {
+// requires for both listings, unlike the local stubRepository above.
+func newMemBackedService(t *testing.T) (*invitations.Service, *invitationsmem.Repository) {
 	t.Helper()
 
 	repo := invitationsmem.NewRepository()
@@ -240,7 +240,7 @@ func newGroupService(t *testing.T) (*invitations.Service, *invitationsmem.Reposi
 func TestListGroupReturnsInvitationsFromEveryInviterNewestFirst(t *testing.T) {
 	t.Parallel()
 
-	service, repo := newGroupService(t)
+	service, repo := newMemBackedService(t)
 
 	alvaro := uuid.New()
 	bea := uuid.New()
@@ -271,7 +271,7 @@ func TestListGroupReturnsInvitationsFromEveryInviterNewestFirst(t *testing.T) {
 func TestListGroupPaginatesWithACursor(t *testing.T) {
 	t.Parallel()
 
-	service, repo := newGroupService(t)
+	service, repo := newMemBackedService(t)
 
 	inviter := uuid.New()
 	repo.RegisterMember(invitations.InviterSummary{ID: inviter, Username: "alvaro", DisplayName: "Álvaro"})
@@ -298,11 +298,112 @@ func TestListGroupPaginatesWithACursor(t *testing.T) {
 func TestListGroupRejectsAnOutOfRangeLimit(t *testing.T) {
 	t.Parallel()
 
-	service, _ := newGroupService(t)
+	service, _ := newMemBackedService(t)
 
 	_, _, err := service.ListGroup(context.Background(), nil, 0)
 	require.ErrorIs(t, err, invitations.ErrInvalidLimit)
 
 	_, _, err = service.ListGroup(context.Background(), nil, 101)
+	require.ErrorIs(t, err, invitations.ErrInvalidLimit)
+}
+
+func TestListMineReturnsOnlyTheCallersInvitationsNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	service, repo := newMemBackedService(t)
+
+	alvaro := uuid.New()
+	bea := uuid.New()
+
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	repo.Seed(invitations.Invitation{
+		Email: "a@correo.com", InviterID: alvaro, Status: invitations.StatusPending, CreatedAt: base,
+	})
+	repo.Seed(invitations.Invitation{
+		Email: "b@correo.com", InviterID: alvaro, Status: invitations.StatusAccepted, CreatedAt: base.Add(time.Hour),
+	})
+	repo.Seed(invitations.Invitation{
+		Email: "c@correo.com", InviterID: bea, Status: invitations.StatusPending, CreatedAt: base.Add(2 * time.Hour),
+	})
+
+	sent, next, err := service.ListMine(context.Background(), alvaro, nil, 10)
+
+	require.NoError(t, err)
+	assert.Nil(t, next, "the last page must not carry a next cursor")
+	require.Len(t, sent, 2, "another member's invitations are not the caller's")
+	assert.Equal(t, "b@correo.com", sent[0].Email, "newest first")
+	assert.Equal(t, invitations.StatusAccepted, sent[0].Status,
+		"every status is included, not only pending")
+	assert.Equal(t, "a@correo.com", sent[1].Email)
+}
+
+func TestListMinePaginatesWithACursor(t *testing.T) {
+	t.Parallel()
+
+	service, repo := newMemBackedService(t)
+
+	inviter := uuid.New()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	repo.Seed(invitations.Invitation{Email: "a@correo.com", InviterID: inviter, Status: invitations.StatusPending, CreatedAt: base})
+	repo.Seed(invitations.Invitation{Email: "b@correo.com", InviterID: inviter, Status: invitations.StatusPending, CreatedAt: base.Add(time.Hour)})
+	repo.Seed(invitations.Invitation{Email: "c@correo.com", InviterID: inviter, Status: invitations.StatusPending, CreatedAt: base.Add(2 * time.Hour)})
+
+	firstPage, cursor, err := service.ListMine(context.Background(), inviter, nil, 2)
+	require.NoError(t, err)
+	require.NotNil(t, cursor, "a page that is not the last one must carry a cursor")
+	require.Len(t, firstPage, 2)
+	assert.Equal(t, "c@correo.com", firstPage[0].Email)
+	assert.Equal(t, "b@correo.com", firstPage[1].Email)
+
+	secondPage, nextCursor, err := service.ListMine(context.Background(), inviter, cursor, 2)
+	require.NoError(t, err)
+	assert.Nil(t, nextCursor)
+	require.Len(t, secondPage, 1)
+	assert.Equal(t, "a@correo.com", secondPage[0].Email)
+}
+
+// TestListMineTieBreaksARepeatedTimestampByID is the case the index this
+// change adds exists for: created_at alone is not unique, so without the id
+// tiebreak a page boundary between two rows sharing a timestamp would skip
+// one or hand it over twice.
+func TestListMineTieBreaksARepeatedTimestampByID(t *testing.T) {
+	t.Parallel()
+
+	service, repo := newMemBackedService(t)
+
+	inviter := uuid.New()
+	sameInstant := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for _, email := range []string{"a@correo.com", "b@correo.com", "c@correo.com"} {
+		repo.Seed(invitations.Invitation{
+			Email: email, InviterID: inviter, Status: invitations.StatusPending, CreatedAt: sameInstant,
+		})
+	}
+
+	seen := map[string]bool{}
+
+	var cursor *invitations.Cursor
+	for range 3 {
+		page, next, err := service.ListMine(context.Background(), inviter, cursor, 1)
+		require.NoError(t, err)
+		require.Len(t, page, 1)
+		require.Falsef(t, seen[page[0].Email], "%s was handed over twice", page[0].Email)
+		seen[page[0].Email] = true
+		cursor = next
+	}
+
+	assert.Nil(t, cursor, "three rows read one at a time is the whole list")
+	assert.Len(t, seen, 3, "no row may be skipped across page boundaries")
+}
+
+func TestListMineRejectsAnOutOfRangeLimit(t *testing.T) {
+	t.Parallel()
+
+	service, _ := newMemBackedService(t)
+	inviter := uuid.New()
+
+	_, _, err := service.ListMine(context.Background(), inviter, nil, 0)
+	require.ErrorIs(t, err, invitations.ErrInvalidLimit)
+
+	_, _, err = service.ListMine(context.Background(), inviter, nil, 101)
 	require.ErrorIs(t, err, invitations.ErrInvalidLimit)
 }
