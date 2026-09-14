@@ -5,8 +5,9 @@
  *
  * Dark by default, neutral hue 272, six category colors. These are the exact
  * values already used and accepted in the high-fidelity desktop mockup
- * (docs/design/high-fidelity-desktop.html). Light theme is not implemented
- * yet: there is no theme-switch mechanism (that lands with /ajustes).
+ * (docs/design/high-fidelity-desktop.html). The light theme lives further
+ * down, in the `:root[data-theme="light"]` block: same token names, re-seated
+ * values, so no component needs to know which theme is on.
  * ------------------------------------------------------------------------- */
 @theme {
   --color-ground: oklch(0.13 0.02 272);
@@ -32,6 +33,14 @@
   --color-danger: oklch(0.66 0.19 22);
   --color-success: var(--color-cat-games);
   --color-warning: var(--color-accent);
+
+  /* The scrim behind a modal or a drawer. It used to be `--ground-deep`, which
+   * works only while the page is dark: `--ground-deep` is a *recess* in the
+   * page (the search field, the cover placeholder hatch), so in the light
+   * theme it is light too, and 55% of a near-white over a near-white page
+   * pushes nothing back. A scrim darkens in both themes, so it is its own
+   * token and the light block deliberately leaves it alone. */
+  --color-scrim: oklch(0.095 0.018 272);
 
   /* Soft backgrounds for state surfaces (docs/states.md): each is its own
    * token, not an ad-hoc `bg-danger/15` opacity modifier repeated per call
@@ -75,6 +84,56 @@
    * waiting on hydration. Pair with the `--i` custom property (see the
    * `.stagger-in` rule below) to cascade a list instead of arriving at once. */
   --animate-rise: rise 220ms var(--ease-out-quint) backwards;
+}
+
+/* ---------------------------------------------------------------------------
+ * Light theme (issue #37, docs/design.md#paleta).
+ *
+ * Same token names, re-seated values: no component knows which theme is on,
+ * it just asks for `bg-surface` or `text-ink`. The six neutrals are the exact
+ * values of the "Claro" column in docs/design.md; everything else is derived
+ * there too, with the contrast measured before it was written down.
+ *
+ * Deliberately unlayered. Tailwind emits `@theme` into `@layer theme`, and
+ * per CSS Cascade Layers an unlayered rule always wins over a layered one, so
+ * this block overrides the dark defaults regardless of source order — the
+ * same reasoning as the reduced-motion overrides further down.
+ *
+ * Not listed here, on purpose:
+ *   - `--color-cat-anime`, `--color-success`, `--color-warning`: each is a
+ *     `var()` alias of a token this block does re-seat, so they follow.
+ *   - `--color-*-soft`: `color-mix()` over those same tokens, same reason.
+ *   - `--color-scrim`: a scrim darkens in both themes (see its declaration).
+ * ------------------------------------------------------------------------- */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-ground: oklch(0.975 0.006 272);
+  --color-ground-deep: oklch(0.925 0.016 272);
+  --color-surface: oklch(0.995 0.003 272);
+  --color-surface-raised: oklch(0.955 0.012 272);
+  --color-border: oklch(0.84 0.018 272);
+  --color-border-soft: oklch(0.9 0.014 272);
+  --color-ink: oklch(0.22 0.02 272);
+  --color-ink-muted: oklch(0.46 0.02 272);
+  --color-ink-faint: oklch(0.68 0.02 272);
+
+  /* The roster keeps its six hues and moves to a single lightness of 0.500,
+   * with the chroma of the dark theme wherever sRGB still holds it at that
+   * lightness and the gamut maximum where it does not. That is what keeps the
+   * six reading as one family instead of six separate corrections, and it
+   * clears 4.93:1 at worst against the three light backgrounds — measured
+   * token by token in docs/design.md#contraste. */
+  --color-accent: oklch(0.5 0.1 78);
+  --color-accent-ink: oklch(0.99 0.01 78);
+
+  --color-cat-manga: oklch(0.5 0.16 32);
+  --color-cat-games: oklch(0.5 0.135 150);
+  --color-cat-films: oklch(0.5 0.08 196);
+  --color-cat-board: oklch(0.5 0.095 226);
+  --color-cat-tcg: oklch(0.5 0.18 300);
+
+  --color-danger: oklch(0.5 0.19 22);
 }
 
 @keyframes status-pop {

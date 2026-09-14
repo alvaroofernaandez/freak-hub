@@ -31,6 +31,22 @@ mismo que ya usa `globals.css` y el banner: no se sustituye, se completa.
 | `--ink` | `oklch(0.960 0.008 272)` | `oklch(0.220 0.020 272)` |
 | `--ink-muted` | `oklch(0.700 0.020 272)` | `oklch(0.460 0.020 272)` |
 
+Esa tabla fijaba seis neutros. `globals.css` usa tres más, que se derivaron al
+construir el tema claro (issue #37) prolongando la misma rampa: mismo hue, el
+croma crece a medida que baja el contraste con el fondo.
+
+| Token | Oscuro | Claro | Qué es |
+| :--- | :--- | :--- | :--- |
+| `--ground-deep` | `oklch(0.095 0.018 272)` | `oklch(0.925 0.016 272)` | Un hueco **hundido** en la página: el campo de búsqueda de una categoría, el rayado del hueco de portada. En claro sigue siendo claro, solo que un escalón por debajo de `--surface-raised` |
+| `--border-soft` | `oklch(0.270 0.028 272)` | `oklch(0.900 0.014 272)` | El separador que pesa menos que `--border`: en ambos temas se acerca al fondo, no al texto |
+| `--ink-faint` | `oklch(0.480 0.020 272)` | `oklch(0.680 0.020 272)` | Sigue **sin ser color de texto** en ningún tema, por la misma razón de siempre (ver la sección de contraste) |
+
+Y un token nuevo, que no existía antes de la issue #37:
+
+| Token | Valor (los dos temas) | Por qué |
+| :--- | :--- | :--- |
+| `--scrim` | `oklch(0.095 0.018 272)` | El velo que aparta la página detrás de un modal o de una hoja inferior. Antes era `--ground-deep`, y funcionaba solo mientras la aplicación era oscura: un hueco hundido sigue al tema y en claro se aclara con él, así que el 55 % de un casi blanco sobre una página casi blanca no apartaba nada. Un velo oscurece en los dos temas, así que es su propio token y el bloque claro lo deja en paz a propósito |
+
 ### El roster — un color por categoría
 
 Seis categorías, seis tonos. Tres ya existían en el banner (Ed, Gon, Killua);
@@ -50,6 +66,31 @@ que el conjunto se lee como una sola familia y no como parches sueltos.
 acompañado de una etiqueta de texto. Nunca se usa solo, ni para transmitir
 significado por sí mismo.
 
+#### El roster en claro
+
+La tabla de arriba no daba valores claros para el roster. Se derivaron en la
+issue #37 con una sola regla, no con seis correcciones sueltas: **mismo hue,
+una única luminosidad de `0.500`, y el croma del tema oscuro donde sRGB todavía
+lo sostiene a esa luminosidad y el máximo del gamut donde no**. Bajar la
+luminosidad es lo que los hace legibles sobre un fondo claro; mantener el hue
+es lo que los mantiene reconocibles como el mismo roster.
+
+| Token | Oscuro | Claro | Croma |
+| :--- | :--- | :--- | :--- |
+| `--accent` / `--cat-anime` | `oklch(0.780 0.150 78)` | `oklch(0.500 0.100 78)` | recortado por gamut |
+| `--cat-manga` | `oklch(0.760 0.160 32)` | `oklch(0.500 0.160 32)` | el mismo |
+| `--cat-games` | `oklch(0.800 0.170 150)` | `oklch(0.500 0.135 150)` | recortado por gamut |
+| `--cat-films` | `oklch(0.780 0.130 196)` | `oklch(0.500 0.080 196)` | recortado por gamut |
+| `--cat-board` | `oklch(0.800 0.120 226)` | `oklch(0.500 0.095 226)` | recortado por gamut |
+| `--cat-tcg` | `oklch(0.760 0.180 300)` | `oklch(0.500 0.180 300)` | el mismo |
+
+`--accent-ink` —el color del texto **sobre** el acento— se invierte con él:
+`oklch(0.180 0.030 78)` en oscuro, `oklch(0.990 0.010 78)` en claro. Y
+`--cat-anime` no aparece en el bloque claro de `globals.css` porque es un alias
+(`var(--color-accent)`) del token que sí se re-siembra; lo mismo vale para
+`--success`, `--warning` y los tres `-soft`, que son `color-mix()` sobre
+tokens ya re-sembrados.
+
 ### Semántica (éxito / error / aviso)
 
 Reutiliza tonos del roster en vez de abrir una tercera familia de color:
@@ -58,6 +99,10 @@ Reutiliza tonos del roster en vez de abrir una tercera familia de color:
 `--warning` = el ámbar de marca. Conviven sin ambigüedad porque aparecen en
 contextos distintos: un toast de error nunca comparte pantalla con una
 etiqueta de categoría.
+
+En claro, `--danger` sigue la misma regla que el roster: `oklch(0.500 0.190 22)`.
+`--success` y `--warning` no se declaran en el bloque claro porque son alias de
+`--cat-games` y de `--accent`, que sí se re-siembran.
 
 ## El estado de una entrada no usa color
 
@@ -395,6 +440,40 @@ ese caso.
 Lo vigila `apps/web/src/app/token-contrast.test.ts`: la suite falla si alguien
 vuelve a pintar texto con él. jsdom no aplica la hoja de estilos, así que el
 test escanea el código fuente en vez de renderizar.
+
+### Lo mismo, medido en claro
+
+El riesgo principal del tema claro era justo este: seis colores de categoría
+pensados para brillar sobre negro, puestos sobre blanco. Medido con el mismo
+método (OKLCH → sRGB → luminancia relativa → WCAG 2.1) sobre los tres fondos
+del tema claro, antes de dar la issue #37 por cerrada:
+
+| Token | Sobre `ground` | Sobre `surface` | Sobre `surface-raised` |
+| :--- | ---: | ---: | ---: |
+| `--ink` | 16.12 | 17.08 | 15.20 |
+| `--ink-muted` | 6.64 | 7.04 | 6.26 |
+| `--ink-faint` | 2.68 | 2.84 | **2.53** |
+| `--accent` / `--cat-anime` / `--warning` | 5.66 | 6.00 | 5.34 |
+| `--cat-manga` | 6.04 | 6.40 | 5.69 |
+| `--cat-games` / `--success` | 5.24 | 5.56 | **4.94** |
+| `--cat-films` | 5.36 | 5.68 | 5.06 |
+| `--cat-board` | 5.43 | 5.76 | 5.12 |
+| `--cat-tcg` | 6.09 | 6.45 | 5.74 |
+| `--danger` | 6.18 | 6.54 | 5.82 |
+
+Las seis categorías pasan AA (4.5:1) en los tres fondos, con **4.94:1 en el
+peor caso** (`--cat-games` sobre `surface-raised`). El margen es deliberado: a
+una luminosidad de `0.540` los seis todavía cabían, pero `--cat-games` se
+quedaba en 4.15:1 y `--cat-films` en 4.24:1, es decir, por debajo del mínimo.
+`0.500` es el primer escalón donde los seis pasan con holgura.
+
+`--ink-faint` vuelve a quedarse corto, exactamente igual que en oscuro (2.53:1
+en el peor fondo), lo cual es coherente y no un descuido: el token conserva su
+papel de borde y fondo en los dos temas, y el test que lo vigila no necesita
+saber qué tema está puesto.
+
+`--accent-ink` sobre `--accent` da 5.91:1 en claro, y el texto del avatar
+(`--ground-deep` sobre el degradado acento→TCG) da 4.88:1.
 
 ## Movimiento
 
@@ -803,3 +882,18 @@ Definition of Done de la épica #18.
   puede inventar, cómo se decide espaciado/jerarquía/tipografía sin una
   maqueta que copiar y cómo se verifica a 390/1024/1440 px. Ver
   [Criterio de extensión para pantallas sin maqueta](#criterio-de-extensión-para-pantallas-sin-maqueta).
+- **2026-09-14** · Tema claro (issue #37). Los seis neutros que ya fijaba la
+  tabla Oscuro/Claro entran tal cual en `globals.css`; los tres que la tabla no
+  cubría (`--ground-deep`, `--border-soft`, `--ink-faint`) se derivan
+  prolongando la misma rampa, y el roster completo se re-siembra con una sola
+  regla —mismo hue, luminosidad `0.500`, croma del tema oscuro donde el gamut
+  sRGB lo sostiene y el máximo donde no—. Las seis categorías se midieron antes
+  de cerrar la issue: 4.94:1 en el peor caso, todas por encima del mínimo AA.
+  El bloque va sin `@layer`, porque Tailwind emite `@theme` dentro de
+  `@layer theme` y una regla sin capa gana siempre.
+- **2026-09-14** · `--scrim`, token nuevo, oscuro en los dos temas. Los velos
+  de `Dialog` y `Drawer` dejan de usar `--ground-deep`. Motivo: `--ground-deep`
+  es un hueco hundido de la página (el campo de búsqueda, el rayado del hueco
+  de portada), así que en claro se aclara con el resto — y un velo al 55 % de
+  un casi blanco sobre una página casi blanca no aparta nada. Separar los dos
+  papeles es lo que permite que el modal siga funcionando en los dos temas.

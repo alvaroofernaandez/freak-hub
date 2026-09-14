@@ -52,7 +52,9 @@ describe("Dialog", () => {
     const overlay = document.querySelector("[data-dialog-overlay]");
     // Light enough that the page stays recognisable: at 85% it read as the
     // screen being switched off, and you lost track of where you were.
-    expect(overlay?.className).toMatch(/bg-ground-deep\/[4-6]\d/);
+    // `--scrim`, not `--ground-deep`: a recess follows the theme and goes
+    // light with it, a scrim has to darken in both (docs/design.md).
+    expect(overlay?.className).toMatch(/bg-scrim\/[4-6]\d/);
     // Blurred, so cards behind never compete with the ones in the panel.
     expect(overlay?.className).toMatch(/backdrop-blur/);
   });

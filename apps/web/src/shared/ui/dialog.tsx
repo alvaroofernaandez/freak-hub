@@ -30,7 +30,7 @@ type DialogProps = {
  * portal, scroll locking, `aria-modal` and outside-click dismissal come from
  * one well-tested implementation instead of being hand-rolled per feature.
  *
- * The overlay pushes the page back without switching it off: ground-deep at
+ * The overlay pushes the page back without switching it off: the scrim at
  * 55% plus a light blur. You still see where you are, and whatever sits behind
  * (often the same cards the panel shows) is out of focus instead of competing.
  *
@@ -72,7 +72,7 @@ export function Dialog({
             <RadixDialog.Overlay asChild forceMount>
               <m.div
                 data-dialog-overlay
-                className="fixed inset-0 z-50 bg-ground-deep/55 backdrop-blur-[6px]"
+                className="fixed inset-0 z-50 bg-scrim/55 backdrop-blur-[6px]"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: ENTER_TRANSITION }}
                 exit={{ opacity: 0, transition: EXIT_TRANSITION }}
