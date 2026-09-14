@@ -764,3 +764,447 @@ func objectOf(t *testing.T, raw json.RawMessage) map[string]json.RawMessage {
 
 	return object
 }
+
+// ---------------------------------------------------------------------------
+// GET · PATCH · DELETE /v1/library/{id}
+//
+// These are the three routes where auth.Middleware is not enough: it says the
+// caller is somebody, never that the entry is theirs. Every one of them goes
+// through library.Service, whose ownedEntry check answers somebody else's
+// entry exactly like a missing one — 404, never 403, because a 403 confirms
+// the id is real.
+// ---------------------------------------------------------------------------
+
+// ratedEntry seeds an entry that already carries a score, which is what the
+// PATCH rating rules are argued about.
+func (s *suite) ratedEntry(memberID, workID uuid.UUID, status library.Status, rating int) library.Entry {
+	return s.entries.Seed(library.Entry{
+		MemberID:  memberID,
+		WorkID:    workID,
+		Status:    status,
+		Rating:    &rating,
+		CreatedAt: seedTime,
+		UpdatedAt: seedTime,
+	})
+}
+
+func TestGetLibraryEntryRequiresASession(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodGet, "/v1/library/"+uuid.New().String(), "", nil)
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "missing_token", errorCode(t, recorder))
+}
+
+func TestGetLibraryEntryReturnsTheCallersOwnEntry(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodGet, "/v1/library/"+entry.ID.String(), "valid-user_alex", nil)
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+	assert.ElementsMatch(t, libraryEntryFields, bodyKeys(t, recorder))
+	assert.Equal(t, entry.ID.String(), decode[map[string]any](t, recorder)["id"])
+}
+
+func TestGetLibraryEntryIs404ForAnotherMembersEntry(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+	work := s.seedAnime("Frieren", seedTime)
+	theirs := s.seedEntry(alvaro.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodGet, "/v1/library/"+theirs.ID.String(), "valid-user_alex", nil)
+
+	assert.NotEqual(t, http.StatusForbidden, recorder.Code,
+		"a 403 would confirm that identifier names a real entry")
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "library_entry_not_found", errorCode(t, recorder))
+}
+
+func TestGetLibraryEntryAnswersAnotherMembersEntryExactlyLikeAMissingOne(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+	work := s.seedAnime("Frieren", seedTime)
+	theirs := s.seedEntry(alvaro.ID, work.ID, library.StatusInProgress, seedTime)
+
+	someoneElses := s.do(t, http.MethodGet, "/v1/library/"+theirs.ID.String(), "valid-user_alex", nil)
+	neverExisted := s.do(t, http.MethodGet, "/v1/library/"+uuid.New().String(), "valid-user_alex", nil)
+
+	assert.Equal(t, someoneElses.Code, neverExisted.Code)
+	assert.Equal(t, problemWithoutInstance(t, someoneElses), problemWithoutInstance(t, neverExisted),
+		"walking uuids must not tell anybody which ones are real")
+}
+
+func TestGetLibraryEntryIs404WhenNothingCarriesThatID(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/library/"+uuid.New().String(), "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "library_entry_not_found", errorCode(t, recorder))
+}
+
+func TestGetLibraryEntryIs404WhenThePathSegmentIsNotAUUID(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/library/not-a-uuid", "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "library_entry_not_found", errorCode(t, recorder))
+}
+
+func TestGetLibraryEntryIs404WhenTheSessionHasNoLocalMemberYet(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodGet, "/v1/library/"+uuid.New().String(), "valid-user_ghost", nil)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "unknown_identity", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRequiresASession(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodPatch, "/v1/library/"+uuid.New().String(), "",
+		map[string]any{"progress": 1})
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "missing_token", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryIs404ForAnotherMembersEntry(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+	work := s.seedAnime("Frieren", seedTime)
+	theirs := s.seedEntry(alvaro.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+theirs.ID.String(), "valid-user_alex",
+		map[string]any{"progress": 12})
+
+	assert.NotEqual(t, http.StatusForbidden, recorder.Code)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "library_entry_not_found", errorCode(t, recorder))
+
+	untouched, err := s.entries.ByID(t.Context(), theirs.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, untouched.Progress, "nothing of somebody else's entry was written")
+}
+
+func TestUpdateLibraryEntryAdvancesTheProgress(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"progress": 12})
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+	assert.ElementsMatch(t, libraryEntryFields, bodyKeys(t, recorder))
+	assert.InDelta(t, 12, decode[map[string]any](t, recorder)["progress"], 0)
+}
+
+func TestUpdateLibraryEntryLeavesAnAbsentPropertyAlone(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.ratedEntry(alex.ID, work.ID, library.StatusCompleted, 8)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"is_favourite": true})
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+
+	body := decode[map[string]any](t, recorder)
+	assert.Equal(t, true, body["is_favourite"])
+	assert.InDelta(t, 8, body["rating"], 0, "a rating nobody mentioned is left where it was")
+}
+
+func TestUpdateLibraryEntryClearsARatingWithAnExplicitNull(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.ratedEntry(alex.ID, work.ID, library.StatusCompleted, 8)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"rating": nil})
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Nil(t, decode[map[string]any](t, recorder)["rating"],
+		"an explicit null is how a score is removed; absent and null cannot mean the same thing")
+
+	stored, err := s.entries.ByID(t.Context(), entry.ID)
+	require.NoError(t, err)
+	assert.Nil(t, stored.Rating)
+}
+
+func TestUpdateLibraryEntryClearsANoteWithAnExplicitNull(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	note := "Empezado con Álvaro."
+	entry := s.entries.Seed(library.Entry{
+		MemberID: alex.ID, WorkID: work.ID, Status: library.StatusInProgress,
+		Note: &note, CreatedAt: seedTime, UpdatedAt: seedTime,
+	})
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"note": nil})
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assert.Nil(t, decode[map[string]any](t, recorder)["note"])
+}
+
+func TestUpdateLibraryEntryKeepsAStoredRatingWhenTheStatusChanges(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.ratedEntry(alex.ID, work.ID, library.StatusCompleted, 8)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"status": "in_progress"})
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+
+	body := decode[map[string]any](t, recorder)
+	assert.Equal(t, "in_progress", body["status"])
+	assert.InDelta(t, 8, body["rating"], 0,
+		"a rewatch is not a reason to destroy a score, and there is no history to restore it from")
+}
+
+func TestUpdateLibraryEntryAcceptsTheStoredRatingSentBackUnchanged(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.ratedEntry(alex.ID, work.ID, library.StatusInProgress, 8)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"rating": 8})
+
+	assert.Equal(t, http.StatusOK, recorder.Code,
+		"the rule guards a change of score; handing back the object this API just returned asks for nothing")
+}
+
+func TestUpdateLibraryEntryRefusesADifferentRatingOnAStatusWithNoOpinionBehindIt(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"rating": 9})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+	assert.Equal(t, "rating_not_allowed", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRefusesAMoveTheStateMachineDoesNotDraw(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusWishlist, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"status": "completed"})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code,
+		"a status in a PATCH is a transition, unlike a status at creation")
+	assert.Equal(t, "invalid_transition", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRefusesProgressBeyondTheWorksTotal(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"progress": 999})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+	assert.Equal(t, "invalid_progress", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRejectsAnUnknownProperty(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"work_id": uuid.New().String()})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code,
+		"an entry never changes the work it points at: that is a different entry")
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryRejectsANullOnAPropertyTheContractDeclaresNonNullable(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	for _, property := range []string{"status", "progress", "is_favourite", "owned"} {
+		recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+			map[string]any{property: nil})
+
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code,
+			"%s is not nullable, so clearing it means nothing: %s", property, recorder.Body.String())
+		assert.Equalf(t, "invalid_payload", errorCode(t, recorder), "property %s", property)
+	}
+}
+
+func TestUpdateLibraryEntryRejectsAStatusOutsideTheEnum(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{"status": "abandonado"})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestUpdateLibraryEntryWithNoPropertiesLeavesEvenTheTimestampAlone(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodPatch, "/v1/library/"+entry.ID.String(), "valid-user_alex",
+		map[string]any{})
+
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Equal(t, entry.UpdatedAt.UTC().Format(time.RFC3339), decode[map[string]any](t, recorder)["updated_at"],
+		"the activity feed reads updated_at, so moving it would announce a change nobody made")
+}
+
+func TestDeleteLibraryEntryRequiresASession(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodDelete, "/v1/library/"+uuid.New().String(), "", nil)
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "missing_token", errorCode(t, recorder))
+}
+
+func TestDeleteLibraryEntryRemovesTheRelationshipAndLeavesTheWorkInTheCatalogue(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusDropped, seedTime)
+
+	recorder := s.do(t, http.MethodDelete, "/v1/library/"+entry.ID.String(), "valid-user_alex", nil)
+
+	require.Equal(t, http.StatusNoContent, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Empty(t, recorder.Body.String())
+
+	_, err := s.entries.ByID(t.Context(), entry.ID)
+	require.ErrorIs(t, err, library.ErrEntryNotFound)
+
+	_, err = s.works.ByID(t.Context(), work.ID)
+	require.NoError(t, err, "what leaves is the relationship; the work is shared history")
+}
+
+func TestDeleteLibraryEntryIs404ForAnotherMembersEntry(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+	work := s.seedAnime("Frieren", seedTime)
+	theirs := s.seedEntry(alvaro.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodDelete, "/v1/library/"+theirs.ID.String(), "valid-user_alex", nil)
+
+	assert.NotEqual(t, http.StatusForbidden, recorder.Code)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "library_entry_not_found", errorCode(t, recorder))
+
+	_, err := s.entries.ByID(t.Context(), theirs.ID)
+	require.NoError(t, err, "somebody else's entry is still there")
+}
+
+func TestDeleteLibraryEntryIs404TheSecondTime(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	entry := s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	require.Equal(t, http.StatusNoContent,
+		s.do(t, http.MethodDelete, "/v1/library/"+entry.ID.String(), "valid-user_alex", nil).Code)
+
+	again := s.do(t, http.MethodDelete, "/v1/library/"+entry.ID.String(), "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusNotFound, again.Code)
+	assert.Equal(t, "library_entry_not_found", errorCode(t, again))
+}
+
+// problemWithoutInstance reads a Problem body and drops `instance`, which is
+// the request path and therefore differs between two requests by
+// construction. What is left is everything a caller could tell two answers
+// apart by.
+func problemWithoutInstance(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body), "body: %s", recorder.Body.String())
+
+	delete(body, "instance")
+	delete(body, "correlation_id")
+
+	return body
+}

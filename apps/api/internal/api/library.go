@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -373,4 +374,183 @@ func valueOr[T any](value *T, fallback T) T {
 	}
 
 	return *value
+}
+
+// optionalField carries one property of a PATCH body through the three
+// states JSON actually has: absent, null, and a value.
+//
+// The obvious spelling — a **int, one indirection for "present" and one for
+// "null" — does not work, and it is worth writing down why, because it looks
+// like it should. encoding/json documents that unmarshalling the literal
+// null into a pointer sets that pointer to nil, so `{"rating": null}` and a
+// body with no rating at all both leave the outer pointer nil. The two
+// states collapse, and clearing a score becomes unexpressible.
+//
+// What does work is an Unmarshaler, because the decoder calls UnmarshalJSON
+// *including when the input is null*. That call is the "present" flag; what
+// it does with the bytes is the rest.
+type optionalField[T any] struct {
+	present bool
+	null    bool
+	value   T
+}
+
+// UnmarshalJSON records that the property was carried at all, then decodes
+// it. A null is kept as a fact rather than decoded, so a property the
+// contract declares non-nullable can refuse it instead of silently reading
+// as its zero value — which is how `{"is_favourite": null}` would otherwise
+// un-favourite something nobody asked to change.
+func (o *optionalField[T]) UnmarshalJSON(data []byte) error {
+	o.present = true
+
+	if string(data) == "null" {
+		o.null = true
+
+		return nil
+	}
+
+	return json.Unmarshal(data, &o.value)
+}
+
+// field turns the property into the domain's own absent/null/value carrier.
+func (o optionalField[T]) field() library.Field[T] {
+	if !o.present {
+		return library.Field[T]{}
+	}
+
+	return library.Set(o.value)
+}
+
+// nulled reports whether the property arrived carrying an explicit null.
+func (o optionalField[T]) nulled() bool {
+	return o.present && o.null
+}
+
+// updateLibraryEntryRequest is the body of PATCH /v1/library/{id}.
+//
+// work_id is not a property: an entry never changes the work it points at,
+// so an attempt to move it is an unknown field and a 400.
+type updateLibraryEntryRequest struct {
+	Status      optionalField[string]     `json:"status"`
+	Progress    optionalField[int]        `json:"progress"`
+	Rating      optionalField[*int]       `json:"rating"`
+	IsFavourite optionalField[bool]       `json:"is_favourite"`
+	Owned       optionalField[bool]       `json:"owned"`
+	Note        optionalField[*string]    `json:"note"`
+	StartedAt   optionalField[*time.Time] `json:"started_at"`
+	FinishedAt  optionalField[*time.Time] `json:"finished_at"`
+}
+
+// patch maps the body onto the domain's EntryPatch, or reports which
+// non-nullable property arrived as null.
+func (u updateLibraryEntryRequest) patch() (library.EntryPatch, bool) {
+	// status, progress, is_favourite and owned are the four properties the
+	// contract declares with no null in their type. Letting a null through
+	// would read as the zero value and quietly un-favourite something, or
+	// send progress back to zero, on a request that asked for neither.
+	if u.Status.nulled() || u.Progress.nulled() || u.IsFavourite.nulled() || u.Owned.nulled() {
+		return library.EntryPatch{}, false
+	}
+
+	patch := library.EntryPatch{
+		Progress:    u.Progress.field(),
+		Rating:      u.Rating.field(),
+		IsFavourite: u.IsFavourite.field(),
+		Owned:       u.Owned.field(),
+		Note:        u.Note.field(),
+		StartedAt:   u.StartedAt.field(),
+		FinishedAt:  u.FinishedAt.field(),
+	}
+
+	if status, ok := u.Status.field().Get(); ok {
+		patch.Status = library.Set(library.Status(status))
+	}
+
+	return patch, true
+}
+
+func (h *handlers) getLibraryEntry(w http.ResponseWriter, r *http.Request) {
+	member, entryID, ok := h.ownEntryRequest(w, r)
+	if !ok {
+		return
+	}
+
+	entry, err := h.library.GetEntry(r.Context(), member, entryID)
+	if err != nil {
+		h.fail(w, r, "get library entry", err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, toLibraryEntryResponse(entry))
+}
+
+func (h *handlers) updateLibraryEntry(w http.ResponseWriter, r *http.Request) {
+	var payload updateLibraryEntryRequest
+	if !decodeJSON(w, r, &payload) {
+		return
+	}
+
+	patch, ok := payload.patch()
+	if !ok {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload,
+			"Ese campo no admite el valor nulo.")
+
+		return
+	}
+
+	member, entryID, ok := h.ownEntryRequest(w, r)
+	if !ok {
+		return
+	}
+
+	entry, err := h.library.UpdateEntry(r.Context(), member, entryID, patch)
+	if err != nil {
+		h.fail(w, r, "update library entry", err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, toLibraryEntryResponse(entry))
+}
+
+func (h *handlers) deleteLibraryEntry(w http.ResponseWriter, r *http.Request) {
+	member, entryID, ok := h.ownEntryRequest(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.library.RemoveFromLibrary(r.Context(), member, entryID); err != nil {
+		h.fail(w, r, "remove from library", err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusNoContent, nil)
+}
+
+// ownEntryRequest resolves the two things every /v1/library/{id} route needs:
+// the member the session names, and the entry id in the path.
+//
+// It does not check ownership, and it deliberately cannot: that check belongs
+// to library.Service, which is the one place every use case passes through.
+// A handler that resolved the entry itself — EntryRepository.ByID takes no
+// member — would hand any member anybody else's entry, which is exactly the
+// leak this issue is about. The comment on UpdateLibraryEntry in
+// db/queries/library_entries.sql says the same thing from the other end: the
+// per-member scope on that one statement is not evidence the reads have it.
+//
+// A malformed id answers like a missing one, for the same reason somebody
+// else's does: from outside there is nothing there either way.
+func (h *handlers) ownEntryRequest(w http.ResponseWriter, r *http.Request) (uuid.UUID, uuid.UUID, bool) {
+	member, ok := h.resolveCaller(w, r)
+	if !ok {
+		return uuid.Nil, uuid.Nil, false
+	}
+
+	entryID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		h.fail(w, r, "resolve library entry", library.ErrEntryNotFound)
+
+		return uuid.Nil, uuid.Nil, false
+	}
+
+	return member.ID, entryID, true
 }

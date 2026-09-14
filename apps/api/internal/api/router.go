@@ -86,6 +86,9 @@ func NewRouter(deps Deps) http.Handler {
 
 		r.Get("/library", handlers.listLibraryEntries)
 		r.Post("/library", handlers.createLibraryEntry)
+		r.Get("/library/{id}", handlers.getLibraryEntry)
+		r.Patch("/library/{id}", handlers.updateLibraryEntry)
+		r.Delete("/library/{id}", handlers.deleteLibraryEntry)
 	})
 
 	return router

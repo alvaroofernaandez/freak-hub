@@ -19,6 +19,13 @@ import (
 // written once instead of four times.
 const errNoLocalMember = "La sesión es válida pero todavía no hay ficha de miembro."
 
+// errNoLibraryEntry is the one detail every library_entry_not_found answer
+// shares, and sharing it is the point rather than a saving: an entry that
+// belongs to somebody else has to be indistinguishable from one that never
+// existed, and prose that differed between the two branches would be exactly
+// the confirmation the 404 exists to withhold.
+const errNoLibraryEntry = "No hay ninguna entrada con ese identificador en tu biblioteca."
+
 // errorRule maps one domain sentinel error onto its transport shape
 // (ADR-0014 §2): one table instead of the three per-handler switches this
 // package used to have (writeProfileUpdateError, writeAvatarUploadError,
@@ -78,6 +85,10 @@ var errorRules = []errorRule{
 		"La valoración debe estar entre 1 y 10."},
 	{library.ErrMissingMember, http.StatusUnauthorized, httpx.CodeUnauthorized,
 		"No hay ningún miembro identificado para esta operación."},
+	{library.ErrEntryNotFound, http.StatusNotFound, httpx.CodeLibraryEntryNotFound,
+		errNoLibraryEntry},
+	{library.ErrInvalidTransition, http.StatusUnprocessableEntity, httpx.CodeInvalidTransition,
+		"Ese cambio de estado no está permitido."},
 }
 
 // fail is the single place every handler answers a domain or adapter error
