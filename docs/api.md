@@ -173,6 +173,33 @@ que no es un cuerpo. Es de la familia de `invalid_limit` y `invalid_cursor`, y
 comparte código con el filtro de categoría porque comparte sitio y comparte
 remedio: corrige el parámetro y repite.
 
+#### Se cuentan puntos de código, no grafemas
+
+`á` mide 1 aunque ocupe dos bytes, y `🙂` mide 1 aunque ocupe cuatro. Pero
+`👨‍👩‍👧` mide **5**, porque son tres emoji y dos uniones de ancho cero, aunque a
+quien lo escribe le parezca un solo carácter.
+
+Importa porque **el navegador cuenta distinto**: `"👨‍👩‍👧".length` en JavaScript
+da 8, que son unidades UTF-16. Así que un contador en la web escrito con
+`.length` discrepará de la API en los dos sentidos, y lo hará en silencio: dirá
+que quedan caracteres cuando la API ya rechaza, o al revés. Si alguna pantalla
+llega a mostrar un contador, que use `[...texto].length`, que sí cuenta puntos
+de código.
+
+#### U+0000 no se guarda en ninguna parte
+
+El carácter nulo es el único que Postgres no acepta en una columna `text`
+—error `22021`— ni como secuencia de escape dentro de `jsonb` —`22P05`—. Go lo
+lleva dentro de una cadena tan tranquilo: la longitud cuadra, la codificación
+es UTF-8 válida, y la petición solo falla cuando ya ha llegado a la base de
+datos. Así que se rechaza en el dominio, en las ocho puertas por las que entra
+texto del cliente: `title`, `synopsis`, `cover_url`, `metadata` (a cualquier
+profundidad, en claves y en valores), `note` —al crear y al actualizar— y `q`.
+
+Lo de «a cualquier profundidad» no es celo: `metadata` es la única parte de una
+obra cuya forma no declara nadie, así que una comprobación que solo mirara el
+primer nivel sería una comprobación que se esquiva anidando.
+
 ## El sobre de error
 
 Toda respuesta de error, sin excepción, lleva `Content-Type:
