@@ -70,7 +70,8 @@ export function WorkCard({ item }: WorkCardProps) {
         >
           {item.title}
         </span>
-        {/* One line per fact, never two facts per line (#76).
+        {/* One line per fact, never two facts per line — the rule now lives in
+            docs/design.md, «Una tarjeta pone un dato por línea» (#76).
             `justify-between` only separates while there is room to spare: at
             1440px the row is 122px wide and `Abandonado` plus `10/10` needs
             157px, so the two ran together and the card clipped the tail —
