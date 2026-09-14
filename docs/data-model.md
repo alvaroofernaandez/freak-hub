@@ -83,6 +83,15 @@ dato compartido por todas las categorías es columna, y uno que solo aplica a un
 vive aquí. Episodios, plataforma, número de jugadores o código de set van en
 `metadata`; título, año y portada son columnas.
 
+> [!NOTE]
+> **`works.updated_at` no puede cambiar todavía.** No hay ningún `UPDATE works`
+> en `db/queries/` ni disparador que lo mueva, así que hoy vale siempre lo mismo
+> que `created_at`. El contrato lo describe como la señal de que una copia
+> embebida de un `Work` se ha quedado rancia, y esa promesa está sin cumplir
+> hasta que exista una ruta de actualización —la importación desde catálogos
+> externos, que es donde un `Work` cambiará de verdad—. Es correcto para el
+> alcance de hoy, en el que una obra no se modifica después de crearse.
+
 `expansion_of` implementa [ADR-0006](decisions/0006-expansiones-de-juegos-de-mesa.md):
 una expansión es un `Work` propio —con su ficha, su `source_id` en BGG y su
 propia entrada de biblioteca— enlazado al juego base en lugar de flotar suelto
@@ -122,6 +131,29 @@ ciertas para cualquier categoría y en cualquier versión del producto:
   dominio** (regla 5).
 - `rating BETWEEN 1 AND 10`: la escala es estructural.
 
+Y dos que viven en `works`, con nombre propio porque son las que sostienen el
+catálogo compartido:
+
+```sql
+CONSTRAINT works_source_id_matches_source
+    CHECK ((source = 'manual') = (source_id IS NULL))
+CONSTRAINT works_expansion_of_is_another_work
+    CHECK (expansion_of IS NULL OR expansion_of <> id)
+```
+
+La primera es la importante, y su segunda dirección es la peligrosa. Una obra
+importada con `source_id` nulo es **invisible** para `works_source_idx`, que es
+parcial sobre `WHERE source_id IS NOT NULL`: basta un puntero a nil en un
+importador para que la deduplicación deje de funcionar sin dar ningún error, y
+que la siguiente persona que importe el mismo anime cree una **segunda** obra.
+Dos personas «viendo lo mismo» apuntando a filas distintas es justo la premisa
+que rompe las coincidencias y las recomendaciones.
+
+Que solo los juegos de mesa tengan expansión **no** está en el esquema: esa
+categoría todavía no existe, [ADR-0006](decisions/0006-expansiones-de-juegos-de-mesa.md)
+describe cómo será, y un `CHECK` escrito antes del primer juego de mesa es una
+suposición.
+
 Lo que **no** está en el esquema, y no por olvido:
 
 - **Que una valoración solo tenga sentido con `status` en `completed` o
@@ -154,7 +186,7 @@ CREATE INDEX library_entries_member_created_idx
 
 -- Filtrar tu biblioteca por estado, que es también como se lee la wishlist.
 CREATE INDEX library_entries_member_status_idx
-    ON library_entries (member_id, status);
+    ON library_entries (member_id, status, created_at DESC, id DESC);
 
 -- Recorrer el catálogo compartido por categoría, con el mismo orden.
 CREATE INDEX works_category_created_idx
@@ -179,6 +211,15 @@ Tres de ellos merecen explicación:
   [ADR-0011](decisions/0011-paginacion-por-cursor.md) lo exige: `created_at` no
   es única, y una frontera de página entre dos filas con la misma marca de
   tiempo saltaría una o repetiría otra.
+- `library_entries_member_status_idx` **también** lleva las columnas del keyset,
+  y no por simetría. Como `(member_id, status)` a secas, el planificador no lo
+  eligió ni una sola vez sobre 100.000 entradas —ni con un estado que cubría el
+  0,1 % de las filas— porque no sabía entregar el `ORDER BY` y
+  `member_created_idx` sí: el estado quedaba como filtro encima de aquel. Con
+  las cuatro columnas se elige siempre para la consulta filtrada, y el predicado
+  del keyset entra en el `Index Cond` en lugar de en un `Sort`. Un índice que
+  nadie elige no es un índice lento, es un comentario que además encarece cada
+  escritura.
 
 #### La búsqueda por título
 
@@ -213,6 +254,17 @@ Si algún día se edita el fichero de reglas de `unaccent`, hay que hacer `REIND
 de `works_title_search_idx`: la promesa de `IMMUTABLE` es nuestra, y Postgres
 seguirá confiando en lo que calculó con las reglas viejas.
 
+> [!IMPORTANT]
+> **El escapado envuelve al plegado, nunca al revés**, y de ese orden depende
+> que la búsqueda sea segura. `unaccent` **emite comodines**: seis puntos de
+> código se pliegan sobre los metacaracteres de `LIKE` —U+2216, U+FE68 y U+FF3C
+> se convierten en `\`; U+FE6A y U+FF05 (el `％` de ancho completo) en `%`;
+> U+FF3F en `_`—. Si se escapara primero y se plegara después, el plegado
+> fabricaría un comodín vivo a partir de un término que no tenía ninguno: una
+> inyección de comodines que ningún test en ASCII detectaría. En `ListWorks`
+> `immutable_unaccent` va por dentro y los `replace` por fuera, y hay un test
+> con `％` que lo fija.
+
 ## Convenciones
 
 - **`uuid` como clave primaria**, generada por `gen_random_uuid()`. Los IDs
@@ -246,10 +298,30 @@ Reglas:
 3. Los cambios destructivos van en su propia migración, separados de los aditivos.
 4. **Comprueba el número que te da `migrate-new`.** Lo genera con la hora UTC
    real, y alguna migración del repositorio lleva una marca puesta a mano que
-   está por delante de ese reloj. Si el número nuevo queda por debajo de una
-   migración ya aplicada, goose la considera fuera de orden: `down` no la
-   revierte y `up` no la vuelve a aplicar, sin decir nada. Renombra el fichero a
-   un número mayor que el último antes de escribir una sola línea de SQL.
+   está por delante de ese reloj, así que el número nuevo puede quedar **por
+   debajo** de una migración ya aplicada. Renombra el fichero a un número mayor
+   que el último antes de escribir una sola línea de SQL.
+
+   Lo que pasa si no lo haces depende de contra qué base se aplique, y la
+   diferencia importa porque el síntoma grave no se parece en nada a la causa
+   (comprobado con goose v3.27.3):
+
+   - **Contra una base que ya pasó de esa versión** —producción, la de tus
+     compañeros, el camino incremental del CI— goose **se niega en voz alta y
+     aborta el `up` entero**, incluidas las migraciones posteriores que sí están
+     en orden:
+
+     ```
+     ERROR: found 1 missing migrations before current version 20260914130000
+     ```
+
+     Quien se tope con eso no está ante una base corrupta: está ante un fichero
+     mal numerado. Se arregla renombrándolo por encima de la última versión.
+
+   - **Contra una base limpia** sí es silencioso: goose aplica todo por orden de
+     nombre y no se queja. La mitad callada de esa mitad es que un
+     `migrate-down` revierte entonces la migración **más alta**, no la que
+     acabas de escribir.
 
 > [!WARNING]
 > El `Down` de `20260914130000_create_library.sql` hace `DROP EXTENSION` de

@@ -105,6 +105,28 @@ func TestLibrarySchemaHoldsTheInvariantsTheDomainCannot(t *testing.T) {
 			"source_id is NULL for manual entries and the partial index leaves them out on purpose")
 	})
 
+	t.Run("an imported work must carry the id it was imported by", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('Ghost import', 'anime', 'anilist', NULL)`)
+		require.Error(t, err,
+			"an imported work with a null source_id is invisible to the partial unique index, "+
+				"so deduplication would silently stop working")
+		assert.Contains(t, err.Error(), "works_source_id_matches_source")
+	})
+
+	t.Run("a manual work cannot claim an external id", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('Fake manual', 'anime', 'manual', '5114')`)
+		require.Error(t, err, "the other direction of the same rule")
+		assert.Contains(t, err.Error(), "works_source_id_matches_source")
+	})
+
+	t.Run("a work cannot expand itself", func(t *testing.T) {
+		err := exec(`UPDATE works SET expansion_of = id WHERE id = '` + baseGame + `'`)
+		require.Error(t, err, "the foreign key accepts it happily: it points back into the same table")
+		assert.Contains(t, err.Error(), "works_expansion_of_is_another_work")
+	})
+
 	t.Run("a work in somebody's library cannot be deleted", func(t *testing.T) {
 		err := exec(`DELETE FROM works WHERE id = '` + importedWork + `'`)
 		require.Error(t, err, "domain rule 3: a work is shared history and is never deleted")
@@ -207,6 +229,15 @@ ORDER BY title`
 	assert.Empty(t, found("100%Teacher"),
 		"and if it were a wildcard this would match, which is exactly the bug the escaping prevents")
 	assert.Empty(t, found("_"), "the same goes for the single-character wildcard")
+
+	// The one that matters and that no ASCII test reaches: unaccent itself
+	// emits wildcards. Full-width ％ (U+FF05) folds to a plain %, so if the
+	// escaping ran before the folding instead of around it, this term would
+	// arrive at the pattern carrying a live wildcard and match.
+	assert.Empty(t, found("100\uff05Teach"),
+		"a folded full-width percent must stay a literal: escaping wraps folding, never the other way round")
+	assert.Equal(t, []string{"100% Teacher"}, found("100\uff05"),
+		"and it still finds what somebody typing it actually meant")
 }
 
 // The risk the issue names out loud: a Down that drops the tables and forgets
@@ -309,8 +340,23 @@ WHERE immutable_unaccent(lower(title)) LIKE '%pokemon%'`)
 	})
 
 	t.Run("filtering the library by status", func(t *testing.T) {
-		explained := plan(`SELECT * FROM library_entries WHERE member_id = '` + memberID + `' AND status = 'in_progress'`)
+		// The shape ListLibraryEntries really emits: the status filter AND the
+		// keyset ORDER BY together. Asserting on a bare SELECT without the
+		// ORDER BY was false comfort — it is a query this codebase never
+		// sends, and it hid that a plain (member_id, status) index is never
+		// chosen, because it cannot deliver the order and the other index can.
+		explained := plan(`
+SELECT le.*, w.*
+FROM library_entries le
+JOIN works w ON w.id = le.work_id
+WHERE le.member_id = '` + memberID + `'
+  AND le.status = 'in_progress'
+ORDER BY le.created_at DESC, le.id DESC
+LIMIT 26`)
 
-		assert.Contains(t, explained, "library_entries_member_status_idx")
+		assert.Contains(t, explained, "library_entries_member_status_idx",
+			"the status index only earns its place if the planner picks it for the real query")
+		assert.NotContains(t, explained, "Sort",
+			"and it only gets picked because it carries the keyset columns after (member_id, status)")
 	})
 }

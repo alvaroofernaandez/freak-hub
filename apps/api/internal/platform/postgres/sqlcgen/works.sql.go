@@ -22,7 +22,11 @@ VALUES (
     $3::text,
     $4::text,
     $5::int,
-    $6::jsonb
+    -- COALESCE, not a bare argument: the contract makes metadata optional on
+    -- CreateWorkRequest, and a required jsonb parameter would send Go's nil as
+    -- SQL NULL and hit the NOT NULL constraint. A POST that simply omits the
+    -- field has to land on the column's own '{}' default, not on a 500.
+    COALESCE($6::jsonb, '{}')
 )
 RETURNING id, title, category, source, source_id, cover_url, synopsis, year, metadata, expansion_of, created_at, updated_at
 `
@@ -102,6 +106,10 @@ type ListWorksParams struct {
 //
 // works_category_created_idx serves the category filter and the whole ORDER BY
 // at once, which is why the index carries the id tiebreak the keyset needs.
+// That holds for a custom plan: under a generic one the NULL guard blocks the
+// row-comparison pushdown and Postgres sorts the partition instead, and the
+// cost then grows with depth. Harmless at this size, but do not copy this
+// comment elsewhere as a guarantee.
 //
 // The title search folds case and accents, so "pokemon" finds "Pokémon"
 // (ADR-0015). Both sides go through immutable_unaccent(lower(...)), and the
@@ -115,8 +123,18 @@ type ListWorksParams struct {
 // protecting is kept by escaping instead: the term arrives from a query
 // string, so a backslash, a % and a _ are turned into literals before they
 // reach the pattern, and somebody searching for "100%" searches for a percent
-// sign rather than writing a wildcard. Order matters in that nesting —
-// backslash first, or the escapes the other two introduce get escaped again.
+// sign rather than writing a wildcard.
+//
+// Two orderings hold this up, and only one of them is visible at a glance:
+//
+//  1. The escaping WRAPS the folding — immutable_unaccent runs on the inside,
+//     the replaces on the outside. It has to be this way round because
+//     unaccent emits wildcards of its own: full-width ％ (U+FF05) folds to %,
+//     U+FF3C folds to a backslash, U+FF3F to an underscore. Escape first and
+//     fold second and the fold manufactures a live wildcard out of a term
+//     that had none — a wildcard injection that no ASCII test would catch.
+//  2. Inside the escaping, backslash first, or the escapes that the other two
+//     replaces introduce get escaped all over again.
 func (q *Queries) ListWorks(ctx context.Context, arg ListWorksParams) ([]Work, error) {
 	rows, err := q.db.Query(ctx, listWorks,
 		arg.Category,

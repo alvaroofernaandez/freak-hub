@@ -227,10 +227,18 @@ type ListLibraryEntriesRow struct {
 // query because the wishlist is not a separate thing: it is status='wishlist'
 // arriving through this same filter.
 //
-// The keyset walks library_entries_member_created_idx, which delivers
-// (member_id, created_at DESC, id DESC) already ordered, so a deep page costs
-// what the first one costs. The category filter reaches across the join into
-// works, which is why it is applied there and not pushed into the entry index.
+// Unfiltered, the keyset walks library_entries_member_created_idx, which
+// delivers (member_id, created_at DESC, id DESC) already ordered. With a
+// status filter it walks library_entries_member_status_idx, which carries the
+// same two ordering columns after (member_id, status) for exactly that reason:
+// without them the planner ignored it entirely and filtered on top of the
+// other index instead. The category filter reaches across the join into works,
+// so it is applied there rather than pushed into either entry index.
+//
+// All of that holds for a custom plan: under a generic one the NULL guard
+// blocks the row-comparison pushdown and Postgres sorts the partition instead,
+// and the cost then grows with depth. Harmless at this size, but do not copy
+// this comment elsewhere as a guarantee.
 func (q *Queries) ListLibraryEntries(ctx context.Context, arg ListLibraryEntriesParams) ([]ListLibraryEntriesRow, error) {
 	rows, err := q.db.Query(ctx, listLibraryEntries,
 		arg.MemberID,

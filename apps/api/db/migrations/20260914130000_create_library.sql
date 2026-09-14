@@ -32,6 +32,15 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- unaccent rules file is ever edited, every index built on this function has
 -- to be REINDEXed, because Postgres will keep trusting entries computed under
 -- the old rules.
+--
+-- One property of this function decides whether the search is safe, and it is
+-- not obvious: unaccent EMITS wildcards. Six codepoints fold onto LIKE's own
+-- metacharacters — U+2216, U+FE68 and U+FF3C all become a backslash, U+FE6A
+-- and U+FF05 (full-width %) become a percent sign, U+FF3F becomes an
+-- underscore. So in ListWorks the escaping WRAPS the folding: fold first, then
+-- escape what came out. The other order would escape a term that does not
+-- contain a wildcard yet and then manufacture one, which is a wildcard
+-- injection no ASCII test would ever catch.
 CREATE FUNCTION immutable_unaccent(input text) RETURNS text
     LANGUAGE sql
     IMMUTABLE
@@ -78,7 +87,27 @@ CREATE TABLE works (
     -- is worse than no expansion.
     expansion_of uuid          REFERENCES works (id) ON DELETE RESTRICT,
     created_at   timestamptz   NOT NULL DEFAULT now(),
-    updated_at   timestamptz   NOT NULL DEFAULT now()
+    updated_at   timestamptz   NOT NULL DEFAULT now(),
+
+    -- source_id is null if AND ONLY IF the work was typed in by hand. Both
+    -- directions matter, and the second one is the dangerous one: an imported
+    -- work with a null source_id is invisible to works_source_idx, because that
+    -- index is partial over WHERE source_id IS NOT NULL. One nil pointer in an
+    -- importer and the deduplication guarantee is gone without an error — the
+    -- next person importing the same anime gets a second row, and two people
+    -- "watching the same thing" end up pointing at different works, which is the
+    -- premise the whole shared catalogue rests on.
+    CONSTRAINT works_source_id_matches_source
+        CHECK ((source = 'manual') = (source_id IS NULL)),
+
+    -- A work cannot expand itself. The foreign key is happy to accept it, being
+    -- a reference back into the same table.
+    --
+    -- That only board games have expansions is NOT enforced here: that category
+    -- does not exist yet, ADR-0006 describes what it will look like, and a CHECK
+    -- written before the first board game is a guess.
+    CONSTRAINT works_expansion_of_is_another_work
+        CHECK (expansion_of IS NULL OR expansion_of <> id)
 );
 
 -- One member's relationship with one work: what turns a shared catalogue into
@@ -139,8 +168,15 @@ CREATE INDEX library_entries_member_created_idx
 
 -- Filtering your own library by status, which is also how the wishlist is
 -- read: it is not a separate list, it is status = 'wishlist'.
+--
+-- It carries the keyset columns for a reason found by measuring rather than by
+-- reading: as plain (member_id, status) the planner never chose it once over
+-- 100.000 entries, not even at 0.1% selectivity, because it could not deliver
+-- the ORDER BY and library_entries_member_created_idx could — so status was
+-- always demoted to a filter on top of that one. An index nothing picks is not
+-- a slow index, it is a comment that costs write throughput.
 CREATE INDEX library_entries_member_status_idx
-    ON library_entries (member_id, status);
+    ON library_entries (member_id, status, created_at DESC, id DESC);
 
 -- The shared catalogue browsed by category, with the same keyset order as
 -- everything else that lists.
