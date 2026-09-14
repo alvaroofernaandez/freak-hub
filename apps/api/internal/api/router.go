@@ -22,15 +22,7 @@ import (
 type Deps struct {
 	Users       *users.Service
 	Invitations *invitations.Service
-	// Library is wired but not yet routed: the handlers for /v1/works and
-	// /v1/library are their own change. It is here so the adapter arrives with
-	// its composition already written, and so the handlers land as one change
-	// about HTTP rather than one that also has to invent the wiring.
-	//
-	// It buys nothing at boot, and the first version of this comment claimed
-	// otherwise: library.NewService and postgres.NewWorkRepository only assign
-	// fields, so there is no misconfiguration for constructing them early to
-	// catch. Ten harmless lines of preparation, not a safety net.
+	// Library backs /v1/works and /v1/library.
 	Library        *library.Service
 	Verifier       auth.Verifier
 	AllowedOrigins []string
@@ -87,6 +79,16 @@ func NewRouter(deps Deps) http.Handler {
 		r.Post("/invitations", handlers.createInvitation)
 		r.Get("/invitations", handlers.listInvitations)
 		r.Get("/invitations/group", handlers.listGroupInvitations)
+
+		r.Get("/works", handlers.listWorks)
+		r.Post("/works", handlers.createWork)
+		r.Get("/works/{id}", handlers.getWork)
+
+		r.Get("/library", handlers.listLibraryEntries)
+		r.Post("/library", handlers.createLibraryEntry)
+		r.Get("/library/{id}", handlers.getLibraryEntry)
+		r.Patch("/library/{id}", handlers.updateLibraryEntry)
+		r.Delete("/library/{id}", handlers.deleteLibraryEntry)
 	})
 
 	return router

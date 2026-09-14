@@ -83,6 +83,10 @@ func (r *WorkRepository) Create(ctx context.Context, work library.Work) (library
 			return library.Work{}, library.ErrWorkAlreadyImported
 		}
 
+		if unstorable := asUnstorableText(err); unstorable != nil {
+			return library.Work{}, unstorable
+		}
+
 		return library.Work{}, fmt.Errorf("insert work: %w", err)
 	}
 
@@ -160,6 +164,10 @@ func (r *WorkRepository) Search(
 
 	rows, err := r.queries.ListWorks(ctx, params)
 	if err != nil {
+		if unstorable := asUnstorableText(err); unstorable != nil {
+			return nil, unstorable
+		}
+
 		return nil, fmt.Errorf("select works: %w", err)
 	}
 
@@ -414,11 +422,13 @@ func createParamsOf(entry library.Entry) (sqlcgen.CreateLibraryEntryParams, erro
 // translateEntryWrite turns the two constraint failures a write to
 // library_entries can raise into the domain errors that mean the same thing.
 func translateEntryWrite(err error, action string) error {
-	switch {
+	switch unstorable := asUnstorableText(err); {
 	case isUniqueViolation(err, entryPerMemberAndWork):
 		return library.ErrAlreadyInLibrary
 	case isForeignKeyViolation(err, entryWorkForeignKey):
 		return library.ErrWorkNotFound
+	case unstorable != nil:
+		return unstorable
 	default:
 		return fmt.Errorf("%s: %w", action, err)
 	}

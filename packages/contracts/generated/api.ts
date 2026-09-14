@@ -1325,10 +1325,12 @@ export interface operations {
             };
             /**
              * @description `invalid_limit` or `invalid_cursor` for the pagination
-             *     parameters, or `invalid_filter` when `category` is not one of
-             *     the declared values. A filter is never ignored silently: an
-             *     unknown value is rejected rather than answered with the
-             *     unfiltered list.
+             *     parameters, or `invalid_filter` for either of the two filters:
+             *     when `category` is not one of the declared values, and when `q`
+             *     is longer than the 200 characters declared above or carries a
+             *     character that cannot be stored. A filter is never ignored
+             *     silently: a value that will not do is rejected rather than
+             *     answered with the unfiltered list.
              */
             400: {
                 headers: {
@@ -1366,7 +1368,12 @@ export interface operations {
                     "application/json": components["schemas"]["Work"];
                 };
             };
-            /** @description The body is malformed or carries unknown fields */
+            /**
+             * @description `invalid_payload`: the body is malformed, carries unknown
+             *     fields, or a property falls outside the bounds declared above —
+             *     `title`, `year`, `synopsis`, or text anywhere in `metadata` that
+             *     cannot be stored.
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1513,7 +1520,12 @@ export interface operations {
                     "application/json": components["schemas"]["LibraryEntry"];
                 };
             };
-            /** @description The body is malformed or carries unknown fields */
+            /**
+             * @description `invalid_payload`: the body is malformed, carries unknown
+             *     fields, sends `null` for a property declared without one
+             *     (`status`, `progress`, `is_favourite`, `owned`), or a `note`
+             *     that falls outside the bounds declared above.
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1645,7 +1657,12 @@ export interface operations {
                     "application/json": components["schemas"]["LibraryEntry"];
                 };
             };
-            /** @description The body is malformed or carries unknown fields */
+            /**
+             * @description `invalid_payload`: the body is malformed, carries unknown
+             *     fields, sends `null` for a property declared without one
+             *     (`status`, `progress`, `is_favourite`, `owned`), or a `note`
+             *     that falls outside the bounds declared above.
+             */
             400: {
                 headers: {
                     [name: string]: unknown;

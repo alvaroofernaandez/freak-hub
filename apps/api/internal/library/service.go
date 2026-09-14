@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -45,6 +46,10 @@ func (s *Service) AddToLibrary(
 
 	if !input.Status.Valid() {
 		return EntryWithWork{}, ErrInvalidStatus
+	}
+
+	if err := validateNote(input.Note); err != nil {
+		return EntryWithWork{}, err
 	}
 
 	work, err := s.existingWork(ctx, input.WorkID)
@@ -168,6 +173,12 @@ func (s *Service) UpdateEntry(
 
 	if progress, ok := patch.Progress.Get(); ok {
 		if err := ValidateProgress(work, progress); err != nil {
+			return EntryWithWork{}, err
+		}
+	}
+
+	if note, ok := patch.Note.Get(); ok {
+		if err := validateNote(note); err != nil {
 			return EntryWithWork{}, err
 		}
 	}
@@ -389,6 +400,22 @@ func (s *Service) CreateManualWork(ctx context.Context, input ManualWorkInput) (
 		return Work{}, ErrInvalidCategory
 	}
 
+	if err := validateYear(input.Year); err != nil {
+		return Work{}, err
+	}
+
+	if err := validateSynopsis(input.Synopsis); err != nil {
+		return Work{}, err
+	}
+
+	if carriesNullCharacter(input.CoverURL) {
+		return Work{}, ErrInvalidCoverURL
+	}
+
+	if metadataCarriesNullCharacter(input.Metadata) {
+		return Work{}, ErrInvalidMetadata
+	}
+
 	work, err := s.works.Create(ctx, Work{
 		Title:    title,
 		Category: input.Category,
@@ -427,6 +454,9 @@ func (s *Service) SearchWorks(
 	}
 
 	filter.Query = strings.TrimSpace(filter.Query)
+	if err := validateQuery(filter.Query); err != nil {
+		return nil, nil, err
+	}
 
 	// Ask for one extra row: its presence, not a COUNT(*), is what tells us
 	// whether another page follows (ADR-0011).
@@ -445,6 +475,117 @@ func (s *Service) SearchWorks(
 	return rows, &Cursor{CreatedAt: last.CreatedAt, ID: last.ID}, nil
 }
 
+// validateYear holds a release year to the range the contract declares. An
+// absent year asks for nothing and passes.
+func validateYear(year *int) error {
+	if year == nil {
+		return nil
+	}
+
+	if *year < MinYear || *year > MaxYear {
+		return ErrInvalidYear
+	}
+
+	return nil
+}
+
+// validateNote holds a note to the length the contract declares, counting
+// characters rather than bytes. A nil note is an absent or a cleared one and
+// passes.
+func validateNote(note *string) error {
+	if note == nil {
+		return nil
+	}
+
+	if len([]rune(*note)) > MaxNoteLength || carriesNullCharacter(*note) {
+		return ErrInvalidNote
+	}
+
+	return nil
+}
+
+// validateSynopsis holds a synopsis to the same two rules.
+func validateSynopsis(synopsis string) error {
+	if len([]rune(synopsis)) > MaxSynopsisLength || carriesNullCharacter(synopsis) {
+		return ErrInvalidSynopsis
+	}
+
+	return nil
+}
+
+// validateQuery holds the free-text search to what a column can hold.
+//
+// Validity is checked here and nowhere else on purpose. Every other piece of
+// client text arrives through encoding/json, which replaces invalid UTF-8
+// with U+FFFD before the domain ever sees it — so the same lone surrogate is
+// stored as a replacement character in a synopsis and is simply not
+// reachable there. A query string is different in kind: raw bytes, through
+// net/url, which sanitises nothing and hands the driver exactly what the
+// client sent.
+func validateQuery(query string) error {
+	if len([]rune(query)) > MaxQueryLength {
+		return ErrInvalidFilter
+	}
+
+	if carriesNullCharacter(query) || !utf8.ValidString(query) {
+		return ErrInvalidFilter
+	}
+
+	return nil
+}
+
+// carriesNullCharacter reports whether text holds U+0000.
+//
+// It is the one character Postgres will not store in a text column at all —
+// 22021, "invalid byte sequence for encoding UTF8: 0x00" — and the one a
+// jsonb column refuses as an escape sequence, 22P05. Go is perfectly happy
+// to carry it inside a string, so nothing upstream notices: the length is
+// fine, the encoding is valid UTF-8, and the request only fails once it has
+// reached the database, as a 500 with nothing useful to say.
+//
+// Modelling it here rather than translating the two SQLSTATEs in the adapter
+// is the same choice made for the int4 ceiling, for the same reason: a rule
+// about what the client may send belongs where every caller passes, not in
+// one adapter that happens to be the storage of the day.
+func carriesNullCharacter(text string) bool {
+	return strings.ContainsRune(text, '\x00')
+}
+
+// metadataCarriesNullCharacter walks the category-specific object looking for
+// the same character, at any depth and in keys as well as values.
+//
+// "At any depth" is the whole point. Metadata is the one part of a work whose
+// shape nobody declared, so a check that only read the top level would be a
+// check a nested object steps around — and the jsonb column refuses the
+// escape wherever it sits.
+func metadataCarriesNullCharacter(value any) bool {
+	switch typed := value.(type) {
+	case string:
+		return carriesNullCharacter(typed)
+	case Metadata:
+		return metadataCarriesNullCharacter(map[string]any(typed))
+	case map[string]any:
+		for key, nested := range typed {
+			if carriesNullCharacter(key) || metadataCarriesNullCharacter(nested) {
+				return true
+			}
+		}
+
+		return false
+	case []any:
+		for _, nested := range typed {
+			if metadataCarriesNullCharacter(nested) {
+				return true
+			}
+		}
+
+		return false
+	default:
+		// Numbers, booleans and nulls carry no text to refuse.
+		return false
+	}
+}
+
 // normaliseTitle trims the title and holds it to the bounds the contract
 // declares, so a title made of spaces can never reach the catalogue.
 func normaliseTitle(raw string) (string, error) {
@@ -453,5 +594,18 @@ func normaliseTitle(raw string) (string, error) {
 		return "", ErrInvalidTitle
 	}
 
+	if carriesNullCharacter(title) {
+		return "", ErrInvalidTitle
+	}
+
 	return title, nil
+}
+
+// GetWork returns one record of the shared catalogue.
+//
+// There is no owner check and there is nothing to scope: a Work belongs to
+// the whole group by design (domain rule 3), and whether the caller keeps it
+// in their own library is a different question, answered by ListLibrary.
+func (s *Service) GetWork(ctx context.Context, id uuid.UUID) (Work, error) {
+	return s.existingWork(ctx, id)
 }

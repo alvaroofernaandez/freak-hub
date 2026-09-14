@@ -6,9 +6,15 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 )
+
+// ErrTrailingData means the body carried something after the JSON document
+// it was supposed to be. Callers answer it the same way as any other
+// malformed body: 400 invalid_payload.
+var ErrTrailingData = errors.New("the request body carries data after the JSON document")
 
 // WriteJSON writes a JSON response, omitting the body for 204 responses.
 func WriteJSON(w http.ResponseWriter, status int, payload any) {
@@ -28,7 +34,15 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 
 // DecodeJSON reads a JSON request body, capped at 1 MiB, rejecting unknown
 // fields so a typo in a client payload fails loudly instead of being
-// silently ignored.
+// silently ignored — and rejecting anything after the document for the same
+// reason.
+//
+// A decoder reads one document and stops, so `{"a":1}{"b":2}` used to
+// succeed with the second half quietly unread: a partial success that looks
+// exactly like a whole one. That is the failure mode "no unknown fields"
+// exists to prevent, seen from the other end, so it is refused here rather
+// than per handler. Trailing whitespace is not data — a newline is how most
+// clients end a body.
 //
 // w must be the request's real ResponseWriter, not nil: http.MaxBytesReader
 // needs it to mark the connection for closing once the limit is exceeded,
@@ -38,5 +52,15 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, target any) error {
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	decoder.DisallowUnknownFields()
 
-	return decoder.Decode(target)
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+
+	// More reports whether another element follows in the stream, and it
+	// skips whitespace to answer.
+	if decoder.More() {
+		return ErrTrailingData
+	}
+
+	return nil
 }

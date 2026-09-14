@@ -679,3 +679,86 @@ func TestTheLibraryUseCasesRunAgainstPostgres(t *testing.T) {
 	_, err = works.ByID(t.Context(), work.ID)
 	assert.NoError(t, err, "domain rule 3: the work stays in the shared catalogue")
 }
+
+// The belt to the domain's braces.
+//
+// Three rounds of review found three ways for client bytes to meet a storage
+// constraint the domain had not modelled — an int4 ceiling, U+0000, invalid
+// UTF-8 — and every one of them arrived as a 500. The domain rules are the
+// primary defence and stay so: they answer precisely and they sit where every
+// caller passes. But they only cover what somebody anticipated, and the score
+// on anticipating is nought for three.
+//
+// These translate the two SQLSTATEs that mean "those bytes cannot live in
+// this column" into a domain error, so a fourth kind arrives as a 400 with a
+// SQLSTATE in the log rather than as a 500 nobody can act on. They are not
+// expected to fire: the domain should have refused first, and a firing here
+// is a missing domain rule.
+
+func TestTextNoColumnCanHoldIsADomainErrorAndNotAnOpaqueFailure(t *testing.T) {
+	pool := libraryDB(t, nil)
+	works := postgres.NewWorkRepository(pool)
+
+	_, err := works.Create(t.Context(), library.Work{
+		Title:    "Frieren\x00",
+		Category: library.CategoryAnime,
+		Source:   library.SourceManual,
+	})
+
+	require.ErrorIs(t, err, library.ErrUnstorableText,
+		"22021 reaching a caller as an opaque wrap is a 500 nobody can act on")
+}
+
+func TestUnstorableTextInJSONBIsTheSameDomainError(t *testing.T) {
+	pool := libraryDB(t, nil)
+	works := postgres.NewWorkRepository(pool)
+
+	_, err := works.Create(t.Context(), library.Work{
+		Title:    "Frieren",
+		Category: library.CategoryAnime,
+		Source:   library.SourceManual,
+		Metadata: library.Metadata{"season": "2024\x00spring"},
+	})
+
+	require.ErrorIs(t, err, library.ErrUnstorableText,
+		"jsonb refuses the escape with 22P05, which means the same thing to the caller")
+}
+
+func TestUnstorableTextOnAReadIsTheSameDomainError(t *testing.T) {
+	pool := libraryDB(t, nil)
+	works := postgres.NewWorkRepository(pool)
+
+	_, err := works.Search(t.Context(), library.WorkFilter{Query: "\xed\xa0\x80"}, nil, 25)
+
+	require.ErrorIs(t, err, library.ErrUnstorableText,
+		"a read reaches the same refusal, and nothing was even written")
+}
+
+func TestUnstorableTextWhenWritingAnEntryIsTheSameDomainError(t *testing.T) {
+	pool := libraryDB(t, nil)
+	works := postgres.NewWorkRepository(pool)
+	entries := postgres.NewEntryRepository(pool)
+	member := seedMember(t, pool, "alvaro")
+
+	work, err := works.Create(t.Context(), library.Work{
+		Title: "Frieren", Category: library.CategoryAnime, Source: library.SourceManual,
+	})
+	require.NoError(t, err)
+
+	note := "a\x00b"
+
+	_, err = entries.Create(t.Context(), library.Entry{
+		MemberID: member, WorkID: work.ID, Status: library.StatusWishlist, Note: &note,
+	})
+	require.ErrorIs(t, err, library.ErrUnstorableText)
+
+	stored, err := entries.Create(t.Context(), library.Entry{
+		MemberID: member, WorkID: work.ID, Status: library.StatusWishlist,
+	})
+	require.NoError(t, err)
+
+	stored.Note = &note
+
+	_, err = entries.Update(t.Context(), stored)
+	require.ErrorIs(t, err, library.ErrUnstorableText, "the update statement carries client text too")
+}

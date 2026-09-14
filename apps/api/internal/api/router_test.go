@@ -10,9 +10,11 @@ import (
 	"net/http/httptest"
 	"net/textproto"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,6 +23,8 @@ import (
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/auth"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations/invitationsmem"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library/librarymem"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users/usersmem"
 )
@@ -52,6 +56,8 @@ type suite struct {
 	memberEmail    *invitationsmem.Members
 	profileUpdater *usersmem.ProfileUpdater
 	avatarUploader *usersmem.AvatarUploader
+	works          *librarymem.WorkRepository
+	entries        *librarymem.EntryRepository
 }
 
 func newSuite(t *testing.T) *suite {
@@ -63,6 +69,8 @@ func newSuite(t *testing.T) *suite {
 	members := invitationsmem.NewMembers()
 	profileUpdater := usersmem.NewProfileUpdater()
 	avatarUploader := usersmem.NewAvatarUploader()
+	works := librarymem.NewWorkRepository()
+	entries := librarymem.NewEntryRepository(works)
 
 	usersService := users.NewService(usersRepo,
 		users.WithProfileUpdater(profileUpdater),
@@ -74,11 +82,13 @@ func newSuite(t *testing.T) *suite {
 		Members:     members,
 		RedirectURL: "https://freakhub.local/registro",
 	})
+	libraryService := library.NewService(library.ServiceDeps{Works: works, Entries: entries})
 
 	return &suite{
 		router: api.NewRouter(api.Deps{
 			Users:          usersService,
 			Invitations:    invitationsService,
+			Library:        libraryService,
 			Verifier:       tokenVerifier{},
 			AllowedOrigins: []string{"http://localhost:3000"},
 		}),
@@ -88,6 +98,8 @@ func newSuite(t *testing.T) *suite {
 		memberEmail:    members,
 		profileUpdater: profileUpdater,
 		avatarUploader: avatarUploader,
+		works:          works,
+		entries:        entries,
 	}
 }
 
@@ -149,6 +161,24 @@ func (s *suite) do(t *testing.T, method, path, token string, body any) *httptest
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
+	request.Header.Set("Content-Type", "application/json")
+
+	recorder := httptest.NewRecorder()
+	s.router.ServeHTTP(recorder, request)
+
+	return recorder
+}
+
+// doRaw sends a body exactly as written, for the cases where the point is
+// that the bytes are not what json.Marshal would ever produce.
+func (s *suite) doRaw(t *testing.T, method, path, token, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if token != "" {
+		request.Header.Set("Authorization", "Bearer "+token)
+	}
+
 	request.Header.Set("Content-Type", "application/json")
 
 	recorder := httptest.NewRecorder()
@@ -866,3 +896,117 @@ func TestCORSRejectsAnUnknownOrigin(t *testing.T) {
 }
 
 var _ = uuid.Nil
+
+// v1Surface is every route mounted under /v1, listed so that removing one
+// from the router is a failing test rather than a silent loss of an
+// endpoint. The check below walks the router instead of reading this list,
+// so a route added and *not* listed here still has to answer 401 without a
+// session — the list is a floor, never the whole rule.
+var v1Surface = []string{
+	"GET /v1/me",
+	"PATCH /v1/me",
+	"POST /v1/me/avatar",
+	"GET /v1/members",
+	"GET /v1/invitations",
+	"POST /v1/invitations",
+	"GET /v1/invitations/group",
+	"GET /v1/works",
+	"POST /v1/works",
+	"GET /v1/works/{id}",
+	"GET /v1/library",
+	"POST /v1/library",
+	"GET /v1/library/{id}",
+	"PATCH /v1/library/{id}",
+	"DELETE /v1/library/{id}",
+}
+
+// TestEveryRouteUnderV1RefusesARequestWithNoSession is the guard AGENTS.md
+// rule 5 asks for, written as a walk of the router rather than as a test per
+// route: a route added tomorrow and forgotten is caught the same day it is
+// mounted, which a hand-written list of cases cannot promise.
+//
+// It checks the route is behind auth.Middleware by asking it, not by reading
+// the middleware chain: a middleware present but wired in the wrong order
+// would satisfy the second and fail this.
+func TestEveryRouteUnderV1RefusesARequestWithNoSession(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+
+	routes, ok := s.router.(chi.Routes)
+	require.True(t, ok, "the router has to be walkable for this guard to mean anything")
+
+	walked := make([]string, 0, len(v1Surface))
+
+	require.NoError(t, chi.Walk(routes, func(
+		method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler,
+	) error {
+		// The bare "/v1" is checked too, and the slash is not a detail. A
+		// handler mounted on exactly that path escapes the session guard
+		// outright: chi.Walk reports it, a request with no session runs it,
+		// and only the accident of which handler sits there decides what
+		// leaks. Measured — GET /v1 with no session reached listWorks and
+		// would have answered the catalogue to an anonymous caller.
+		//
+		// Two details make this easy to measure wrong, and both cost an
+		// afternoon here. Registration ORDER decides everything: declared
+		// after router.Route("/v1", …) the route is live and walked;
+		// declared before it, Mount absorbs the node, Walk never reports it
+		// and the request goes through the subrouter to a 401. And the
+		// TRAILING SLASH is a different chi route: GET /v1/ answers 401
+		// whatever is mounted on GET /v1, so probing with the slash proves
+		// nothing about the path without it.
+		if route != "/v1" && !strings.HasPrefix(route, "/v1/") {
+			return nil
+		}
+
+		walked = append(walked, method+" "+route)
+
+		path := strings.ReplaceAll(route, "{id}", uuid.NewString())
+		recorder := s.do(t, method, path, "", map[string]any{})
+
+		assert.Equalf(t, http.StatusUnauthorized, recorder.Code,
+			"%s %s answered without a session", method, route)
+		assert.Equalf(t, "missing_token", errorCode(t, recorder), "%s %s", method, route)
+
+		return nil
+	}))
+
+	assert.Subset(t, walked, v1Surface, "a route of the documented surface is no longer mounted")
+}
+
+// The two routes outside the library that share httpx.DecodeJSON. The change
+// that rejects a second document is theirs as much as it is /v1/works', and
+// a behaviour change nothing asserts at the route level is one the next
+// person has to rediscover by reading httpx.
+func TestPatchMeRejectsASecondDocumentAfterTheBody(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.doRaw(t, http.MethodPatch, "/v1/me", "valid-user_alex",
+		`{"username":"alex2"}{"username":"alex3"}`)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+
+	unchanged, err := s.usersRepo.ByClerkID(t.Context(), "user_alex")
+	require.NoError(t, err)
+	assert.Equal(t, "alex", unchanged.Username,
+		"the first document is not applied before the second is noticed")
+}
+
+func TestCreateInvitationRejectsASecondDocumentAfterTheBody(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.doRaw(t, http.MethodPost, "/v1/invitations", "valid-user_alex",
+		`{"email":"uno@freakhub.test"}{"email":"dos@freakhub.test"}`)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+	assert.Empty(t, s.sender.Emails, "nothing is sent when the body is refused")
+}

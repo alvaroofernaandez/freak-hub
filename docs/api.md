@@ -18,6 +18,13 @@ documento explica las decisiones que hay detrás.
    `/webhooks` no la llevan porque no son API de producto.
 4. **Sin campos desconocidos.** El decodificador rechaza propiedades que no
    existen: una errata en un cliente falla ruidosamente en vez de ignorarse.
+   Y **sin nada detrás del documento**: un cuerpo con dos documentos JSON
+   pegados (`{"a":1}{"b":2}`) se rechaza con `400 invalid_payload` en lugar de
+   leer el primero y callar sobre el segundo. Es el mismo fallo visto desde el
+   otro lado —un éxito parcial con aspecto de éxito entero—, así que se
+   resuelve en `httpx.DecodeJSON` y vale para todos los endpoints con cuerpo.
+   Los espacios en blanco al final no son datos: un salto de línea es como
+   acaba casi cualquier cuerpo.
 
 ## Endpoints
 
@@ -40,6 +47,182 @@ documento explica las decisiones que hay detrás.
 | PATCH | `/v1/library/{id}` | sí | Actualiza estado, progreso, valoración, favorito, posesión o nota |
 | DELETE | `/v1/library/{id}` | sí | Saca la obra de la biblioteca. **No** borra la obra |
 | POST | `/webhooks/clerk` | firma Svix | Eventos de Clerk |
+
+Toda la tabla está **implementada**. Hasta este cambio las ocho rutas de
+`/v1/works` y `/v1/library` existían solo en el contrato: el esquema, el
+dominio y el adaptador estaban listos, pero nadie podía llegar a ellos desde
+fuera.
+
+## Biblioteca y catálogo
+
+Cuatro decisiones del borde HTTP que no se leen en el YAML y conviene tener a
+mano.
+
+### El miembro siempre sale de la sesión
+
+Ni el cuerpo ni la cadena de consulta llevan `member_id`, y no es que se
+ignore: `POST /v1/library` no declara esa propiedad, así que el decodificador
+estricto la rechaza con `400 invalid_payload`. Aceptarla sería aceptar una
+escritura en la biblioteca de otra persona.
+
+El listado tiene además un segundo cerrojo: `library.Service.ListLibrary`
+sobrescribe el propietario del filtro con el de la sesión, de modo que un
+manejador que algún día olvide fijarlo tampoco puede recorrer una estantería
+ajena.
+
+### Una entrada ajena responde 404, nunca 403
+
+`GET`, `PATCH` y `DELETE` sobre `/v1/library/{id}` responden
+`404 library_entry_not_found` tanto si la entrada no existe como si existe y
+es de otro miembro. Un 403 confirmaría que ese identificador es real, y de
+quién es cada biblioteca no es asunto de nadie más.
+
+La indistinguibilidad es literal: mismo estado, mismo `code` y mismo `detail`
+en las dos ramas. Una prosa distinta según el caso sería exactamente la
+confirmación que el 404 existe para no dar. Un identificador mal formado
+—algo que no es un UUID— responde igual, por la misma razón.
+
+La comprobación vive en el servicio de dominio, no en el manejador. El puerto
+`EntryRepository.ByID` no recibe el miembro, así que un manejador que lo
+llamara directamente entregaría cualquier entrada a cualquiera; por eso las
+tres rutas pasan por `GetEntry`, `UpdateEntry` y `RemoveFromLibrary`.
+
+### `PATCH`: ausente, nulo y valor son tres cosas distintas
+
+Una propiedad ausente deja el valor guardado como está. Una propiedad con
+`null` lo borra a propósito, y es la única manera de quitar una valoración,
+una nota o una fecha. Las cuatro propiedades que el contrato declara sin
+`null` —`status`, `progress`, `is_favourite` y `owned`— rechazan un nulo con
+`400 invalid_payload` en lugar de leerlo como su valor cero, que dejaría de
+marcar un favorito que nadie pidió cambiar.
+
+`POST /v1/library` aplica la misma regla a `progress`, `is_favourite` y
+`owned`. Leer ahí un nulo como el valor cero aterrizaba justo en los valores
+por defecto del contrato, así que no hacía daño —y por eso mismo habría
+sobrevivido hasta el día en que uno de esos valores por defecto cambiara.
+
+Dos reglas más, ambas sobre *cambios* y no sobre presencia:
+
+- Reenviar el estado que la entrada ya tiene no es una transición ilegal: es
+  no pedir nada, y responder 422 a nada es una trampa.
+- Reenviar la misma valoración guardada tampoco pide nada y pasa en cualquier
+  estado. Solo una valoración **distinta** sobre un estado que no sea
+  `completed` ni `dropped` da `422 rating_not_allowed`. Esa cláusula no se
+  aplica al alta: en un `POST` no hay nada guardado con lo que coincidir.
+
+Una valoración guardada **sobrevive** a un cambio de estado. Volver a ver algo
+no borra la nota que le pusiste.
+
+### Un cursor solo vale para los filtros que lo produjeron
+
+El cursor lleva una posición —`(created_at, id)`— y no los filtros con los que
+se calculó, así que reutilizar uno de otra combinación **no se rechaza**: el
+orden es el mismo para todos los filtros, de modo que la página que vuelve es
+una página correcta del filtro nuevo, solo que empezada por la mitad. Lo que
+no es, es un recorrido completo. Por eso el contrato pide reenviar los mismos
+filtros en cada página y empezar sin cursor cada vez que uno cambie.
+
+Un valor de filtro fuera del enum sí se rechaza, con `400 invalid_filter`: a
+quien pidió una porción, devolverle la lista entera se le parece demasiado a
+que haya funcionado.
+
+### Las cotas del contrato las hace cumplir el dominio
+
+`year` (1800-2200), `synopsis` (5000 caracteres), `note` (1000) y `q` (200) se
+comprueban en `internal/library`, junto a `normaliseTitle`, y no en el
+manejador: una regla de negocio escrita en el borde HTTP es una regla que el
+dominio no puede hacer cumplir cuando el mismo caso de uso llegue por otra
+puerta. Se cuentan **caracteres**, no bytes, que es lo que escribió quien lo
+escribió.
+
+Dos de ellas no eran solo permisividad: eran un **500 que cualquier cliente
+podía provocar**. Las columnas de `year` y `progress` son `int4`; el adaptador
+se niega —con razón— a truncar en silencio, porque una valoración de
+4294967297 guardada como 1 sería una nota perfectamente válida. Pero esa
+negativa viajaba como un error pelado, caía a la rama por defecto y salía como
+`500 internal_error`:
+
+```
+POST /v1/works   {"title":"Y","category":"anime","year":2147483648}
+POST /v1/library {"work_id":"…","status":"in_progress","progress":3000000000}
+```
+
+`rating` estaba a salvo porque el dominio lo capa a 1-10 antes de llegar ahí.
+`progress` solo lo estaba cuando la obra declaraba un total, y **una obra
+manual sin `metadata` no lo declara**, que es justo lo que crea
+`POST /v1/works` cuando nadie escribe el número de episodios. De ahí
+`library.MaxProgress`: dos mil millones de episodios no los tiene nada, así que
+la cota no cuesta nada real y la rama por defecto vuelve a ser cierta.
+
+Los códigos son los que ya había, porque ninguna de las cuatro es una regla
+nueva —el contrato ya las declaraba— y hacer cumplir lo prometido no necesita
+vocabulario nuevo:
+
+| Cota | `code` | Estado |
+| :--- | :--- | :--- |
+| `year` fuera de 1800-2200 | `invalid_payload` | 400 |
+| `synopsis` > 5000 caracteres | `invalid_payload` | 400 |
+| `note` > 1000 caracteres | `invalid_payload` | 400 |
+| `progress` que no cabe en un `int4` | `invalid_progress` | 422 |
+| `q` > 200 caracteres | `invalid_filter` | 400 |
+
+`q` va con `invalid_filter` y no con `invalid_payload` por la regla que este
+mismo documento fija unas líneas más arriba: `invalid_payload` significa «el
+**cuerpo** de la petición no es válido», y `q` viaja en la cadena de consulta,
+que no es un cuerpo. Es de la familia de `invalid_limit` y `invalid_cursor`, y
+comparte código con el filtro de categoría porque comparte sitio y comparte
+remedio: corrige el parámetro y repite.
+
+#### Se cuentan puntos de código, no grafemas
+
+`á` mide 1 aunque ocupe dos bytes, y `🙂` mide 1 aunque ocupe cuatro. Pero
+`👨‍👩‍👧` mide **5**, porque son tres emoji y dos uniones de ancho cero, aunque a
+quien lo escribe le parezca un solo carácter.
+
+Importa porque **el navegador cuenta distinto**: `"👨‍👩‍👧".length` en JavaScript
+da 8, que son unidades UTF-16. Así que un contador en la web escrito con
+`.length` discrepará de la API en los dos sentidos, y lo hará en silencio: dirá
+que quedan caracteres cuando la API ya rechaza, o al revés. Si alguna pantalla
+llega a mostrar un contador, que use `[...texto].length`, que sí cuenta puntos
+de código.
+
+#### Bytes que ninguna columna puede guardar
+
+Postgres no acepta el carácter nulo en una columna `text` —error `22021`— ni
+como secuencia de escape dentro de `jsonb` —`22P05`—, y tampoco acepta una
+secuencia que no sea UTF-8 válido. Go lleva las dos cosas dentro de una cadena
+tan tranquilo: la longitud cuadra y la petición solo falla cuando ya ha llegado
+a la base de datos.
+
+El nulo se rechaza en las ocho puertas por las que entra texto del cliente:
+`title`, `synopsis`, `cover_url`, `metadata` (a cualquier profundidad, en claves
+y en valores), `note` —al crear y al actualizar— y `q`. Lo de «a cualquier
+profundidad» no es celo: `metadata` es la única parte de una obra cuya forma no
+declara nadie, así que una comprobación que solo mirara el primer nivel se
+esquiva anidando.
+
+La **validez del UTF-8** se comprueba solo en `q`, y esa asimetría es
+deliberada. Todo el texto que llega por el cuerpo pasa antes por
+`encoding/json`, que sustituye una secuencia inválida por U+FFFD: por eso un
+sustituto suelto en `synopsis` responde 201 y guarda `�`, y por eso
+comprobarlo ahí sería código muerto. La cadena de consulta es distinta en
+naturaleza —bytes crudos a través de `net/url`, que no sanea nada—, así que es
+la única entrada que necesita las dos comprobaciones.
+
+#### Y una red debajo, por si falta una regla
+
+Las reglas de dominio son la defensa principal: responden con precisión, nombran
+el campo y viven donde pasan todos los llamantes. Pero solo cubren lo que
+alguien anticipó, y en tres revisiones aparecieron tres formas distintas de que
+los bytes del cliente chocaran con una restricción de almacenamiento que el
+dominio no modelaba —el techo de `int4`, U+0000 y el UTF-8 inválido—, las tres
+llegando como 500.
+
+Por eso el adaptador traduce además `22021` y `22P05` a un
+`400 invalid_payload`. **No se espera que salte**: si salta, es que falta una
+regla de dominio. Lo que garantiza es que la cuarta forma, sea cual sea, llegue
+como 4xx y no como 500, y que el log lleve el SQLSTATE para que quien lo lea
+sepa qué regla escribir.
 
 ## El sobre de error
 
@@ -97,7 +280,7 @@ no es un cuerpo.
 | `not_found` | 404 | no | Ruta inexistente |
 | `internal_error` | 500 | no | Fallo nuestro. El detalle va al log, nunca al cliente |
 | `invalid_cursor` | 400 | no | El cursor de paginación no decodifica. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
-| `invalid_filter` | 400 | no | Un filtro de consulta (`?status=`, `?category=`) trae un valor que no está en el enum. No se ignora en silencio |
+| `invalid_filter` | 400 | no | Un filtro de consulta trae un valor que no vale: `?status=` o `?category=` fuera del enum, o `?q=` por encima de 200 caracteres. No se ignora en silencio |
 | `invalid_limit` | 400 | no | El `limit` de paginación está fuera de rango. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
 | `no_profile_changes` | 422 | no | `PATCH /v1/me` sin ningún campo |
 | `name_too_long` | 422 | no | Nombre o apellidos por encima de 100 caracteres |
@@ -208,3 +391,10 @@ Todo listado devuelve un objeto, nunca un array desnudo:
   bucle accidental.
 - **Idempotencia en escrituras.** Si aparecen reintentos de cliente, hará falta
   `Idempotency-Key`.
+- **Propiedad por partida doble en el `DELETE`.** La entrada se comprueba en el
+  dominio antes de borrar, que es el punto de estrangulamiento correcto, pero
+  `DeleteLibraryEntry` en `db/queries/library_entries.sql` borra por
+  identificador a secas. Añadirle `AND member_id = $2` cuesta una línea y su
+  rama **sí se puede comprobar con un test**, a diferencia de la de la lectura,
+  donde el puerto ni siquiera recibe el miembro. Defensa en profundidad barata,
+  pendiente.

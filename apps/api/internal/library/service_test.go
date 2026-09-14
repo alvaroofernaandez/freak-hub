@@ -149,6 +149,30 @@ func TestCreateManualWorkRefusesACategoryThatDoesNotExist(t *testing.T) {
 	require.ErrorIs(t, err, library.ErrInvalidCategory)
 }
 
+func TestGetWorkReturnsTheRecordFromTheSharedCatalogue(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	seeded := h.anime("Kimetsu no Yaiba", 26)
+
+	got, err := h.service.GetWork(context.Background(), seeded.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, seeded.ID, got.ID)
+	assert.Equal(t, "Kimetsu no Yaiba", got.Title,
+		"the catalogue is shared, so any member reads any work by its id")
+}
+
+func TestGetWorkReportsAWorkThatIsNotInTheCatalogue(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.GetWork(context.Background(), uuid.New())
+
+	require.ErrorIs(t, err, library.ErrWorkNotFound)
+}
+
 func TestSearchWorksRefusesALimitOutsideTheAllowedRange(t *testing.T) {
 	t.Parallel()
 
@@ -1340,5 +1364,258 @@ func TestEveryPatchableFieldCountsAsAChange(t *testing.T) {
 			assert.True(t, updated.UpdatedAt.After(entry.UpdatedAt),
 				"the write reached the repository instead of being swallowed as a no-op")
 		})
+	}
+}
+
+// The four bounds the contract declares and the domain used not to enforce.
+// Three of them were merely permissive; the year was a 500, because an int4
+// column cannot hold 2147483648 and the adapter refused to truncate it.
+
+func TestCreateManualWorkRefusesAYearOutsideTheRangeTheContractDeclares(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, year := range []int{1799, 2201, 99999, 2_147_483_648} {
+		value := year
+		_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+			Title: "Frieren", Category: library.CategoryAnime, Year: &value,
+		})
+
+		require.ErrorIsf(t, err, library.ErrInvalidYear, "year %d", year)
+	}
+}
+
+func TestCreateManualWorkAcceptsTheYearsAtTheEdgesOfTheRange(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	for _, year := range []int{1800, 2200} {
+		value := year
+		_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+			Title: "Frieren", Category: library.CategoryAnime, Year: &value,
+		})
+
+		require.NoErrorf(t, err, "year %d", year)
+	}
+}
+
+func TestCreateManualWorkRefusesASynopsisLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime, Synopsis: strings.Repeat("á", 5001),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidSynopsis,
+		"the bound is in characters, so an accent must not count double")
+}
+
+func TestAddToLibraryRefusesANoteLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	work := h.anime("Frieren", 28)
+	note := strings.Repeat("á", 1001)
+
+	_, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: work.ID, Status: library.StatusWishlist, Note: &note,
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+func TestUpdateEntryRefusesANoteLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.entries.Seed(library.Entry{
+		MemberID: member, WorkID: work.ID, Status: library.StatusInProgress,
+	})
+	note := strings.Repeat("a", 1001)
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Note: library.Set(&note),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+func TestSearchWorksRefusesAQueryLongerThanTheContractAllows(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, _, err := h.service.SearchWorks(context.Background(),
+		library.WorkFilter{Query: strings.Repeat("a", 201)}, nil, 25)
+
+	require.ErrorIs(t, err, library.ErrInvalidFilter,
+		"q is a query parameter, so it joins the invalid_filter family and not invalid_payload")
+}
+
+// U+0000 is the one character Postgres refuses in a text or jsonb column —
+// 22021 for text, 22P05 for the escape inside jsonb — and no amount of
+// length checking catches it. It is the same shape of failure as the int4
+// ceiling: client text meeting a column constraint the domain had not
+// modelled, arriving as a 500.
+
+func TestCreateManualWorkRefusesATitleCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren\x00", Category: library.CategoryAnime,
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidTitle)
+}
+
+func TestCreateManualWorkRefusesASynopsisCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime, Synopsis: "a\x00b",
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidSynopsis)
+}
+
+func TestCreateManualWorkRefusesACoverURLCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime, CoverURL: "http://a\x00b",
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidCoverURL)
+}
+
+// TestCreateManualWorkRefusesMetadataCarryingANullCharacterAnywhere walks the
+// open map, because "anywhere" is the whole point: the category-specific
+// object is the one part of a work nobody declared the shape of, so a check
+// that only looked at the top level would be a check somebody could step
+// around by nesting.
+func TestCreateManualWorkRefusesMetadataCarryingANullCharacterAnywhere(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	hiding := map[string]library.Metadata{
+		"in a value":        {"season": "2024\x00spring"},
+		"in a key":          {"a\x00b": 1},
+		"inside a map":      {"studio": map[string]any{"name": "a\x00b"}},
+		"inside a slice":    {"tags": []any{"fine", "a\x00b"}},
+		"inside a map key":  {"studio": map[string]any{"a\x00b": "fine"}},
+		"deeper than usual": {"a": map[string]any{"b": []any{map[string]any{"c": "a\x00b"}}}},
+	}
+
+	for name, metadata := range hiding {
+		_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+			Title: "Frieren " + name, Category: library.CategoryAnime, Metadata: metadata,
+		})
+
+		require.ErrorIsf(t, err, library.ErrInvalidMetadata, "hiding %s", name)
+	}
+}
+
+func TestCreateManualWorkAcceptsMetadataWithNoNullCharacterInIt(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.CreateManualWork(context.Background(), library.ManualWorkInput{
+		Title: "Frieren", Category: library.CategoryAnime,
+		Metadata: library.Metadata{
+			"episodes": 28,
+			"season":   "2023-autumn",
+			"studio":   map[string]any{"name": "Madhouse"},
+			"tags":     []any{"fantasy", "drama"},
+		},
+	})
+
+	require.NoError(t, err, "the walk must not turn ordinary metadata away")
+}
+
+func TestAddToLibraryRefusesANoteCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	work := h.anime("Frieren", 28)
+	note := "a\x00b"
+
+	_, err := h.service.AddToLibrary(context.Background(), uuid.New(), library.AddToLibraryInput{
+		WorkID: work.ID, Status: library.StatusWishlist, Note: &note,
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+func TestUpdateEntryRefusesANoteCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	member := uuid.New()
+	work := h.anime("Frieren", 28)
+	entry := h.entries.Seed(library.Entry{
+		MemberID: member, WorkID: work.ID, Status: library.StatusInProgress,
+	})
+	note := "a\x00b"
+
+	_, err := h.service.UpdateEntry(context.Background(), member, entry.ID, library.EntryPatch{
+		Note: library.Set(&note),
+	})
+
+	require.ErrorIs(t, err, library.ErrInvalidNote)
+}
+
+// TestSearchWorksRefusesAQueryCarryingANullCharacter is the one on a read
+// path, which is what makes it worth its own name: nothing is written, and
+// the request still reached the database and came back a 500.
+func TestSearchWorksRefusesAQueryCarryingANullCharacter(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, _, err := h.service.SearchWorks(context.Background(),
+		library.WorkFilter{Query: "a\x00b"}, nil, 25)
+
+	require.ErrorIs(t, err, library.ErrInvalidFilter)
+}
+
+// TestSearchWorksRefusesAQueryThatIsNotValidUTF8 is the ninth door, and the
+// one the null-character check did not cover.
+//
+// A query string is raw bytes and passes through no JSON decoder. In a body,
+// encoding/json replaces invalid UTF-8 with U+FFFD, which is why the same
+// surrogate in a synopsis is stored as a replacement character and answers
+// 201. net/url does nothing of the sort, so r.URL.Query().Get("q") hands the
+// driver bytes Postgres refuses outright.
+func TestSearchWorksRefusesAQueryThatIsNotValidUTF8(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	sequences := map[string]string{
+		"a lone surrogate":       "\xed\xa0\x80",
+		"a byte no encoding has": "\xff",
+		"a truncated multibyte":  "\xc3",
+		"an overlong encoding":   "\xc0\xaf",
+	}
+
+	for name, query := range sequences {
+		_, _, err := h.service.SearchWorks(context.Background(),
+			library.WorkFilter{Query: query}, nil, 25)
+
+		require.ErrorIsf(t, err, library.ErrInvalidFilter, "%s", name)
 	}
 }
