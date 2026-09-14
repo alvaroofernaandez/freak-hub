@@ -81,21 +81,17 @@ func (q *Queries) CreateLibraryEntry(ctx context.Context, arg CreateLibraryEntry
 }
 
 const deleteLibraryEntry = `-- name: DeleteLibraryEntry :execrows
-DELETE FROM library_entries
-WHERE id = $1::uuid
-  AND member_id = $2::uuid
+DELETE FROM library_entries WHERE id = $1::uuid
 `
 
-type DeleteLibraryEntryParams struct {
-	ID       uuid.UUID
-	MemberID uuid.UUID
-}
-
-// Returns the number of rows removed so the handler can answer 404 on the
-// second attempt instead of pretending a delete happened. The work itself is
-// untouched: domain rule 3, it is shared history.
-func (q *Queries) DeleteLibraryEntry(ctx context.Context, arg DeleteLibraryEntryParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteLibraryEntry, arg.ID, arg.MemberID)
+// Returns the number of rows removed so the adapter can answer "not found" on
+// the second attempt instead of pretending a delete happened. Unscoped for the
+// same reason the read is: library.EntryRepository.Delete takes an id, and
+// RemoveFromLibrary has already resolved the owner through ownedEntry.
+//
+// The work itself is untouched: domain rule 3, it is shared history.
+func (q *Queries) DeleteLibraryEntry(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteLibraryEntry, id)
 	if err != nil {
 		return 0, err
 	}
@@ -103,55 +99,37 @@ func (q *Queries) DeleteLibraryEntry(ctx context.Context, arg DeleteLibraryEntry
 }
 
 const libraryEntryByID = `-- name: LibraryEntryByID :one
-SELECT le.id, le.member_id, le.work_id, le.status, le.progress, le.rating, le.is_favourite, le.owned, le.note, le.started_at, le.finished_at, le.created_at, le.updated_at, w.id, w.title, w.category, w.source, w.source_id, w.cover_url, w.synopsis, w.year, w.metadata, w.expansion_of, w.created_at, w.updated_at
-FROM library_entries le
-JOIN works w ON w.id = le.work_id
-WHERE le.id = $1::uuid
-  AND le.member_id = $2::uuid
+SELECT id, member_id, work_id, status, progress, rating, is_favourite, owned, note, started_at, finished_at, created_at, updated_at FROM library_entries WHERE id = $1::uuid
 `
 
-type LibraryEntryByIDParams struct {
-	ID       uuid.UUID
-	MemberID uuid.UUID
-}
-
-type LibraryEntryByIDRow struct {
-	LibraryEntry LibraryEntry
-	Work         Work
-}
-
-// Scoped by member on purpose: an entry that belongs to somebody else is not a
-// 403 for this API, it is a 404. The caller has no business knowing it exists.
-// The work travels with it so rendering never needs a second round trip.
-func (q *Queries) LibraryEntryByID(ctx context.Context, arg LibraryEntryByIDParams) (LibraryEntryByIDRow, error) {
-	row := q.db.QueryRow(ctx, libraryEntryByID, arg.ID, arg.MemberID)
-	var i LibraryEntryByIDRow
+// Deliberately NOT scoped by member, and that is the one thing worth arguing
+// about here. library.EntryRepository.ByID takes an id and nothing else,
+// because the domain decided that "somebody else's entry answers as missing"
+// is a rule of the service — Service.ownedEntry — rather than of the storage.
+// Holding it in both places sounds safer and is not: the service would still
+// have to compare the owner to tell 404 from 403, and a WHERE that can never
+// fail is a branch no test can reach.
+//
+// The work does not travel with it either, for the same reason: the port
+// answers an Entry. GetEntry therefore costs two statements, a constant two,
+// which is a different thing from the N+1 the listing avoids.
+func (q *Queries) LibraryEntryByID(ctx context.Context, id uuid.UUID) (LibraryEntry, error) {
+	row := q.db.QueryRow(ctx, libraryEntryByID, id)
+	var i LibraryEntry
 	err := row.Scan(
-		&i.LibraryEntry.ID,
-		&i.LibraryEntry.MemberID,
-		&i.LibraryEntry.WorkID,
-		&i.LibraryEntry.Status,
-		&i.LibraryEntry.Progress,
-		&i.LibraryEntry.Rating,
-		&i.LibraryEntry.IsFavourite,
-		&i.LibraryEntry.Owned,
-		&i.LibraryEntry.Note,
-		&i.LibraryEntry.StartedAt,
-		&i.LibraryEntry.FinishedAt,
-		&i.LibraryEntry.CreatedAt,
-		&i.LibraryEntry.UpdatedAt,
-		&i.Work.ID,
-		&i.Work.Title,
-		&i.Work.Category,
-		&i.Work.Source,
-		&i.Work.SourceID,
-		&i.Work.CoverUrl,
-		&i.Work.Synopsis,
-		&i.Work.Year,
-		&i.Work.Metadata,
-		&i.Work.ExpansionOf,
-		&i.Work.CreatedAt,
-		&i.Work.UpdatedAt,
+		&i.ID,
+		&i.MemberID,
+		&i.WorkID,
+		&i.Status,
+		&i.Progress,
+		&i.Rating,
+		&i.IsFavourite,
+		&i.Owned,
+		&i.Note,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -328,7 +306,16 @@ type UpdateLibraryEntryParams struct {
 // which would make clearing a rating or a note impossible.
 //
 // work_id is absent by design: an entry never changes the work it points at.
-// Scoped by member for the same reason the read is.
+//
+// Scoped by member, and NOT for the same reason the read is — the read is not
+// scoped at all any more. LibraryEntryByID and DeleteLibraryEntry take a bare
+// id because their ports do, and Service.ownedEntry is what refuses somebody
+// else's entry. This one keeps the owner in its WHERE only because the port
+// hands over the whole entity and member_id therefore travels here for free.
+//
+// Do not read the scoping on this statement as evidence that reads are scoped.
+// A handler that calls EntryRepository.ByID directly, without going through
+// Service.ownedEntry, hands any member any other member's entry.
 func (q *Queries) UpdateLibraryEntry(ctx context.Context, arg UpdateLibraryEntryParams) (LibraryEntry, error) {
 	row := q.db.QueryRow(ctx, updateLibraryEntry,
 		arg.Status,

@@ -13,47 +13,64 @@ import (
 )
 
 const createWork = `-- name: CreateWork :one
-INSERT INTO works (title, category, source, source_id, cover_url, synopsis, year, metadata)
+INSERT INTO works (title, category, source, source_id, cover_url, synopsis, year, metadata, expansion_of)
 VALUES (
     $1::text,
     $2::work_category,
-    'manual',
-    NULL,
-    $3::text,
+    $3::work_source,
     $4::text,
-    $5::int,
+    $5::text,
+    $6::text,
+    $7::int,
     -- COALESCE, not a bare argument: the contract makes metadata optional on
     -- CreateWorkRequest, and a required jsonb parameter would send Go's nil as
     -- SQL NULL and hit the NOT NULL constraint. A POST that simply omits the
     -- field has to land on the column's own '{}' default, not on a 500.
-    COALESCE($6::jsonb, '{}')
+    --
+    -- It catches SQL NULL and only SQL NULL. The jsonb scalar ` + "`" + `null` + "`" + ` is a
+    -- perfectly valid value that satisfies NOT NULL and walks straight past
+    -- this, leaving a row where metadata->>'episodes' answers NULL rather than
+    -- "no such key". Nothing in SQL can tell the two apart once the bytes have
+    -- arrived, so the adapter is what closes that door: an absent or empty
+    -- Metadata is sent as SQL NULL, never as the four bytes ` + "`" + `null` + "`" + `.
+    COALESCE($8::jsonb, '{}'),
+    $9::uuid
 )
 RETURNING id, title, category, source, source_id, cover_url, synopsis, year, metadata, expansion_of, created_at, updated_at
 `
 
 type CreateWorkParams struct {
-	Title    string
-	Category WorkCategory
-	CoverUrl *string
-	Synopsis *string
-	Year     *int32
-	Metadata []byte
+	Title       string
+	Category    WorkCategory
+	Source      WorkSource
+	SourceID    *string
+	CoverUrl    *string
+	Synopsis    *string
+	Year        *int32
+	Metadata    []byte
+	ExpansionOf *uuid.UUID
 }
 
-// Manual entry only, and the query is where that is enforced rather than in a
-// handler: `source` and `source_id` are written here, not taken from the
-// caller, so nothing can claim a record came from AniList when nobody checked.
-// A manual work has no external record to point at, so source_id stays NULL,
-// which is also what keeps it out of works_source_idx: manual works are
-// deliberately not deduplicated.
+// Every column the domain fills, `source` and `source_id` included. They are
+// NOT stamped here: library.Service.CreateManualWork is what refuses to take
+// them from a caller, and it is the only way into this today. Freezing
+// 'manual' into the SQL instead would make the importer — the whole reason
+// (source, source_id) is unique — impossible to write against this port.
+//
+// source_id arrives NULL exactly when the work is manual, which is what
+// works_source_id_matches_source checks and what keeps manual works out of the
+// partial works_source_idx: they are deliberately not deduplicated.
 func (q *Queries) CreateWork(ctx context.Context, arg CreateWorkParams) (Work, error) {
 	row := q.db.QueryRow(ctx, createWork,
 		arg.Title,
 		arg.Category,
+		arg.Source,
+		arg.SourceID,
 		arg.CoverUrl,
 		arg.Synopsis,
 		arg.Year,
 		arg.Metadata,
+		arg.ExpansionOf,
 	)
 	var i Work
 	err := row.Scan(
@@ -180,6 +197,46 @@ SELECT id, title, category, source, source_id, cover_url, synopsis, year, metada
 
 func (q *Queries) WorkByID(ctx context.Context, id uuid.UUID) (Work, error) {
 	row := q.db.QueryRow(ctx, workByID, id)
+	var i Work
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Category,
+		&i.Source,
+		&i.SourceID,
+		&i.CoverUrl,
+		&i.Synopsis,
+		&i.Year,
+		&i.Metadata,
+		&i.ExpansionOf,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const workBySource = `-- name: WorkBySource :one
+SELECT id, title, category, source, source_id, cover_url, synopsis, year, metadata, expansion_of, created_at, updated_at FROM works
+WHERE source = $1::work_source
+  AND source_id = $2::text
+`
+
+type WorkBySourceParams struct {
+	Source   WorkSource
+	SourceID string
+}
+
+// An imported work resolved by its catalogue coordinates, which is the read an
+// importer does before deciding whether it has anything to insert. It walks
+// works_source_idx, the same partial unique index that refuses the duplicate
+// when two importers race past this check.
+//
+// A manual work is unreachable through it by construction: its source_id is
+// NULL and `source_id = NULL` matches nothing, which is the answer we want
+// rather than an accident — two manual works would otherwise collide on a key
+// that means nothing.
+func (q *Queries) WorkBySource(ctx context.Context, arg WorkBySourceParams) (Work, error) {
+	row := q.db.QueryRow(ctx, workBySource, arg.Source, arg.SourceID)
 	var i Work
 	err := row.Scan(
 		&i.ID,

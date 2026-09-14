@@ -292,6 +292,74 @@ seguirá confiando en lo que calculó con las reglas viejas.
 > `immutable_unaccent` va por dentro y los `replace` por fuera, y hay un test
 > con `％` que lo fija.
 
+## Lo que traduce el adaptador, y lo que no
+
+`internal/platform/postgres` es la frontera: por encima de ella nadie sabe que
+Postgres existe. Eso significa que ningún `pgtype.*` la cruza y que ningún error
+de driver llega a un handler. La traducción de errores **discrimina por nombre
+de restricción**, no solo por SQLSTATE, porque dos violaciones de la misma clase
+significan cosas distintas para quien espera la respuesta:
+
+| En Postgres | Error de dominio | Respuesta |
+| :--- | :--- | :--- |
+| `23505` en `library_entries_member_work_idx` | `ErrAlreadyInLibrary` | 409 `already_in_library` |
+| `23505` en `works_source_idx` | `ErrWorkAlreadyImported` | pendiente de código en el contrato |
+| `23503` en `library_entries_work_id_fkey` | `ErrWorkNotFound` | 404 `work_not_found` |
+| `pgx.ErrNoRows` | el «no encontrado» de la entidad consultada | 404 |
+| `23514` en cualquiera de los dos `CHECK` | **ninguno**, a propósito | 500 con la restricción en el log |
+
+La última fila es la que hay que justificar. `works_source_id_matches_source` y
+`works_expansion_of_is_another_work` saltan cuando alguien compone una obra que
+el propio dominio declara imposible —una obra importada sin id externo, o una
+que se expande a sí misma—. Nadie las teclea: no hay campo en el contrato que
+las provoque. Convertirlas en un 4xx le pediría a un miembro que arregle algo
+que nunca escribió y escondería el fallo real del importador detrás de un
+mensaje de validación. Viajan envueltas, responden 500 y dejan en el log el
+nombre de la restricción, que es donde está la pista.
+
+> [!IMPORTANT]
+> **`COALESCE($n::jsonb, '{}')` no basta para `metadata`.** Atrapa el `NULL` de
+> SQL —el parámetro ausente— y solo eso. El escalar jsonb `null` es un valor
+> válido, satisface el `NOT NULL` y llega en cuanto algo serializa un mapa de Go
+> a nil. La fila resultante parece correcta hasta que alguien lee
+> `metadata->>'episodes'` y recibe `NULL` en vez de «esa clave no está», que
+> para `Work.Total()` es la diferencia entre «sigue emitiéndose» y «no tiene
+> episodios». Dentro de SQL ya no hay forma de distinguirlos, así que **la
+> puerta la cierra el adaptador**: un `Metadata` ausente o vacío se envía como
+> `NULL` de SQL y cae en el `DEFAULT '{}'` de la columna, nunca como los cuatro
+> bytes `null`. El handler de `POST /v1/works` no tiene que defenderse de un
+> `"metadata": null` del cuerpo: cuando el valor llega aquí ya es un mapa nil.
+
+El listado de la biblioteca resuelve la entrada y su obra en **una sola
+consulta** con `sqlc.embed`, y el `JOIN` es `INNER`. `work_id` es `NOT NULL`
+detrás de una clave ajena `ON DELETE RESTRICT`, así que una entrada sin obra no
+puede existir y las dos variantes devuelven hoy lo mismo. La diferencia está en
+qué pasaría si eso dejara de ser cierto: un `LEFT JOIN` respondería con una obra
+a cero —una tarjeta sin título ni portada, que parece un fallo de pintado y tapa
+una referencia rota— mientras que el `INNER` deja caer la fila y la página solo
+contiene entradas íntegras.
+
+> [!WARNING]
+> **El `INNER JOIN` no avisa de la fila que descarta**, y conviene ser exacto
+> porque la intuición dice lo contrario. El `LIMIT` se aplica **después** del
+> `JOIN`, así que el motor tira de la siguiente fila para llenar la página: con
+> `limit+1 = 6` devuelve seis filas, idénticas a las del `LEFT JOIN`, y solo la
+> última página de un recorrido queda corta. Comprobado rompiendo una referencia
+> de verdad y recorriendo el cursor entero: nueve filas distintas de nueve
+> unibles, sin saltos y sin tarjeta a cero.
+>
+> El motivo para preferir `INNER` no es, por tanto, que se detecte. Es que una
+> fila descartada deja la página **coherente consigo misma**, mientras que una
+> obra a cero corrompe a todo el que la consuma después —la tarjeta, el filtro,
+> cualquier código que lea `Work.ID`—. Los dos callan; solo uno mantiene cierto
+> lo que sí devuelve.
+
+El cursor opaco **no se codifica aquí**. `internal/platform/httpx`
+(`PageCursor`, `EncodeCursor`, `DecodeCursor`) ya es dueño de ese formato para
+`/v1/members` y `/v1/invitations/group`, y los puertos del dominio reciben la
+posición `(created_at, id)` ya decodificada. Un segundo códec del mismo formato
+en el adaptador sería un segundo sitio donde el formato puede divergir.
+
 ## Convenciones
 
 - **`uuid` como clave primaria**, generada por `gen_random_uuid()`. Los IDs
