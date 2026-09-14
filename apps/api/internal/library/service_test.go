@@ -149,6 +149,30 @@ func TestCreateManualWorkRefusesACategoryThatDoesNotExist(t *testing.T) {
 	require.ErrorIs(t, err, library.ErrInvalidCategory)
 }
 
+func TestGetWorkReturnsTheRecordFromTheSharedCatalogue(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+	seeded := h.anime("Kimetsu no Yaiba", 26)
+
+	got, err := h.service.GetWork(context.Background(), seeded.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, seeded.ID, got.ID)
+	assert.Equal(t, "Kimetsu no Yaiba", got.Title,
+		"the catalogue is shared, so any member reads any work by its id")
+}
+
+func TestGetWorkReportsAWorkThatIsNotInTheCatalogue(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t)
+
+	_, err := h.service.GetWork(context.Background(), uuid.New())
+
+	require.ErrorIs(t, err, library.ErrWorkNotFound)
+}
+
 func TestSearchWorksRefusesALimitOutsideTheAllowedRange(t *testing.T) {
 	t.Parallel()
 

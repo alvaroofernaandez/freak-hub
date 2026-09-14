@@ -455,3 +455,12 @@ func normaliseTitle(raw string) (string, error) {
 
 	return title, nil
 }
+
+// GetWork returns one record of the shared catalogue.
+//
+// There is no owner check and there is nothing to scope: a Work belongs to
+// the whole group by design (domain rule 3), and whether the caller keeps it
+// in their own library is a different question, answered by ListLibrary.
+func (s *Service) GetWork(ctx context.Context, id uuid.UUID) (Work, error) {
+	return s.existingWork(ctx, id)
+}
