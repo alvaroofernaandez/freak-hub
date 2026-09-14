@@ -33,6 +33,9 @@ coverage/
 .vitest/
 playwright-report/
 test-results/
+# Playwright's stored sign-in: a real Clerk session, in plain text. Never a
+# commit, and the reason the signed-in E2E credentials live in the environment.
+apps/web/playwright/.clerk/
 .golangci-cache/
 # TypeScript's incremental cache: rewritten on every typecheck, never source.
 *.tsbuildinfo
