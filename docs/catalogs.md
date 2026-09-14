@@ -58,12 +58,24 @@ externo de solo lectura, así que la regla 2 de `AGENTS.md` no se rompe, pero
 la regla 1 de aquí —un adaptador por proveedor detrás de un puerto del
 dominio— sí queda pendiente hasta que ese adaptador viva en el backend.
 
-Ese módulo respeta lo que sí aplica ya: la llamada sale del servidor
-(`ANILIST_API_URL` no lleva el prefijo `NEXT_PUBLIC_`), no persiste nada, no
-filtra los tipos de AniList fuera de sí mismo y trata el límite de peticiones
-y los fallos de red como estados, no como excepciones. Cuando el backend tenga
-su integración, el fichero se borra entero y la web pasa a consumir la API
-propia.
+Ese módulo respeta lo que sí aplica ya: está pensado para ejecutarse en el
+servidor, no persiste nada, no filtra los tipos de AniList fuera de sí mismo y
+trata el límite de peticiones y los fallos de red como estados, no como
+excepciones. Cuando el backend tenga su integración, el fichero se borra entero
+y la web pasa a consumir la API propia.
+
+Que se ejecute en el servidor no está impuesto por nada: `ANILIST_API_URL` no
+lleva el prefijo `NEXT_PUBLIC_`, así que en el navegador queda `undefined` y la
+búsqueda degrada a «no disponible», pero nadie impide el import ni hay un error
+de compilación que lo avise. Hacerlo obligatorio pediría el paquete
+`server-only`, una dependencia nueva para un módulo escrito para borrarse.
+
+La variable se declara en `apps/web/.env.example` **y** en el de la raíz, y se
+reenvía al servicio `web` de `docker-compose.yml`. No es duplicación: Next carga
+los ficheros de entorno desde el directorio de la aplicación y no sube al raíz
+del monorepo, y el contenedor solo ve lo que compose le pasa. Declararla en un
+solo sitio deja la búsqueda apagada en silencio, que es justo lo que el contrato
+de estados de este cliente hace invisible.
 
 ## Casos que no cubre ninguna API
 
