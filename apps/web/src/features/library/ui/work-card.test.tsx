@@ -124,6 +124,23 @@ describe("WorkCard", () => {
     expect(meta.className).not.toMatch(/justify-between/);
   });
 
+  it("keeps a long title from stretching the card past its neighbours", () => {
+    render(
+      <WorkCard
+        item={item({ title: "Ghost in the Shell: Stand Alone Complex" })}
+      />,
+    );
+
+    const title = screen.getByTestId("work-card-title");
+    // Clamped AND reserved: the pair is what keeps every card's status line at
+    // the same height, whether its title took one line or two.
+    expect(title).toHaveClass("line-clamp-2", "min-h-[2lh]");
+    expect(title).toHaveAttribute(
+      "title",
+      "Ghost in the Shell: Stand Alone Complex",
+    );
+  });
+
   it("shows how far along the entry is, in the category's own unit", () => {
     render(<WorkCard item={item({ progress: 12, progressTotal: 64 })} />);
 

@@ -32,7 +32,11 @@ export function WorkCard({ item }: WorkCardProps) {
     <Link
       href={`/obras/${item.id}`}
       className={cn(
-        "flex flex-col overflow-hidden rounded-xl border border-border bg-surface",
+        // `h-full` so the card fills its grid cell. The lines inside are
+        // aligned by the reserved title box, not by this; what this fixes is
+        // the card outline itself, which otherwise shrank to its own content
+        // and left short entries floating in a row of taller neighbours.
+        "flex h-full flex-col overflow-hidden rounded-xl border border-border bg-surface",
         interactiveCardClasses(item.category),
       )}
     >
@@ -51,10 +55,18 @@ export function WorkCard({ item }: WorkCardProps) {
           </span>
         ) : null}
       </div>
-      <div className="flex flex-col gap-1.5 p-3">
+      <div className="flex flex-1 flex-col gap-1.5 p-3">
+        {/* Two lines, always: clamped so a long title cannot run to four lines
+            in a 148px column and drag its whole grid row with it (measured at
+            1440px, card heights ranged 224–288px), and reserved so a short one
+            still leaves the status, the rating and the progress on the same
+            line as every other card in the grid. `2lh` rather than a fixed
+            40px so the box follows the type scale instead of restating it.
+            The full title stays reachable on hover and on the work page. */}
         <span
           data-testid="work-card-title"
-          className="font-display text-base leading-tight text-ink"
+          title={item.title}
+          className="line-clamp-2 min-h-[2lh] font-display text-base leading-tight text-ink"
         >
           {item.title}
         </span>
@@ -65,7 +77,13 @@ export function WorkCard({ item }: WorkCardProps) {
             "Abandonado10," on screen. A column cannot do that at any width,
             and it is what the mockup draws at all three
             (docs/design/high-fidelity-desktop.html §3, desktop and mobile
-            alike: `flex-direction:column; gap:6px`). */}
+            alike: `flex-direction:column; gap:6px`).
+
+            Not bottom-anchored: with a reserved two-line title above it, the
+            block starts at the same height on every card, so the status lines
+            read across the grid as one row. Anchoring it to the bottom instead
+            would align only the last line of each card, which is whichever of
+            the three the entry happens to have. */}
         <div
           data-testid="work-card-meta"
           className="flex flex-col gap-1.5 break-words"
