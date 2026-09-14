@@ -306,7 +306,16 @@ type UpdateLibraryEntryParams struct {
 // which would make clearing a rating or a note impossible.
 //
 // work_id is absent by design: an entry never changes the work it points at.
-// Scoped by member for the same reason the read is.
+//
+// Scoped by member, and NOT for the same reason the read is — the read is not
+// scoped at all any more. LibraryEntryByID and DeleteLibraryEntry take a bare
+// id because their ports do, and Service.ownedEntry is what refuses somebody
+// else's entry. This one keeps the owner in its WHERE only because the port
+// hands over the whole entity and member_id therefore travels here for free.
+//
+// Do not read the scoping on this statement as evidence that reads are scoped.
+// A handler that calls EntryRepository.ByID directly, without going through
+// Service.ownedEntry, hands any member any other member's entry.
 func (q *Queries) UpdateLibraryEntry(ctx context.Context, arg UpdateLibraryEntryParams) (LibraryEntry, error) {
 	row := q.db.QueryRow(ctx, updateLibraryEntry,
 		arg.Status,

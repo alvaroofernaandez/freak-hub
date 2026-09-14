@@ -336,9 +336,23 @@ detrás de una clave ajena `ON DELETE RESTRICT`, así que una entrada sin obra n
 puede existir y las dos variantes devuelven hoy lo mismo. La diferencia está en
 qué pasaría si eso dejara de ser cierto: un `LEFT JOIN` respondería con una obra
 a cero —una tarjeta sin título ni portada, que parece un fallo de pintado y tapa
-una referencia rota— mientras que el `INNER` deja caer la fila, que se nota como
-una entrada que falta. Ninguno miente en silencio, y el ruidoso es el que falla
-del lado seguro.
+una referencia rota— mientras que el `INNER` deja caer la fila y la página solo
+contiene entradas íntegras.
+
+> [!WARNING]
+> **El `INNER JOIN` no avisa de la fila que descarta**, y conviene ser exacto
+> porque la intuición dice lo contrario. El `LIMIT` se aplica **después** del
+> `JOIN`, así que el motor tira de la siguiente fila para llenar la página: con
+> `limit+1 = 6` devuelve seis filas, idénticas a las del `LEFT JOIN`, y solo la
+> última página de un recorrido queda corta. Comprobado rompiendo una referencia
+> de verdad y recorriendo el cursor entero: nueve filas distintas de nueve
+> unibles, sin saltos y sin tarjeta a cero.
+>
+> El motivo para preferir `INNER` no es, por tanto, que se detecte. Es que una
+> fila descartada deja la página **coherente consigo misma**, mientras que una
+> obra a cero corrompe a todo el que la consuma después —la tarjeta, el filtro,
+> cualquier código que lea `Work.ID`—. Los dos callan; solo uno mantiene cierto
+> lo que sí devuelve.
 
 El cursor opaco **no se codifica aquí**. `internal/platform/httpx`
 (`PageCursor`, `EncodeCursor`, `DecodeCursor`) ya es dueño de ese formato para

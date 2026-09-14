@@ -48,6 +48,14 @@ func NewWorkRepository(pool *pgxpool.Pool) *WorkRepository {
 // as a 4xx would tell a member to fix a field they never typed and would hide
 // the real fault, so it travels out wrapped, answers 500, and lands in the log
 // with the constraint name that names the fix.
+//
+// works_expansion_of_fkey is not translated either, and that one is a gap
+// rather than a decision. A 23503 there means the base game an expansion points
+// at is not in the catalogue, which is a 404 about a work the caller named —
+// the same shape as the entry case below. It is unreachable today because
+// ManualWorkInput carries no ExpansionOf, and it becomes reachable the day the
+// board-game expansions of ADR-0006 arrive. Translate it then; do not
+// rediscover it as a 500 in production.
 func (r *WorkRepository) Create(ctx context.Context, work library.Work) (library.Work, error) {
 	year, err := fromIntPtr(work.Year, "year")
 	if err != nil {
@@ -242,17 +250,31 @@ func (r *EntryRepository) ByMemberAndWork(
 //
 // One statement, never one per row: ListLibraryEntries joins works and
 // sqlc.embed brings both rows back typed, so a page of 25 entries costs one
-// round trip instead of twenty-six. The join is INNER on purpose. work_id is
-// NOT NULL and references works ON DELETE RESTRICT, so an entry without its
-// work cannot exist — which makes INNER and LEFT return the same rows today,
-// and makes the difference entirely about what happens if that ever stops
-// being true. A LEFT JOIN would answer with a zero-valued Work: a library
-// screen rendering an untitled card with no cover and no id, which looks like
-// a display bug and hides a broken reference for as long as nobody
-// investigates. INNER drops the row instead, which the member notices as a
-// missing entry — and the difference between the page size asked for and the
-// rows returned is the thing a cursor walk makes visible. Neither is a
-// silent success, and the loud one is the one that fails closed.
+// round trip instead of twenty-six.
+//
+// The join is INNER on purpose. work_id is NOT NULL and references works ON
+// DELETE RESTRICT, so an entry without its work cannot exist — which makes
+// INNER and LEFT return the same rows today, and makes the choice entirely
+// about what each would do if that ever stopped being true.
+//
+// A LEFT JOIN would answer with a zero-valued Work: a library screen rendering
+// an untitled card with no cover and no id, which looks like a display bug and
+// hides a broken reference for as long as nobody investigates. INNER drops the
+// row, so the page carries only entries that are whole.
+//
+// What INNER does NOT give is a signal that a row was dropped, and it is worth
+// being exact about that because the obvious guess is wrong. The LIMIT applies
+// after the join, so the engine simply pulls the next row to fill the page: a
+// page of six comes back with six rows, identical to what LEFT JOIN would have
+// returned, and only the final page of a walk ends up short. Nothing surfaces
+// the loss at the page boundary. Measured, not assumed — a reviewer broke a
+// reference and walked the whole cursor: nine distinct rows out of nine
+// joinable ones, no skips, no zero-valued card.
+//
+// So the reason to prefer INNER is not detectability. It is that a dropped row
+// leaves the page internally consistent, while a zero-valued one corrupts every
+// consumer downstream of it — the card, the filter, any code reading Work.ID.
+// Both are silent; only one keeps what it does return true.
 func (r *EntryRepository) List(
 	ctx context.Context, filter library.EntryFilter, after *library.Cursor, limit int,
 ) ([]library.EntryWithWork, error) {
@@ -342,6 +364,14 @@ func (r *EntryRepository) Update(ctx context.Context, entry library.Entry) (libr
 //
 // A delete that removed nothing is reported rather than swallowed, so a second
 // attempt answers 404 instead of pretending it worked.
+//
+// Dropping the member guard from the statement is safe today for a reason that
+// is narrower than it looks: member_id is immutable — no query in db/queries
+// updates it — and UUIDv4 ids are not reused, so the entry ownedEntry resolved
+// is still the entry this deletes. The day a "transfer an entry" feature or an
+// account merge can move member_id, the check-then-act in
+// Service.RemoveFromLibrary becomes a live TOCTOU and the owner has to come
+// back into this WHERE.
 func (r *EntryRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	removed, err := r.queries.DeleteLibraryEntry(ctx, id)
 	if err != nil {

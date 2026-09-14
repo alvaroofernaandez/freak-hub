@@ -23,10 +23,14 @@ type Deps struct {
 	Users       *users.Service
 	Invitations *invitations.Service
 	// Library is wired but not yet routed: the handlers for /v1/works and
-	// /v1/library are their own change. It is here so the composition root
-	// builds the real thing from the start — a service the boot path never
-	// constructs is one nobody finds out is misconfigured until the first
-	// request.
+	// /v1/library are their own change. It is here so the adapter arrives with
+	// its composition already written, and so the handlers land as one change
+	// about HTTP rather than one that also has to invent the wiring.
+	//
+	// It buys nothing at boot, and the first version of this comment claimed
+	// otherwise: library.NewService and postgres.NewWorkRepository only assign
+	// fields, so there is no misconfiguration for constructing them early to
+	// catch. Ten harmless lines of preparation, not a safety net.
 	Library        *library.Service
 	Verifier       auth.Verifier
 	AllowedOrigins []string
