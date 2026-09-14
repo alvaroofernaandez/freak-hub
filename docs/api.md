@@ -31,6 +31,14 @@ documento explica las decisiones que hay detrás.
 | GET | `/v1/invitations` | sí | Invitaciones que ha enviado quien llama, paginadas por cursor |
 | POST | `/v1/invitations` | sí | Invitar a alguien |
 | GET | `/v1/invitations/group` | sí | Invitaciones pendientes de todo el grupo, paginadas por cursor |
+| GET | `/v1/works` | sí | Busca en el catálogo compartido. Filtros `?category=` y `?q=`, paginado por cursor |
+| POST | `/v1/works` | sí | Da de alta a mano una obra que ningún catálogo externo lista |
+| GET | `/v1/works/{id}` | sí | La ficha de una obra |
+| GET | `/v1/library` | sí | La biblioteca de quien llama. Filtros `?status=` y `?category=`, paginado por cursor |
+| POST | `/v1/library` | sí | Añade una obra a la biblioteca propia |
+| GET | `/v1/library/{id}` | sí | Una entrada concreta de la biblioteca propia |
+| PATCH | `/v1/library/{id}` | sí | Actualiza estado, progreso, valoración, favorito, posesión o nota |
+| DELETE | `/v1/library/{id}` | sí | Saca la obra de la biblioteca. **No** borra la obra |
 | POST | `/webhooks/clerk` | firma Svix | Eventos de Clerk |
 
 ## El sobre de error
@@ -67,8 +75,8 @@ application/problem+json` y este cuerpo (ADR-0014):
 
 `invalid_cursor` e `invalid_limit` los devuelven los endpoints paginados, que
 desde el ADR-0011 son todos los que listan: `GET /v1/members`,
-`GET /v1/invitations` y `GET /v1/invitations/group`. Ver
-[ADR-0011](decisions/0011-paginacion-por-cursor.md).
+`GET /v1/invitations`, `GET /v1/invitations/group`, `GET /v1/works` y
+`GET /v1/library`. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md).
 
 ## Catálogo de códigos
 
@@ -93,6 +101,10 @@ desde el ADR-0011 son todos los que listan: `GET /v1/members`,
 | `invalid_email` | 422 | no | El correo de la invitación no es válido |
 | `invitation_already_sent` | 409 | no | Ya hay una invitación pendiente para ese correo |
 | `already_member` | 409 | no | Ese correo ya pertenece a un miembro |
+| `already_in_library` | 409 | no | Quien llama ya tiene esa obra en su biblioteca. Un miembro tiene como máximo una entrada por obra (regla 1 del dominio) |
+| `work_not_found` | 404 | no | El `work_id` referenciado no existe en el catálogo compartido |
+| `rating_not_allowed` | 422 | no | Llega una valoración con un estado que no es `completed` ni `dropped` (regla 2 del dominio) |
+| `invalid_progress` | 422 | no | El progreso no encaja con la categoría de la obra. La unidad la valida el dominio, no la base de datos (regla 5) |
 | `method_not_allowed` | 405 | no | La ruta existe, pero no para ese verbo |
 | `payload_too_large` | 413 | no | El cuerpo de la petición supera el límite del endpoint (1 MB en JSON) |
 | `request_timeout` | 504 | sí | La petición no terminó dentro del plazo del servidor |
