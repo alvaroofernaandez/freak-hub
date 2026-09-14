@@ -36,4 +36,12 @@ describe("CatalogAttribution", () => {
       );
     }
   });
+
+  it("warns that they open in a new tab, since nothing else would say so", () => {
+    render(<CatalogAttribution />);
+
+    expect(
+      screen.getByRole("link", { name: /anilist.*pestaña nueva/i }),
+    ).toBeInTheDocument();
+  });
 });

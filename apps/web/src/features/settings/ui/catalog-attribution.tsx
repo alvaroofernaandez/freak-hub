@@ -44,6 +44,10 @@ export function CatalogAttribution() {
             className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink transition-colors duration-150 hover:text-accent"
           >
             {name}
+            {/* The arrow says it to whoever can see it; this says it to
+             * whoever cannot. Leaving the tab change unannounced is the part
+             * of `target="_blank"` that WCAG actually objects to. */}
+            <span className="sr-only"> (se abre en una pestaña nueva)</span>
             <ArrowUpRight size={14} aria-hidden="true" />
           </a>
         </li>

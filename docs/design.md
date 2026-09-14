@@ -242,8 +242,12 @@ Sigue el patrón *menu button* de WAI-ARIA, y eso no es opcional:
 | Cierre por puntero | Un clic fuera lo cierra |
 | Capas | `z-40`: por encima del contenido, por debajo del modal (`z-50`) |
 
-No enlaza a rutas que no existen. `/ajustes` y `/recomendaciones` están
-pendientes (issues #37 y #36); hasta que existan, el menú no las ofrece.
+No enlaza a rutas que no existen. `/recomendaciones` sigue pendiente (issue
+#36); hasta que exista, el menú no la ofrece. `/ajustes` sí existe desde la
+issue #37, así que el menú la enlaza —y además lleva el tema, como fija
+[screens.md](screens.md#navegación)— con un elemento de tipo
+`menuitemcheckbox`, que es el que anuncia un estado; se queda abierto al
+pulsarlo, porque cambiar de tema no es motivo para perder el sitio.
 
 ## Las tarjetas de categoría llevan personaje
 
@@ -385,6 +389,29 @@ aplicación, así que el valor por defecto (`true`, hoja ancha → `Dialog`) es
 lo que se ve hasta que el efecto resuelve la consulta real; como el
 contenido del selector solo es visible una vez abierto, ese instante por
 defecto nunca llega a pintarse.
+
+## El tema se elige, y se recuerda
+
+El interruptor vive en `/ajustes`, que es la pantalla que lo estrena, y se
+repite como elemento del menú de sesión para tenerlo a un clic desde cualquier
+parte. Los dos leen y escriben el mismo sitio, así que nunca se contradicen.
+
+| Pieza | Decisión |
+| :--- | :--- |
+| Dónde vive el estado | El atributo `data-theme` de `<html>`, que es justo lo que selecciona el bloque claro de `globals.css`. No hay una segunda copia en estado de React |
+| Dónde se recuerda | `localStorage`, clave `freak-hub-theme`. No es una cookie ni una preferencia de servidor: es de este navegador, y el servidor no tiene por qué saberlo |
+| Primer pintado | Un script **en línea**, antes de la hidratación (`shared/lib/theme.ts`, montado en `app/layout.tsx`). Resolverlo después significaría un destello oscuro en cada carga en frío para quien haya elegido claro |
+| Cómo lo lee React | `useSyncExternalStore` sobre el propio documento (`shared/lib/use-theme.ts`): el pase de hidratación usa el valor por defecto —el mismo que sirvió el servidor— y salta al real justo después, así que no hay discrepancia de hidratación, solo el control poniéndose al día un fotograma tarde |
+| El control | Un botón con `role="switch"`, no una casilla nativa: misma razón que el resto de controles ([Componentes](#componentes-radix-con-nuestros-tokens)) |
+| Chrome del navegador | `<meta name="theme-color">` se mueve con el tema, para que la barra del móvil no contradiga a la página |
+
+**El cambio de color es instantáneo, a propósito.** Animarlo significaría
+disparar a la vez las decenas de `transition-colors` que ya llevan los
+componentes, y eso se lee como lentitud, no como cuidado. Lo único que se
+mueve es el pulgar del interruptor: 120 ms con `--ease-out-quint`, el mismo
+presupuesto que la casilla de verificación se gana por frecuencia
+(ver [La frecuencia importa](#la-frecuencia-importa)), y nada bajo
+`prefers-reduced-motion`.
 
 ## Iconografía: un solo set
 
@@ -897,3 +924,20 @@ Definition of Done de la épica #18.
   de portada), así que en claro se aclara con el resto — y un velo al 55 % de
   un casi blanco sobre una página casi blanca no aparta nada. Separar los dos
   papeles es lo que permite que el modal siga funcionando en los dos temas.
+- **2026-09-14** · El tema se elige en `/ajustes` y se repite en el menú de
+  sesión como `menuitemcheckbox`. El estado vive en `data-theme` sobre
+  `<html>`, se recuerda en `localStorage` y lo estampa un script en línea antes
+  de la hidratación. El cambio de color es instantáneo: animarlo dispararía a
+  la vez todas las `transition-colors` de la página. Ver
+  [El tema se elige, y se recuerda](#el-tema-se-elige-y-se-recuerda).
+- **2026-09-14** · `/ajustes` existe (issue #37), con los cuatro bloques de
+  `screens.md`: cuenta, tema, tus datos y atribución de catálogos. No inventa
+  ninguna pieza: título de pantalla de `/actividad`, `SectionHeading` por
+  bloque, la tarjeta neutra y la moldura como separador, exactamente lo que
+  autoriza el [criterio de extensión](#criterio-de-extensión-para-pantallas-sin-maqueta).
+  La cuenta se deja en manos de `<UserProfile>` de Clerk — no contradice la
+  decisión de retirar `<UserButton>`: aquella era una superficie de diseño
+  nuestro, y esta es la gestión de unos datos que guarda Clerk, con sus flujos
+  de verificación detrás. Exportar y borrar se quedan visibles y apagados,
+  porque la API todavía no los expone y un botón que finge exportar es peor que
+  ninguno.

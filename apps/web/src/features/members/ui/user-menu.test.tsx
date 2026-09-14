@@ -16,6 +16,8 @@ const PROPS = {
 describe("UserMenu", () => {
   beforeEach(() => {
     signOut.mockReset();
+    document.documentElement.removeAttribute("data-theme");
+    window.localStorage.clear();
   });
 
   it("announces itself as a closed menu button", () => {
@@ -52,6 +54,35 @@ describe("UserMenu", () => {
       "href",
       "/invitar",
     );
+  });
+
+  it("links to settings, now that the route exists", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu {...PROPS} />);
+
+    await user.click(screen.getByRole("button", { name: /álvaro fernández/i }));
+
+    expect(screen.getByRole("menuitem", { name: /ajustes/i })).toHaveAttribute(
+      "href",
+      "/ajustes",
+    );
+  });
+
+  it("switches the theme without leaving the page you are on", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu {...PROPS} />);
+
+    await user.click(screen.getByRole("button", { name: /álvaro fernández/i }));
+    const themeItem = screen.getByRole("menuitemcheckbox", {
+      name: /tema claro/i,
+    });
+    expect(themeItem).toHaveAttribute("aria-checked", "false");
+
+    await user.click(themeItem);
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    // Still open: flipping the theme is not a reason to lose the menu.
+    expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("signs out through Clerk without ever showing Clerk", async () => {
