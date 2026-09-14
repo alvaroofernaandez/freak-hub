@@ -232,3 +232,145 @@ func valueOrEmpty(value *string) string {
 
 	return *value
 }
+
+// libraryEntryResponse is the wire shape of a LibraryEntry.
+//
+// There is no member_id and no work_id. The entry is the caller's by
+// construction — a listing only ever walks their own library and every
+// single-entry route goes through the owner check — so echoing the owner
+// back would be a property the contract never declared. The work travels
+// whole instead of as an id, which is what lets a library screen render
+// titles and covers from the page it already fetched.
+type libraryEntryResponse struct {
+	ID          string       `json:"id"`
+	Work        workResponse `json:"work"`
+	Status      string       `json:"status"`
+	Progress    int          `json:"progress"`
+	Rating      *int         `json:"rating"`
+	IsFavourite bool         `json:"is_favourite"`
+	Owned       bool         `json:"owned"`
+	Note        *string      `json:"note"`
+	StartedAt   *string      `json:"started_at"`
+	FinishedAt  *string      `json:"finished_at"`
+	CreatedAt   string       `json:"created_at"`
+	UpdatedAt   string       `json:"updated_at"`
+}
+
+func toLibraryEntryResponse(entry library.EntryWithWork) libraryEntryResponse {
+	return libraryEntryResponse{
+		ID:          entry.ID.String(),
+		Work:        toWorkResponse(entry.Work),
+		Status:      string(entry.Status),
+		Progress:    entry.Progress,
+		Rating:      entry.Rating,
+		IsFavourite: entry.IsFavourite,
+		Owned:       entry.Owned,
+		Note:        entry.Note,
+		StartedAt:   formatOptionalTimestamp(entry.StartedAt),
+		FinishedAt:  formatOptionalTimestamp(entry.FinishedAt),
+		CreatedAt:   formatTimestamp(entry.CreatedAt),
+		UpdatedAt:   formatTimestamp(entry.UpdatedAt),
+	}
+}
+
+// listLibraryEntries answers the caller's own library, keyset-paginated per
+// ADR-0011.
+//
+// The owner is not a filter the caller can set: it comes from the session,
+// and library.Service.ListLibrary overwrites whatever the filter carried
+// with it anyway. Two locks on the same door, deliberately.
+func (h *handlers) listLibraryEntries(w http.ResponseWriter, r *http.Request) {
+	member, ok := h.resolveCaller(w, r)
+	if !ok {
+		return
+	}
+
+	limit, after, ok := h.pageParams(w, r, library.DefaultListLimit)
+	if !ok {
+		return
+	}
+
+	filter := library.EntryFilter{
+		Status:   library.Status(r.URL.Query().Get("status")),
+		Category: library.Category(r.URL.Query().Get("category")),
+	}
+
+	entries, next, err := h.library.ListLibrary(r.Context(), member.ID, filter, after, limit)
+	if err != nil {
+		h.fail(w, r, "list library", err)
+		return
+	}
+
+	items := make([]libraryEntryResponse, 0, len(entries))
+	for _, entry := range entries {
+		items = append(items, toLibraryEntryResponse(entry))
+	}
+
+	httpx.WriteJSON(w, http.StatusOK,
+		httpx.Page[libraryEntryResponse]{Items: items, NextCursor: encodeNext(next)})
+}
+
+// createLibraryEntryRequest is the body of POST /v1/library. It carries no
+// member_id on purpose: the owner is the session's member, and
+// DisallowUnknownFields (httpx.DecodeJSON) is what turns an attempt to
+// smuggle one in into a 400 rather than a write into somebody else's
+// library.
+type createLibraryEntryRequest struct {
+	WorkID      string     `json:"work_id"`
+	Status      string     `json:"status"`
+	Progress    *int       `json:"progress"`
+	Rating      *int       `json:"rating"`
+	IsFavourite *bool      `json:"is_favourite"`
+	Owned       *bool      `json:"owned"`
+	Note        *string    `json:"note"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+}
+
+func (h *handlers) createLibraryEntry(w http.ResponseWriter, r *http.Request) {
+	var payload createLibraryEntryRequest
+	if !decodeJSON(w, r, &payload) {
+		return
+	}
+
+	workID, err := uuid.Parse(payload.WorkID)
+	if err != nil {
+		httpx.WriteProblem(w, r, http.StatusBadRequest, httpx.CodeInvalidPayload,
+			"El identificador de la obra no es válido.")
+
+		return
+	}
+
+	member, ok := h.resolveCaller(w, r)
+	if !ok {
+		return
+	}
+
+	entry, err := h.library.AddToLibrary(r.Context(), member.ID, library.AddToLibraryInput{
+		WorkID:      workID,
+		Status:      library.Status(payload.Status),
+		Progress:    valueOr(payload.Progress, 0),
+		Rating:      payload.Rating,
+		IsFavourite: valueOr(payload.IsFavourite, false),
+		Owned:       valueOr(payload.Owned, false),
+		Note:        payload.Note,
+		StartedAt:   payload.StartedAt,
+		FinishedAt:  payload.FinishedAt,
+	})
+	if err != nil {
+		h.fail(w, r, "add to library", err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusCreated, toLibraryEntryResponse(entry))
+}
+
+// valueOr reads an optional scalar out of a request body, falling back to
+// the default the contract declares for an absent property.
+func valueOr[T any](value *T, fallback T) T {
+	if value == nil {
+		return fallback
+	}
+
+	return *value
+}

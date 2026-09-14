@@ -365,3 +365,402 @@ func TestGetWorkIs404WhenThePathSegmentIsNotAUUID(t *testing.T) {
 		"from the caller's side a malformed id and a missing one both mean there is nothing here")
 	assert.Equal(t, "work_not_found", errorCode(t, recorder))
 }
+
+// ---------------------------------------------------------------------------
+// GET /v1/library
+// ---------------------------------------------------------------------------
+
+func TestListLibraryRequiresASession(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodGet, "/v1/library", "", nil)
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "missing_token", errorCode(t, recorder))
+}
+
+func TestListLibraryIs404WhenTheSessionHasNoLocalMemberYet(t *testing.T) {
+	t.Parallel()
+
+	recorder := newSuite(t).do(t, http.MethodGet, "/v1/library", "valid-user_ghost", nil)
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "unknown_identity", errorCode(t, recorder),
+		"the session is valid but the user.created webhook has not landed yet")
+}
+
+func TestListLibraryAnswersOnlyTheCallersOwnEntries(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+	mine := s.seedAnime("Frieren", seedTime)
+	theirs := s.seedAnime("Vinland Saga", seedTime)
+	s.seedEntry(alex.ID, mine.ID, library.StatusInProgress, seedTime)
+	s.seedEntry(alvaro.ID, theirs.ID, library.StatusCompleted, seedTime)
+
+	recorder := s.do(t, http.MethodGet, "/v1/library", "valid-user_alex", nil)
+	require.Equal(t, http.StatusOK, recorder.Code, "body: %s", recorder.Body.String())
+
+	page := decode[struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}](t, recorder)
+
+	require.Len(t, page.Items, 1, "a listing only ever walks the caller's own library")
+	assert.JSONEq(t, `"Frieren"`, string(objectOf(t, page.Items[0]["work"])["title"]))
+}
+
+func TestListLibraryCarriesTheWholeWorkInlineAndTheContractFields(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	s.seedEntry(alex.ID, work.ID, library.StatusInProgress, seedTime)
+
+	recorder := s.do(t, http.MethodGet, "/v1/library", "valid-user_alex", nil)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	page := decode[struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}](t, recorder)
+	require.Len(t, page.Items, 1)
+
+	entry := page.Items[0]
+	keys := make([]string, 0, len(entry))
+	for key := range entry {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
+	assert.ElementsMatch(t, libraryEntryFields, keys,
+		"member_id is not among them: the entry is the caller's by construction")
+	assert.ElementsMatch(t, workFields, objectKeys(t, entry["work"]),
+		"the whole work travels inline, so a library screen needs no second round of requests")
+}
+
+func TestListLibraryPagesNewestFirst(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	older := s.seedAnime("Older", seedTime)
+	newer := s.seedAnime("Newer", seedTime)
+	s.seedEntry(alex.ID, older.ID, library.StatusWishlist, seedTime)
+	newest := s.seedEntry(alex.ID, newer.ID, library.StatusWishlist, seedTime.Add(time.Hour))
+
+	recorder := s.do(t, http.MethodGet, "/v1/library?limit=1", "valid-user_alex", nil)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	page := decode[struct {
+		Items      []map[string]json.RawMessage `json:"items"`
+		NextCursor *string                      `json:"next_cursor"`
+	}](t, recorder)
+
+	require.Len(t, page.Items, 1)
+	assert.JSONEq(t, `"`+newest.ID.String()+`"`, string(page.Items[0]["id"]))
+	require.NotNil(t, page.NextCursor)
+
+	second := s.do(t, http.MethodGet, "/v1/library?limit=1&cursor="+*page.NextCursor, "valid-user_alex", nil)
+	require.Equal(t, http.StatusOK, second.Code)
+
+	tail := decode[struct {
+		Items      []map[string]json.RawMessage `json:"items"`
+		NextCursor *string                      `json:"next_cursor"`
+	}](t, second)
+	require.Len(t, tail.Items, 1)
+	assert.Nil(t, tail.NextCursor)
+}
+
+func TestListLibraryKeepsOnlyTheStatusAndCategoryAsked(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	anime := s.seedAnime("Frieren", seedTime)
+	game := s.works.Seed(library.Work{
+		Title: "Catan", Category: library.CategoryBoardGame, Source: library.SourceBGG,
+		SourceID: "13", CreatedAt: seedTime, UpdatedAt: seedTime,
+	})
+	s.seedEntry(alex.ID, anime.ID, library.StatusInProgress, seedTime)
+	s.seedEntry(alex.ID, game.ID, library.StatusWishlist, seedTime)
+
+	byStatus := s.do(t, http.MethodGet, "/v1/library?status=wishlist", "valid-user_alex", nil)
+	require.Equal(t, http.StatusOK, byStatus.Code)
+
+	wishlist := decode[struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}](t, byStatus)
+	require.Len(t, wishlist.Items, 1)
+	assert.JSONEq(t, `"Catan"`, string(objectOf(t, wishlist.Items[0]["work"])["title"]))
+
+	byCategory := s.do(t, http.MethodGet, "/v1/library?category=anime", "valid-user_alex", nil)
+	require.Equal(t, http.StatusOK, byCategory.Code)
+
+	animeOnly := decode[struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}](t, byCategory)
+	require.Len(t, animeOnly.Items, 1)
+	assert.JSONEq(t, `"Frieren"`, string(objectOf(t, animeOnly.Items[0]["work"])["title"]))
+}
+
+func TestListLibraryRejectsAStatusOutsideTheEnum(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/library?status=abandonado", "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_filter", errorCode(t, recorder),
+		"answering the unfiltered list to somebody who asked for a slice looks like success")
+}
+
+func TestListLibraryRejectsACategoryOutsideTheEnum(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/library?category=vinyl", "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_filter", errorCode(t, recorder))
+}
+
+func TestListLibraryRejectsAnInvalidLimit(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	for _, limit := range []string{"0", "101", "abc"} {
+		recorder := s.do(t, http.MethodGet, "/v1/library?limit="+limit, "valid-user_alex", nil)
+		assert.Equalf(t, http.StatusBadRequest, recorder.Code, "limit %s", limit)
+		assert.Equalf(t, "invalid_limit", errorCode(t, recorder), "limit %s", limit)
+	}
+}
+
+func TestListLibraryRejectsAnInvalidCursor(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodGet, "/v1/library?cursor=not-a-cursor", "valid-user_alex", nil)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_cursor", errorCode(t, recorder))
+}
+
+// ---------------------------------------------------------------------------
+// POST /v1/library
+// ---------------------------------------------------------------------------
+
+func TestCreateLibraryEntryRequiresASession(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "",
+		map[string]any{"work_id": work.ID.String(), "status": "wishlist"})
+
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	assert.Equal(t, "missing_token", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryRegistersTheWorkForTheSessionsMember(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex", map[string]any{
+		"work_id": work.ID.String(), "status": "in_progress", "progress": 3,
+	})
+	require.Equal(t, http.StatusCreated, recorder.Code, "body: %s", recorder.Body.String())
+
+	assert.ElementsMatch(t, libraryEntryFields, bodyKeys(t, recorder))
+
+	body := decode[map[string]any](t, recorder)
+	assert.Equal(t, "in_progress", body["status"])
+	assert.InDelta(t, 3, body["progress"], 0)
+	assert.Nil(t, body["rating"])
+
+	stored, err := s.entries.ByMemberAndWork(t.Context(), alex.ID, work.ID)
+	require.NoError(t, err, "the entry belongs to the member the session names")
+	assert.Equal(t, alex.ID, stored.MemberID)
+}
+
+func TestCreateLibraryEntryRefusesAMemberIDSmuggledInTheBody(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex", map[string]any{
+		"work_id": work.ID.String(), "status": "wishlist", "member_id": alvaro.ID.String(),
+	})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code,
+		"accepting a member_id would be accepting a write into somebody else's library")
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryIs404WhenTheWorkIsNotInTheCatalogue(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": uuid.New().String(), "status": "wishlist"})
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "work_not_found", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryIs404WhenTheSessionHasNoLocalMemberYet(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_ghost",
+		map[string]any{"work_id": work.ID.String(), "status": "wishlist"})
+
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, "unknown_identity", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryIs409WhenTheCallerAlreadyKeepsThatWork(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	alex := s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+	s.seedEntry(alex.ID, work.ID, library.StatusWishlist, seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": work.ID.String(), "status": "pending"})
+
+	assert.Equal(t, http.StatusConflict, recorder.Code,
+		"watching something again is progress on the entry that exists, never a second row")
+	assert.Equal(t, "already_in_library", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryAcceptsAnyOfTheSixStatusesBecauseCreatingIsNotATransition(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	for _, status := range []string{"wishlist", "pending", "in_progress", "completed", "dropped", "on_hold"} {
+		work := s.seedAnime("Anime "+status, seedTime)
+
+		recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+			map[string]any{"work_id": work.ID.String(), "status": status})
+
+		require.Equalf(t, http.StatusCreated, recorder.Code, "status %s: %s", status, recorder.Body.String())
+	}
+}
+
+func TestCreateLibraryEntryRefusesARatingOnAStatusWithNoOpinionBehindIt(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": work.ID.String(), "status": "in_progress", "rating": 8})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code,
+		"creation has nothing stored for an incoming rating to match, so the plain rule applies")
+	assert.Equal(t, "rating_not_allowed", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryKeepsARatingOnACompletedEntry(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": work.ID.String(), "status": "completed", "rating": 9})
+
+	require.Equal(t, http.StatusCreated, recorder.Code, "body: %s", recorder.Body.String())
+	assert.InDelta(t, 9, decode[map[string]any](t, recorder)["rating"], 0)
+}
+
+func TestCreateLibraryEntryRejectsProgressBeyondTheWorksTotal(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": work.ID.String(), "status": "in_progress", "progress": 999})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
+	assert.Equal(t, "invalid_progress", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryRejectsAStatusOutsideTheEnum(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": work.ID.String(), "status": "abandonado"})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryRejectsARatingOutsideOneToTen(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+	work := s.seedAnime("Frieren", seedTime)
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": work.ID.String(), "status": "completed", "rating": 11})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+func TestCreateLibraryEntryRejectsAWorkIDThatIsNotAUUID(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.do(t, http.MethodPost, "/v1/library", "valid-user_alex",
+		map[string]any{"work_id": "not-a-uuid", "status": "wishlist"})
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+}
+
+// objectOf decodes a nested JSON object into its raw properties.
+func objectOf(t *testing.T, raw json.RawMessage) map[string]json.RawMessage {
+	t.Helper()
+
+	var object map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(raw, &object), "object: %s", string(raw))
+
+	return object
+}

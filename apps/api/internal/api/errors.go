@@ -66,6 +66,18 @@ var errorRules = []errorRule{
 		"Ese filtro no es uno de los valores declarados."},
 	{library.ErrInvalidLimit, http.StatusBadRequest, httpx.CodeInvalidLimit,
 		"El parámetro limit debe estar entre 1 y 100."},
+	{library.ErrAlreadyInLibrary, http.StatusConflict, httpx.CodeAlreadyInLibrary,
+		"Ya tienes esa obra en tu biblioteca."},
+	{library.ErrRatingNotAllowed, http.StatusUnprocessableEntity, httpx.CodeRatingNotAllowed,
+		"Solo puedes valorar una entrada terminada o abandonada."},
+	{library.ErrInvalidProgress, http.StatusUnprocessableEntity, httpx.CodeInvalidProgress,
+		"El progreso no encaja con la obra."},
+	{library.ErrInvalidStatus, http.StatusBadRequest, httpx.CodeInvalidPayload,
+		"El estado no es uno de los declarados."},
+	{library.ErrInvalidRating, http.StatusBadRequest, httpx.CodeInvalidPayload,
+		"La valoración debe estar entre 1 y 10."},
+	{library.ErrMissingMember, http.StatusUnauthorized, httpx.CodeUnauthorized,
+		"No hay ningún miembro identificado para esta operación."},
 }
 
 // fail is the single place every handler answers a domain or adapter error
