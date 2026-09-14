@@ -317,14 +317,28 @@ export interface paths {
          *
          *     **A stored rating survives a status change.** The rule that only
          *     `completed` and `dropped` can be rated applies to a rating *arriving
-         *     in the request*, not to one already saved: `rating_not_allowed` is
-         *     raised when the body carries a non-null `rating` and the resulting
-         *     status is neither of those. A `PATCH {"status": "in_progress"}` on an
-         *     entry rated 8 succeeds and keeps the 8. `completed → in_progress` is
-         *     a rewatch, there is no rating history to restore from, and silently
-         *     destroying a score because somebody revisited something would be
-         *     data loss. Clearing a rating is something you ask for, by sending
-         *     `"rating": null`.
+         *     in the request*, not to one already saved. A
+         *     `PATCH {"status": "in_progress"}` on an entry rated 8 succeeds and
+         *     keeps the 8. `completed → in_progress` is a rewatch, there is no
+         *     rating history to restore from, and silently destroying a score
+         *     because somebody revisited something would be data loss. Clearing a
+         *     rating is something you ask for, by sending `"rating": null`.
+         *
+         *     **And the rule is about a *change* of rating, not about the field
+         *     being present.** `rating_not_allowed` is raised when the body carries
+         *     a non-null `rating` that *differs from the stored one* and the
+         *     resulting status is neither `completed` nor `dropped`. Sending back a
+         *     rating identical to the one already saved asks for nothing and
+         *     succeeds, whatever the status.
+         *
+         *     Without that, a state is reachable but not re-affirmable: an entry
+         *     that is `in_progress` and rated 8 — a perfectly ordinary entry, since
+         *     a score survives a rewatch — would be refused its own representation
+         *     handed straight back, and `PATCH` would not be idempotent with
+         *     respect to the object this API just returned. The same reasoning
+         *     makes a `status` equal to the stored one a no-op rather than an
+         *     illegal transition: a client sending the whole object back is asking
+         *     for nothing, and answering 422 to nothing is a trap, not a rule.
          *
          *     Unlike creation, **a status change is a transition** and is checked
          *     against the state machine in
@@ -658,9 +672,11 @@ export interface components {
              * @description A score from 1 to 10, only meaningful once there is an opinion.
              *     The domain accepts a rating *arriving in a request* on
              *     `completed` and `dropped` and rejects it anywhere else with
-             *     `rating_not_allowed` (domain rule 2). A rating already stored
-             *     survives a later status change — a rewatch does not erase a
-             *     score. `null` when unrated.
+             *     `rating_not_allowed` (domain rule 2). What the rule guards is a
+             *     *change*: a rating already stored survives a later status change
+             *     — a rewatch does not erase a score — and sending that same score
+             *     back unchanged is a no-op that succeeds in any status. `null`
+             *     when unrated.
              */
             rating: number | null;
             /**
@@ -737,13 +753,22 @@ export interface components {
          *
          *     A `status` here is a **transition** and is checked against the state
          *     machine in [domain.md](../../docs/domain.md) — unlike creation,
-         *     which is the entry point and accepts any of the six. A rating
-         *     already stored is not touched by a status change; send
-         *     `"rating": null` to clear it deliberately.
+         *     which is the entry point and accepts any of the six. Re-sending the
+         *     status an entry already holds is a no-op, not an illegal move. A
+         *     rating already stored is not touched by a status change, and
+         *     re-sending that same rating is a no-op too; send `"rating": null` to
+         *     clear it deliberately.
          */
         UpdateLibraryEntryRequest: {
             status?: components["schemas"]["LibraryEntryStatus"];
             progress?: number;
+            /**
+             * @description Accepted when the resulting status is `completed` or `dropped`,
+             *     and also when it is identical to the stored score, which changes
+             *     nothing. A *different* rating on any other status is
+             *     `422 rating_not_allowed`. Send `null` to clear it, which is
+             *     always allowed.
+             */
             rating?: number | null;
             is_favourite?: boolean;
             owned?: boolean;
@@ -1625,10 +1650,11 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             /**
              * @description A domain rule rejects the body: `rating_not_allowed` when the
-             *     body carries a rating and the resulting status is neither
-             *     `completed` nor `dropped`, `invalid_progress` when the progress
-             *     does not fit the work's category, or `invalid_transition` when
-             *     the state machine does not allow the requested status change.
+             *     body carries a rating that differs from the stored one and the
+             *     resulting status is neither `completed` nor `dropped`,
+             *     `invalid_progress` when the progress does not fit the work's
+             *     category, or `invalid_transition` when the state machine does not
+             *     allow the requested status change.
              */
             422: {
                 headers: {
