@@ -152,6 +152,155 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/works": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the shared catalogue
+         * @description The catalogue every member shares. A work is not owned by anybody: if
+         *     two members track the same anime, both point at the same `Work`, and
+         *     that overlap is what later makes matches and recommendations mean
+         *     something.
+         *
+         *     Newest first and keyset-paginated per
+         *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). Both
+         *     filters are optional and combine with an AND.
+         */
+        get: operations["listWorks"];
+        put?: never;
+        /**
+         * Add a work by hand
+         * @description Manual entry for something no external catalogue lists. It is not a
+         *     fallback: [catalogs.md](../../docs/catalogs.md) treats it as part of
+         *     the design, because a homemade deck or an obscure game has to be
+         *     recordable too.
+         *
+         *     The created work is always `source: manual` with a `source_id` of
+         *     `null` — importing from AniList, TMDB and the rest is a separate
+         *     piece of work and this endpoint deliberately refuses to fake it, so
+         *     neither field is accepted in the body.
+         *
+         *     A work is never deleted, even if nobody keeps it in their library
+         *     (domain rule 3): it is shared history.
+         */
+        post: operations["createWork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/works/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The work's identifier. */
+                id: components["parameters"]["WorkId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One work's record
+         * @description The catalogue is shared, so any member can read any work. Whether the
+         *     caller keeps it in their own library is a separate question, answered
+         *     by `GET /v1/library`.
+         */
+        get: operations["getWork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The caller's own library
+         * @description Every work the caller has registered, whatever its status. There is
+         *     no separate wishlist endpoint because the wishlist is not a separate
+         *     thing: it is `status=wishlist`, and an entry moves through the
+         *     lifecycle without changing collection or losing its history.
+         *
+         *     Newest first and keyset-paginated per
+         *     [ADR-0011](../../docs/decisions/0011-paginacion-por-cursor.md). Both
+         *     filters are optional and combine with an AND.
+         *
+         *     Each entry carries its whole `Work` inline rather than just a
+         *     `work_id`, so rendering a library list never needs a second round of
+         *     requests to resolve titles and covers.
+         */
+        get: operations["listLibraryEntries"];
+        put?: never;
+        /**
+         * Add a work to the caller's library
+         * @description The work has to exist in the shared catalogue first; add it with
+         *     `POST /v1/works` when it does not.
+         *
+         *     A member holds **at most one** entry per work (domain rule 1), so
+         *     adding a work that is already there is a conflict, not a second row:
+         *     `409 already_in_library`. Watching something again is progress on the
+         *     entry that already exists.
+         */
+        post: operations["createLibraryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/library/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library entry's identifier. */
+                id: components["parameters"]["LibraryEntryId"];
+            };
+            cookie?: never;
+        };
+        /** One entry of the caller's library */
+        get: operations["getLibraryEntry"];
+        put?: never;
+        post?: never;
+        /**
+         * Take a work out of the caller's library
+         * @description Removes the caller's relationship with the work. The `Work` itself
+         *     stays in the shared catalogue: it is never deleted, even when nobody
+         *     keeps it any more (domain rule 3).
+         *
+         *     Deleting is idempotent from the caller's side only in the sense that
+         *     a second attempt answers `404`: the entry is already gone.
+         */
+        delete: operations["deleteLibraryEntry"];
+        options?: never;
+        head?: never;
+        /**
+         * Update status, progress, rating, favourite, ownership or note
+         * @description Every field is optional and only the ones present are touched. A
+         *     field sent as `null` is cleared on purpose — that is how a rating, a
+         *     note or a date is removed — which is why those properties are
+         *     nullable here and merely absent means "leave as it is". A body with
+         *     no fields at all changes nothing and answers `200` with the entry
+         *     unchanged.
+         *
+         *     The work an entry points at never changes: pointing at a different
+         *     work is a different entry. Delete this one and create the other.
+         */
+        patch: operations["updateLibraryEntry"];
+        trace?: never;
+    };
     "/webhooks/clerk": {
         parameters: {
             query?: never;
@@ -215,7 +364,7 @@ export interface components {
              * @example not_found
              * @enum {string}
              */
-            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
+            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "already_in_library" | "work_not_found" | "rating_not_allowed" | "invalid_progress" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
             /**
              * @deprecated
              * @description Same text as `detail`. Kept only for backward compatibility with clients written before ADR-0014.
@@ -307,6 +456,229 @@ export interface components {
             items: components["schemas"]["GroupInvitation"][];
             next_cursor: string | null;
         };
+        /**
+         * @description What kind of thing a work is. All six are declared because the set
+         *     belongs to the domain, not to the release schedule
+         *     ([domain.md](../../docs/domain.md)); the product only feeds `anime`
+         *     for now, and the rest arrive as their categories are built.
+         * @enum {string}
+         */
+        WorkCategory: "anime" | "manga" | "game" | "film" | "boardgame" | "tcg";
+        /**
+         * @description Where a work's record came from ([catalogs.md](../../docs/catalogs.md)).
+         *     `manual` means somebody typed it in because no public catalogue lists
+         *     it, and it is the only value `POST /v1/works` produces today.
+         * @enum {string}
+         */
+        WorkSource: "anilist" | "tmdb" | "igdb" | "bgg" | "scryfall" | "manual";
+        /**
+         * @description Everything that is specific to one category, kept out of the columns
+         *     that apply to all of them: the rule in
+         *     [domain.md](../../docs/domain.md) is that a field shared by every
+         *     category is a column and a field that belongs to one lives here.
+         *
+         *     The object is deliberately open. Anime — the only category the
+         *     product feeds right now — uses these keys:
+         *
+         *     | Key | Type | Meaning |
+         *     | :--- | :--- | :--- |
+         *     | `episodes` | integer | How many episodes the run has, when the catalogue knows |
+         *     | `season` | string | The broadcast season, as the catalogue labels it (`"2024-spring"`) |
+         *     | `status_airing` | string | The airing status the catalogue reports (`"airing"`, `"finished"`, `"not_yet_aired"`) |
+         *
+         *     The other five categories will document their own keys when they are
+         *     built. Closing this object now would mean inventing fields for board
+         *     games and TCGs that nobody has used yet, so it stays open on purpose.
+         */
+        WorkMetadata: {
+            /** @description Anime only. Episode count, when the catalogue knows it. */
+            episodes?: number;
+            /** @description Anime only. The broadcast season as the catalogue labels it. */
+            season?: string;
+            /** @description Anime only. The airing status the catalogue reports. */
+            status_airing?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description The objective record of a thing: title, category, year, cover,
+         *     synopsis. It is **shared by the whole group** — if two members watch
+         *     the same anime, both point at this same record — and that overlap is
+         *     what makes matches and recommendations mean anything later.
+         *
+         *     A work is never deleted, even when nobody keeps it in their library
+         *     any more (domain rule 3).
+         */
+        Work: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            category: components["schemas"]["WorkCategory"];
+            source: components["schemas"]["WorkSource"];
+            /**
+             * @description The work's identifier inside `source`'s own catalogue. Always
+             *     `null` when `source` is `manual`, because there is no external
+             *     record to point at.
+             */
+            source_id: string | null;
+            /** Format: uri */
+            cover_url: string | null;
+            synopsis: string | null;
+            /** @description Year of release, when it is known. */
+            year: number | null;
+            metadata: components["schemas"]["WorkMetadata"];
+            /**
+             * Format: uuid
+             * @description The base game this work expands, for board game expansions
+             *     ([ADR-0006](../../docs/decisions/0006-expansiones-de-juegos-de-mesa.md)).
+             *     An expansion is a work of its own — its own record, its own
+             *     library entry — linked to its base instead of floating loose in
+             *     the catalogue. `null` for everything else, which today is
+             *     everything.
+             */
+            expansion_of: string | null;
+        };
+        /**
+         * @description A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+         *     nothing more remains to read.
+         */
+        WorkPage: {
+            items: components["schemas"]["Work"][];
+            next_cursor: string | null;
+        };
+        /**
+         * @description Manual entry of a work. Neither `source` nor `source_id` is accepted:
+         *     what this endpoint creates is `manual` by definition, and pretending
+         *     otherwise would let a client claim a record came from AniList when
+         *     nobody checked.
+         *
+         *     `expansion_of` is not accepted either. Linking an expansion to its
+         *     base game needs validation rules that only matter once board games
+         *     are actually built, and this release feeds anime.
+         */
+        CreateWorkRequest: {
+            title: string;
+            category: components["schemas"]["WorkCategory"];
+            /** Format: uri */
+            cover_url?: string | null;
+            synopsis?: string | null;
+            year?: number | null;
+            metadata?: components["schemas"]["WorkMetadata"];
+        };
+        /**
+         * @description Where a member stands with a work. The wishlist is not a separate
+         *     list: it is this enum's `wishlist` value, which is what lets an entry
+         *     travel from wanted to finished without changing collection or losing
+         *     its history ([domain.md](../../docs/domain.md)).
+         * @enum {string}
+         */
+        LibraryEntryStatus: "wishlist" | "pending" | "in_progress" | "completed" | "dropped" | "on_hold";
+        /**
+         * @description One member's relationship with one work — what turns a shared
+         *     catalogue into *your* library. A member holds at most one entry per
+         *     work (domain rule 1).
+         *
+         *     The whole `Work` travels inline rather than a bare `work_id`: a
+         *     library screen renders titles and covers straight from the page it
+         *     already fetched, instead of firing one request per row.
+         */
+        LibraryEntry: {
+            /** Format: uuid */
+            id: string;
+            work: components["schemas"]["Work"];
+            status: components["schemas"]["LibraryEntryStatus"];
+            /**
+             * @description How far along the member is. The unit depends on the work's
+             *     category — episodes for anime, chapters for manga, hours for a
+             *     game, plays for a board game — so the domain is what validates
+             *     it, never the database (domain rule 5). `0` means not started.
+             */
+            progress: number;
+            /**
+             * @description A score from 1 to 10, only meaningful once there is an opinion:
+             *     the domain accepts it on `completed` and `dropped` and rejects it
+             *     anywhere else with `rating_not_allowed` (domain rule 2). `null`
+             *     when unrated.
+             */
+            rating: number | null;
+            /**
+             * @description Affection, not score. A favourite rated 6 is a perfectly normal
+             *     thing and the two fields never imply each other.
+             */
+            is_favourite: boolean;
+            /** @description Whether the member owns a physical copy. Matters for board games, manga and TCGs. */
+            owned: boolean;
+            /**
+             * @description A short note. It is **public** to the whole group, with no
+             *     per-entry privacy setting
+             *     ([ADR-0005](../../docs/decisions/0005-notas-publicas.md)).
+             */
+            note: string | null;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            finished_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /**
+         * @description A keyset-paginated page (ADR-0011). `next_cursor` is `null` when
+         *     nothing more remains to read.
+         */
+        LibraryEntryPage: {
+            items: components["schemas"]["LibraryEntry"][];
+            next_cursor: string | null;
+        };
+        /**
+         * @description `status` is required rather than defaulted: a member either wants
+         *     something (`wishlist`) or already has it (`pending`), and both are
+         *     legitimate entry points into the lifecycle. Picking one silently
+         *     would guess at the very thing the member is telling us.
+         */
+        CreateLibraryEntryRequest: {
+            /**
+             * Format: uuid
+             * @description The work being added. It must already exist, or the answer is `404 work_not_found`.
+             */
+            work_id: string;
+            status: components["schemas"]["LibraryEntryStatus"];
+            /** @description Defaults to `0` when absent. */
+            progress?: number;
+            /** @description Only accepted when `status` is `completed` or `dropped`; otherwise `422 rating_not_allowed`. */
+            rating?: number | null;
+            /** @description Defaults to `false` when absent. */
+            is_favourite?: boolean;
+            /** @description Defaults to `false` when absent. */
+            owned?: boolean;
+            note?: string | null;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
+        };
+        /**
+         * @description A partial update: only the properties present are touched. `null`
+         *     clears a field on purpose — it is the only way to remove a rating, a
+         *     note or a date — while an absent property leaves the stored value
+         *     alone. A body with no properties at all is a no-op.
+         *
+         *     `work_id` is absent by design: an entry never changes the work it
+         *     points at.
+         */
+        UpdateLibraryEntryRequest: {
+            status?: components["schemas"]["LibraryEntryStatus"];
+            progress?: number;
+            rating?: number | null;
+            is_favourite?: boolean;
+            owned?: boolean;
+            note?: string | null;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
+        };
     };
     responses: {
         /** @description The session is missing, malformed or expired */
@@ -321,6 +693,22 @@ export interface components {
         };
         /** @description The request body is larger than the endpoint accepts */
         PayloadTooLarge: {
+            headers: {
+                "X-Request-ID": components["headers"]["RequestID"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description No entry with that id belongs to the caller. An entry that exists but
+         *     belongs to somebody else answers exactly the same way, on purpose: a
+         *     `403` would confirm the entry exists, and whose library holds what is
+         *     nobody else's business. `unknown_identity` lands here too, while the
+         *     `user.created` webhook is still in flight.
+         */
+        LibraryEntryNotFound: {
             headers: {
                 "X-Request-ID": components["headers"]["RequestID"];
                 [name: string]: unknown;
@@ -362,7 +750,12 @@ export interface components {
             };
         };
     };
-    parameters: never;
+    parameters: {
+        /** @description The work's identifier. */
+        WorkId: string;
+        /** @description The library entry's identifier. */
+        LibraryEntryId: string;
+    };
     requestBodies: never;
     headers: {
         /**
@@ -774,6 +1167,376 @@ export interface operations {
              *     while the `user.created` webhook is still in flight.
              */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    listWorks: {
+        parameters: {
+            query?: {
+                /** @description Keep only works of this category. */
+                category?: components["schemas"]["WorkCategory"];
+                /**
+                 * @description Free-text search over the title. Matching is case- and
+                 *     accent-insensitive; an empty value is the same as not sending it.
+                 */
+                q?: string;
+                /** @description Page size. Defaults to 25, must be between 1 and 100. */
+                limit?: number;
+                /** @description Opaque cursor returned as `next_cursor` by a previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the shared catalogue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkPage"];
+                };
+            };
+            /** @description The limit or the cursor is not valid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    createWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkRequest"];
+            };
+        };
+        responses: {
+            /** @description The work was added to the shared catalogue */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Work"];
+                };
+            };
+            /** @description The body is malformed or carries unknown fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            413: components["responses"]["PayloadTooLarge"];
+            /** @description A field fails validation */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    getWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The work's identifier. */
+                id: components["parameters"]["WorkId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The work */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Work"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description No work has that id — `work_not_found`. A path segment that is
+             *     not a well-formed uuid answers the same way: from the caller's
+             *     side both mean "there is nothing here".
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    listLibraryEntries: {
+        parameters: {
+            query?: {
+                /** @description Keep only entries in this status. */
+                status?: components["schemas"]["LibraryEntryStatus"];
+                /** @description Keep only entries whose work belongs to this category. */
+                category?: components["schemas"]["WorkCategory"];
+                /** @description Page size. Defaults to 25, must be between 1 and 100. */
+                limit?: number;
+                /** @description Opaque cursor returned as `next_cursor` by a previous page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's library */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryEntryPage"];
+                };
+            };
+            /** @description The limit or the cursor is not valid */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description The session is valid but no member row exists yet, which happens
+             *     while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    createLibraryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLibraryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The entry was created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryEntry"];
+                };
+            };
+            /** @description The body is malformed or carries unknown fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Either `work_id` names no work (`work_not_found`), or the session
+             *     is valid but no member row exists yet (`unknown_identity`), which
+             *     happens while the `user.created` webhook is still in flight.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller already keeps that work — `already_in_library` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            /**
+             * @description A domain rule rejects the body: `rating_not_allowed` when a
+             *     rating arrives on a status other than `completed` or `dropped`,
+             *     or `invalid_progress` when the progress does not fit the work's
+             *     category.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    getLibraryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library entry's identifier. */
+                id: components["parameters"]["LibraryEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry, with its work inline */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryEntry"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["LibraryEntryNotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    deleteLibraryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library entry's identifier. */
+                id: components["parameters"]["LibraryEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry is gone */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["LibraryEntryNotFound"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["ServiceUnavailable"];
+            504: components["responses"]["Timeout"];
+        };
+    };
+    updateLibraryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description The library entry's identifier. */
+                id: components["parameters"]["LibraryEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLibraryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The entry after the update */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryEntry"];
+                };
+            };
+            /** @description The body is malformed or carries unknown fields */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Error"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["LibraryEntryNotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            /**
+             * @description A domain rule rejects the body: `rating_not_allowed` when the
+             *     resulting status is neither `completed` nor `dropped`, or
+             *     `invalid_progress` when the progress does not fit the work's
+             *     category.
+             */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
