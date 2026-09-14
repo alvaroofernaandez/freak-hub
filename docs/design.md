@@ -459,6 +459,88 @@ aparición, así que si el override viviera dentro de `@layer base` (como
 ocurría antes) las versiones sin capa de arriba ganarían y el movimiento
 reducido nunca se aplicaría.
 
+## Criterio de extensión para pantallas sin maqueta
+
+Cinco pantallas del listado cerrado ([screens.md](screens.md)) no tienen
+ninguna sección en `design/high-fidelity-desktop.html`: Actividad, Grupo,
+Invitar, Recomendaciones y Ajustes (épica #18). Tres ya existen y ya usan los
+tokens de este documento (Actividad, Grupo, Invitar); dos se construyen desde
+cero (Recomendaciones, Ajustes). Esto fija cómo se extiende el sistema a las
+cinco sin que cada una invente su propio lenguaje visual.
+
+### Qué se reutiliza
+
+| Pieza | Componente | Regla |
+| :--- | :--- | :--- |
+| Cabecera y navegación | `shared/ui/navbar.tsx` y la barra inferior móvil, ya cableadas en `app/(app)/layout.tsx` | No se toca por pantalla; ya cubre las cinco |
+| Ancho de página | `max-w-5xl` (el mismo `<main>` de `app/(app)/layout.tsx`) | Heredado; ninguna pantalla nueva redefine su propio ancho |
+| Título de pantalla | `text-3xl font-semibold` + subtítulo `text-ink-muted`, dentro de `space-y-2`, y el bloque completo en `space-y-6` | Patrón exacto de `/actividad`, `/miembros` e `/invitar`; se copia literal |
+| Encabezado de subsección | `shared/ui/section-heading.tsx` (`SectionHeading`) | Para cualquier bloque con nombre propio dentro de la pantalla (p. ej. «Recibidas» / «Enviadas» en Recomendaciones) |
+| Tarjeta neutra | Patrón `rounded-xl border border-border bg-surface` (ver `features/library/ui/work-card.tsx`) | Base de cualquier tarjeta nueva: fila de recomendación, bloque de Ajustes |
+| Placeholder de portada | `features/library/ui/cover-placeholder.tsx` | Donde falte una imagen asociada (una recomendación sin portada) |
+| Estado de una entrada o invitación | `shared/ui/status-badge.tsx`, `shared/ui/status-mark.tsx` | Icono + etiqueta, igual que en el resto de la app — ver [la regla de más abajo](#qué-se-puede-extender-y-qué-no) |
+| Vacío | `shared/ui/empty-state.tsx` (`size="section"` para la pantalla completa, `"inline"` dentro de una sección con cabecera propia) | Nunca un párrafo suelto anunciando que no hay nada |
+| Separador de secciones | `shared/ui/moulding.tsx` | Entre bloques con entidad propia dentro de la misma pantalla (recibidas/enviadas, cuenta/tema/datos en Ajustes) |
+
+### Qué se puede extender, y qué no
+
+- **Se puede** componer piezas de la tabla anterior en un layout nuevo. Una
+  pantalla que no existe todavía (Ajustes, Recomendaciones) no tiene una
+  maqueta que copiar a píxel, pero sí un catálogo cerrado de piezas del que
+  partir.
+- **Se puede** usar un color de categoría (`--cat-*`) cuando la pantalla
+  agrupa por categoría — siempre acompañado de su etiqueta de texto, nunca
+  solo (misma regla que [el estado de una entrada](#el-estado-de-una-entrada-no-usa-color)).
+- **No se puede** inventar un componente de tarjeta, badge o placeholder
+  nuevo. Si ninguna pieza existente encaja, la pantalla necesita una decisión
+  de diseño explícita — se añade a este documento antes de escribir el
+  componente, no se improvisa en el momento.
+- **No se puede** usar el color como único identificador de un estado. Las
+  cinco pantallas heredan la regla ya cerrada: icono + etiqueta, nunca solo
+  color.
+- **No se puede** introducir un ancho de contenedor, un tamaño de tipografía
+  o un radio de borde que no esté ya en la escala de este documento. Ninguna
+  pantalla sin maqueta amplía la paleta ni los tokens.
+
+### Espaciado, jerarquía y tipografía sin maqueta
+
+Sin una maqueta que copiar a píxel, la jerarquía se decide con las piezas ya
+cerradas, no con un valor nuevo calculado a ojo para esa pantalla:
+
+1. **Tipografía.** La escala ya existe (`text-3xl`, `text-lg`, `text-sm`, ya
+   usados en las diez pantallas con maqueta). Ninguna pantalla sin maqueta
+   introduce un tamaño de fuente que no aparezca ya en otra pantalla del
+   listado cerrado.
+2. **Espaciado.** `space-y-6` entre bloques de nivel de pantalla, `space-y-2`
+   dentro de una cabecera, `gap-2`/`gap-2.5` dentro de una fila: los mismos
+   valores que usan hoy `/actividad`, `/miembros` e `/invitar`. No se abre
+   una escala de espaciado paralela.
+3. **Jerarquía.** Un único `<h1>` por pantalla (el título), `<h2>` vía
+   `SectionHeading` para cada bloque con nombre propio. Si una pantalla
+   pide un tercer nivel, es señal de que hay que partirla en dos, no de que
+   falte un `<h3>`.
+4. **Listas y rejillas.** `space-y-*` o `grid` con los mismos huecos que el
+   resto de la app (ver la tabla de arriba), nunca un margen o un `gap`
+   ad-hoc.
+
+### Verificación a 390 / 1024 / 1440 px
+
+No hay maqueta de referencia que comparar, así que la validación es contra la
+propia pantalla en las tres anchuras a la vez — mismo criterio que la
+Definition of Done de la épica #18:
+
+| Anchura | Qué se comprueba |
+| :--- | :--- |
+| 390 px | La barra inferior sustituye a la navbar de escritorio (ya cableado en el shell); ningún texto se corta ni se solapa; el `<h1>` y su subtítulo caben en una columna; los objetivos pulsables mantienen los 44 px mínimos de [la barra inferior](#la-barra-inferior-del-móvil) |
+| 1024 px | El contenido sigue dentro de `max-w-5xl` sin franjas vacías desproporcionadas ni una sola columna forzada donde ya cabría una rejilla; la moldura, si la pantalla la usa, se lee completa |
+| 1440 px | El contenido no se estira sin límite — `max-w-5xl` es el tope, no un mínimo que rellenar; ninguna tarjeta ni fila queda más ancha que sus equivalentes en `/miembros` o `/actividad` |
+
+Se prueba a ojo con las herramientas de responsive de DevTools (390, 1024 y
+1440 como anchuras de referencia, no puntos de corte exactos de Tailwind).
+No hace falta una captura por anchura ni un test de regresión visual: es una
+pasada manual antes de dar la pantalla por terminada, igual que fija la
+Definition of Done de la épica #18.
+
 ## Registro de decisiones
 
 - **2026-09-09** · Estados de invitación con marca + palabra, y contorno
@@ -716,3 +798,8 @@ reducido nunca se aplicaría.
 - **2026-09-10** · Ayuda de la foto de perfil corregida a «JPEG, PNG, WEBP o
   GIF, hasta 5 MB» — el texto anterior («JPG, PNG o WebP») omitía GIF, que
   `apps/api/internal/users.AllowedAvatarContentTypes` sí admite.
+- **2026-09-14** · Criterio de extensión para las cinco pantallas sin maqueta
+  (issue #32, épica #18): qué piezas ya cerradas se reutilizan, qué no se
+  puede inventar, cómo se decide espaciado/jerarquía/tipografía sin una
+  maqueta que copiar y cómo se verifica a 390/1024/1440 px. Ver
+  [Criterio de extensión para pantallas sin maqueta](#criterio-de-extensión-para-pantallas-sin-maqueta).
