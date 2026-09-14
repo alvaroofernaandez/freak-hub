@@ -48,6 +48,23 @@ Con el híbrido, un `Work` tiene `source` y `source_id`. Cuando `source` es
 
 Todas se declaran en `.env.example`.
 
+## La excepción temporal de AniList
+
+Mientras la API en Go no exponga `/v1/works` con su propia integración
+(épica #10), la web consulta AniList directamente desde
+`apps/web/src/features/library/lib/anilist.ts`. Es una excepción consciente y
+con fecha de caducidad, acordada en la épica #20: AniList es un catálogo
+externo de solo lectura, así que la regla 2 de `AGENTS.md` no se rompe, pero
+la regla 1 de aquí —un adaptador por proveedor detrás de un puerto del
+dominio— sí queda pendiente hasta que ese adaptador viva en el backend.
+
+Ese módulo respeta lo que sí aplica ya: la llamada sale del servidor
+(`ANILIST_API_URL` no lleva el prefijo `NEXT_PUBLIC_`), no persiste nada, no
+filtra los tipos de AniList fuera de sí mismo y trata el límite de peticiones
+y los fallos de red como estados, no como excepciones. Cuando el backend tenga
+su integración, el fichero se borra entero y la web pasa a consumir la API
+propia.
+
 ## Casos que no cubre ninguna API
 
 TCG más allá de Magic (Pokémon, Yu-Gi-Oh!, One Piece), cómic europeo, ediciones
