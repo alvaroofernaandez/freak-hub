@@ -91,6 +91,7 @@ describe("normalizeError copy for the library codes", () => {
     { code: "invalid_progress", status: 422 },
     { code: "library_entry_not_found", status: 404 },
     { code: "invalid_transition", status: 422 },
+    { code: "invalid_filter", status: 400 },
   ];
 
   it.each(

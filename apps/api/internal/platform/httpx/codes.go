@@ -21,6 +21,7 @@ const (
 	CodeInternal              ErrorCode = "internal_error"
 	CodeInvalidLimit          ErrorCode = "invalid_limit"
 	CodeInvalidCursor         ErrorCode = "invalid_cursor"
+	CodeInvalidFilter         ErrorCode = "invalid_filter"
 	CodeNoProfileChanges      ErrorCode = "no_profile_changes"
 	CodeNameTooLong           ErrorCode = "name_too_long"
 	CodeUsernameInvalidLength ErrorCode = "username_invalid_length"
@@ -66,6 +67,7 @@ var codeRegistry = map[ErrorCode]codeInfo{
 	CodeInternal:              {Title: "Error interno del servidor"},
 	CodeInvalidLimit:          {Title: "Parámetro limit no válido"},
 	CodeInvalidCursor:         {Title: "Parámetro cursor no válido"},
+	CodeInvalidFilter:         {Title: "Filtro no válido"},
 	CodeNoProfileChanges:      {Title: "Sin cambios que aplicar"},
 	CodeNameTooLong:           {Title: "Nombre demasiado largo"},
 	CodeUsernameInvalidLength: {Title: "Longitud de usuario no válida", Field: "username"},

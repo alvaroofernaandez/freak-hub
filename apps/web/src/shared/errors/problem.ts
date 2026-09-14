@@ -44,6 +44,7 @@ const KNOWN_CODES = {
   internal_error: true,
   invalid_limit: true,
   invalid_cursor: true,
+  invalid_filter: true,
   no_profile_changes: true,
   name_too_long: true,
   username_invalid_length: true,

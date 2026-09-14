@@ -400,7 +400,7 @@ export interface components {
              * @example not_found
              * @enum {string}
              */
-            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "already_in_library" | "work_not_found" | "rating_not_allowed" | "invalid_progress" | "library_entry_not_found" | "invalid_transition" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
+            code: "missing_token" | "invalid_token" | "unauthorized" | "unknown_identity" | "invalid_payload" | "not_found" | "internal_error" | "invalid_limit" | "invalid_cursor" | "invalid_filter" | "no_profile_changes" | "name_too_long" | "username_invalid_length" | "username_numeric_only" | "username_taken" | "avatar_too_large" | "avatar_unsupported_type" | "invalid_email" | "invitation_already_sent" | "already_member" | "already_in_library" | "work_not_found" | "rating_not_allowed" | "invalid_progress" | "library_entry_not_found" | "invalid_transition" | "method_not_allowed" | "payload_too_large" | "request_timeout" | "upstream_unavailable";
             /**
              * @deprecated
              * @description Same text as `detail`. Kept only for backward compatibility with clients written before ADR-0014.
@@ -1289,7 +1289,13 @@ export interface operations {
                     "application/json": components["schemas"]["WorkPage"];
                 };
             };
-            /** @description The limit or the cursor is not valid */
+            /**
+             * @description `invalid_limit` or `invalid_cursor` for the pagination
+             *     parameters, or `invalid_filter` when `category` is not one of
+             *     the declared values. A filter is never ignored silently: an
+             *     unknown value is rejected rather than answered with the
+             *     unfiltered list.
+             */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1418,7 +1424,13 @@ export interface operations {
                     "application/json": components["schemas"]["LibraryEntryPage"];
                 };
             };
-            /** @description The limit or the cursor is not valid */
+            /**
+             * @description `invalid_limit` or `invalid_cursor` for the pagination
+             *     parameters, or `invalid_filter` when `status` or `category` is
+             *     not one of the declared values. A filter is never ignored
+             *     silently: an unknown value is rejected rather than answered with
+             *     the unfiltered list.
+             */
             400: {
                 headers: {
                     [name: string]: unknown;

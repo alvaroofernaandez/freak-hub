@@ -78,6 +78,13 @@ desde el ADR-0011 son todos los que listan: `GET /v1/members`,
 `GET /v1/invitations`, `GET /v1/invitations/group`, `GET /v1/works` y
 `GET /v1/library`. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md).
 
+`invalid_filter` es de la misma familia y lo devuelven los dos listados que
+filtran —`GET /v1/works` y `GET /v1/library`— cuando `?status=` o `?category=`
+traen un valor fuera del enum. Es un código propio y no `invalid_payload` por la
+misma razón que lo son `invalid_limit` e `invalid_cursor`: `invalid_payload`
+significa «el **cuerpo** de la petición no es válido», y una cadena de consulta
+no es un cuerpo.
+
 ## Catálogo de códigos
 
 | `code` | Estado | Reintentable | Cuándo |
@@ -90,6 +97,7 @@ desde el ADR-0011 son todos los que listan: `GET /v1/members`,
 | `not_found` | 404 | no | Ruta inexistente |
 | `internal_error` | 500 | no | Fallo nuestro. El detalle va al log, nunca al cliente |
 | `invalid_cursor` | 400 | no | El cursor de paginación no decodifica. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
+| `invalid_filter` | 400 | no | Un filtro de consulta (`?status=`, `?category=`) trae un valor que no está en el enum. No se ignora en silencio |
 | `invalid_limit` | 400 | no | El `limit` de paginación está fuera de rango. Ver [ADR-0011](decisions/0011-paginacion-por-cursor.md) |
 | `no_profile_changes` | 422 | no | `PATCH /v1/me` sin ningún campo |
 | `name_too_long` | 422 | no | Nombre o apellidos por encima de 100 caracteres |

@@ -527,7 +527,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/WorkPage"
         "400":
-          description: The limit or the cursor is not valid
+          description: |
+            `invalid_limit` or `invalid_cursor` for the pagination
+            parameters, or `invalid_filter` when `category` is not one of
+            the declared values. A filter is never ignored silently: an
+            unknown value is rejected rather than answered with the
+            unfiltered list.
           content:
             application/problem+json:
               schema:
@@ -694,7 +699,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/LibraryEntryPage"
         "400":
-          description: The limit or the cursor is not valid
+          description: |
+            `invalid_limit` or `invalid_cursor` for the pagination
+            parameters, or `invalid_filter` when `status` or `category` is
+            not one of the declared values. A filter is never ignored
+            silently: an unknown value is rejected rather than answered with
+            the unfiltered list.
           content:
             application/problem+json:
               schema:
@@ -1129,6 +1139,7 @@ components:
             - internal_error
             - invalid_limit
             - invalid_cursor
+            - invalid_filter
             - no_profile_changes
             - name_too_long
             - username_invalid_length

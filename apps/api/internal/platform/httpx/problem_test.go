@@ -174,6 +174,11 @@ func TestWriteProblemDescribesTheLibraryCodes(t *testing.T) {
 		// library_entry_not_found blames none either: the id it rejects is
 		// a path segment, never a body property.
 		{name: "library entry not found", code: httpx.CodeLibraryEntryNotFound, field: ""},
+		// invalid_filter blames none: field_errors names request-body
+		// fields, and the value it rejects is a query parameter — which of
+		// status or category is ambiguous anyway. Same shape as its
+		// siblings invalid_limit and invalid_cursor.
+		{name: "invalid filter", code: httpx.CodeInvalidFilter, field: ""},
 	}
 
 	for _, testCase := range cases {

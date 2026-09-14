@@ -170,6 +170,10 @@ export const MESSAGES: Record<ProblemCode, CopyResolver> = {
     "Ese cambio no es posible",
     "No se puede pasar a ese estado desde el actual. Comprueba en qué punto está la entrada.",
   ),
+  invalid_filter: fixed(
+    "Ese filtro no existe",
+    "Puede que el enlace esté desactualizado. Vuelve a la lista completa y filtra de nuevo.",
+  ),
   method_not_allowed: fixed(
     "Acción no disponible",
     "Esta acción no está disponible ahora mismo.",
