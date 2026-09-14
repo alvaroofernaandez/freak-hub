@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// domainPackages are the two this rule covers: the domain and its in-memory
-// double. The double is included on purpose — a test double that reached for
-// pgx would be proving nothing.
-var domainPackages = []string{".", "./librarymem"}
+// domainPackages is every package under internal/library, named as a pattern
+// rather than a list. A list only covers the packages that existed the day it
+// was written, and the next subpackage — an importer, a second double —
+// would slip past this rule unnoticed. The in-memory double is covered on
+// purpose: a test double that reached for pgx would be proving nothing.
+var domainPackages = []string{"./..."}
 
 // forbiddenAnywhere are the adapters the domain must not reach, however
 // indirectly (AGENTS.md, rule 3). Matching is by import path fragment, so a
