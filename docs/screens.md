@@ -59,7 +59,7 @@ criterio para extenderlas está en
 
 Wordmark (Bungee, enlaza a `/inicio`) · Inicio · Biblioteca · Actividad ·
 Grupo · botón `+ Añadir` (acento) · badge de recomendaciones pendientes ·
-menú de usuario (perfil propio, grupo, invitar, ajustes, tema, salir).
+menú de usuario (perfil propio, invitar, ajustes, tema, salir).
 
 Solo cuatro enlaces de primer nivel: **Biblioteca** es el único punto de
 entrada a las seis categorías, no seis enlaces sueltos — se llega a una
@@ -76,9 +76,10 @@ Actividad · Recomendaciones.
 La cabecera **no desaparece en el móvil**: se queda con el wordmark, el badge
 de pendientes y el menú de usuario, que es lo que dibuja el artboard `(móvil)`
 de la maqueta. Lo que baja a la barra inferior son los destinos, no la
-identidad. Grupo y perfil propio se alcanzan desde ese menú, y con ellos
-invitar, ajustes, el tema y cerrar sesión — que no tiene ninguna otra vía en
-toda la interfaz.
+identidad. Desde ese menú se llega al perfil propio, a invitar, a ajustes, al
+tema y a cerrar sesión —que no tiene ninguna otra vía en toda la interfaz—, y
+por debajo de 768 px también a Grupo, que es la entrada que la barra inferior
+cedió a Recomendaciones.
 
 **El único badge de notificación de toda la app** es el contador de
 recomendaciones recibidas pendientes. Ningún otro contador es comparativo

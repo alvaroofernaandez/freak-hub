@@ -209,7 +209,7 @@ mantiene "Grupo" marcado. Aplica igual a la barra inferior del móvil.
 | Navegación | Icono + palabra. El icono de la sección activa usa `weight="Filled"`; el resto, `Outline`. Desde 768 px |
 | Acción primaria | "Añadir" con `Plus`, en `--accent`: es la única acción primaria de la cabecera. Desde 768 px; por debajo vive en el botón central de la barra inferior |
 | Badge de pendientes | Enlace a `/recomendaciones`. La píldora mide 24 px; por debajo de 768 px el área pulsable a su alrededor sube a 44 px |
-| Identidad | `UserMenu` con avatar siempre, y con handle y chevron desde 1024 px |
+| Identidad | `UserMenu`. El avatar, siempre; el handle `@usuario` y el chevron, desde 1024 px |
 | Salto al contenido | Primer elemento enfocable del documento, visible solo al recibir foco |
 
 El peso del icono es la segunda señal de la sección activa, junto al color y al
@@ -218,32 +218,55 @@ funciona en escala de grises, con daltonismo y a tamaño pequeño.
 
 ### La cabecera existe en las tres anchuras
 
-La maqueta dibuja la misma barra tres veces, y las tres se implementan:
+La maqueta dibuja la misma barra tres veces, y las tres se implementan. Las
+medidas salen del propio fichero de maqueta, no de la aplicación:
 
 | Anchura | Alto · padding lateral · hueco | Qué lleva |
 | :--- | :--- | :--- |
 | 390 px | 56 · 16 · 12 | Wordmark, badge y avatar. Nada más |
-| 1024 px | 58 · 22 · 20 | Lo anterior más los cuatro enlaces y "Añadir" |
-| 1440 px | 64 · 28 · 32 | Lo mismo, con el handle junto al avatar |
+| 1024 px | 58 · 22 · 22 | Lo anterior, más los cuatro enlaces y "Añadir" |
+| 1440 px | 64 · 28 · 32 | Lo mismo que a 1024 px |
 
-Dos consecuencias que conviene tener presentes al tocar este componente:
+El handle `@usuario` no está en esa tabla porque **no está en la maqueta**: ni
+el artboard de tablet ni el de 1440 px dibujan ninguno, solo un avatar
+circular. Es una pieza que añade la aplicación, y aparece a partir de 1024 px
+por una razón de espacio, no de fidelidad — ver más abajo.
+
+Tres consecuencias que conviene tener presentes al tocar este componente:
 
 **En el teléfono la cabecera no desaparece: se queda con lo que el artboard
 `(móvil)` dibuja.** Los destinos bajan a la barra inferior, pero la identidad
 —y con ella cerrar sesión— se queda arriba. Es la diferencia entre mover una
 pieza y borrarla.
 
-**Escritorio empieza en `xl:` (1280 px), no en `lg:` (1024 px).** 1024 px es
-justo la anchura del artboard de tablet: con `lg:` la variante de tablet nunca
+**Escritorio empieza en `xl` (1280 px), no en `lg` (1024 px).** 1024 px es
+justo la anchura del artboard de tablet: con `lg` la variante de tablet nunca
 llegaba a renderizarse a la anchura para la que está dibujada. Las tres
 anchuras de referencia del proyecto —390, 1024 y 1440— caen así una en cada
-variante, que es lo que hace verificable una pasada visual.
+variante, que es lo que hace verificable una pasada visual. **Esto vale para
+toda la aplicación, no solo para la cabecera**: el `h1` de Inicio, la rejilla
+de una categoría, las tarjetas del lobby, la ficha de obra y las portadas
+siguen la misma escalera —base para el móvil, `md` para la tablet, `xl` para
+el escritorio— y `app/desktop-breakpoint.test.ts` recorre el código para que
+no vuelva a aparecer un `lg`. La única excepción registrada es el handle, que
+no es un escalón de esa escalera.
 
-**Entre 768 y 1023 px el handle `@usuario` no cabe.** Medido: con él, la fila
-pedía 811 px dentro de 768, el wordmark partía en dos líneas y el disparador
-del menú quedaba cortado 16 px fuera de la pantalla. El avatar solo basta para
-identificar la sesión en esa franja, que es además como lo dibujan los dos
-artboards.
+**Entre 768 y 1023 px el handle `@usuario` no cabe.** Medido sobre el código
+anterior a la issue #63: a 768 px la fila pedía 819 px (775 de contenido más
+44 de padding), el wordmark partía en dos líneas y el disparador del menú
+terminaba en 792 px, es decir 24 px fuera de una pantalla de 768, con scroll
+horizontal en la página. El avatar solo basta para identificar la sesión en
+esa franja.
+
+### Lo que la cabecera todavía no clona
+
+La barra tiene ya la estructura y las medidas de los tres artboards, pero no
+es aún una copia exacta: el wordmark va de un solo color (la maqueta pinta
+"HUB" en `--accent`), el badge es una píldora con la cifra (la maqueta dibuja
+una campana con la cifra encima), el fondo usa `--ground` (la maqueta,
+`--ground-deep`) y el hueco entre enlaces es 20/24 donde la maqueta pide
+18/26. Son diferencias de acabado, no de estructura, y pertenecen a la issue
+de clonado de la navbar dentro de la épica #17.
 
 ### La barra inferior del móvil
 
@@ -277,12 +300,14 @@ No enlaza a rutas que no existen. `/recomendaciones` existe desde la issue
 le da dos entradas —el badge de pendientes de la navbar y la barra inferior del
 móvil— y una tercera en el menú solo repetiría lo que ya está a un clic.
 
-`/miembros` es el caso contrario, y por eso sí está. Por encima de 768 px
-repite el enlace "Grupo" de la barra, cierto; por debajo no tenía ninguna
-entrada, porque la barra inferior lo cambió por Recomendaciones. Ese es el
-precio de un único menú sirviendo a todas las anchuras, y es más barato que
-dejar una pantalla del listado cerrado sin ninguna vía de acceso desde un
-teléfono.
+`/miembros` sigue la misma regla, y por eso aparece **solo por debajo de
+768 px**. Ahí no tenía ninguna entrada, porque la barra inferior cambió Grupo
+por Recomendaciones; por encima la navbar ya lo enlaza, y repetirlo sería
+exactamente lo que este documento acaba de descartar para `/recomendaciones`.
+Se oculta con `md:hidden` sobre el propio elemento del menú, que es seguro
+mientras no sea el primero: `display: none` lo saca del árbol de accesibilidad
+y el foco itinerante de Radix lo salta solo, pero el primer elemento es el que
+lleva el `tabindex="0"` del menú.
 `/ajustes` existe desde la issue #37, así que el menú la enlaza —y además lleva el tema, como fija
 [screens.md](screens.md#navegación)— con un elemento de tipo
 `menuitemcheckbox`, que es el que anuncia un estado; se queda abierto al
@@ -1034,18 +1059,43 @@ Definition of Done de la épica #18.
   dibuja el artboard `(móvil)`. El área pulsable del badge sube a 44 px solo en
   esa franja; la píldora de 24 px no cambia de tamaño. Ver
   [La cabecera existe en las tres anchuras](#la-cabecera-existe-en-las-tres-anchuras).
-- **2026-09-14** · Las métricas de escritorio pasan de `lg:` (1024 px) a `xl:`
-  (1280 px). Motivo: 1024 px es la anchura del artboard de tablet, así que con
-  `lg:` la variante de tablet solo existía entre 768 y 1023 px y nunca se
-  renderizaba a la anchura para la que está dibujada. Medido antes: a 1024 px
-  la barra daba 64/28/32; ahora da 58/22/20 hasta 1279 px.
+- **2026-09-14** · Las métricas de escritorio pasan de `lg` (1024 px) a `xl`
+  (1280 px), **en toda la aplicación**. Motivo: 1024 px es la anchura del
+  artboard de tablet, así que con `lg` la variante de tablet solo existía entre
+  768 y 1023 px y nunca se renderizaba a la anchura para la que está dibujada.
+  Medido antes: a 1024 px la barra daba 64/28/32. Afecta a `navbar.tsx`,
+  `home-dashboard.tsx`, `category-works-browser.tsx`, `work-page-header.tsx`,
+  `category-card.tsx` y `biblioteca/page.tsx`; la regla la vigila
+  `app/desktop-breakpoint.test.ts`, que recorre el código y no admite ningún
+  `lg` fuera de una lista de excepciones con motivo escrito. Aplicarlo solo a
+  la cabecera habría sido peor que no aplicarlo: a 1100 px la barra habría
+  dibujado la tablet y la rejilla de `/biblioteca/[categoria]`, las seis
+  columnas del escritorio.
+- **2026-09-14** · El hueco de la cabecera a tablet pasa de 20 a **22 px**
+  (`md:gap-[22px]`). La maqueta dice 22 en el artboard de tablet; el 20 venía
+  de `gap-5` y de darlo por bueno sin volver al fichero. El padding de al lado
+  ya era `px-[22px]`, así que no había ninguna regla de escala que lo
+  justificara.
 - **2026-09-14** · El handle `@usuario` y su chevron esperan a 1024 px
-  (antes, a 640 px). Medido: entre 768 y 1023 px la fila pedía 811 px dentro de
-  768, el wordmark partía en dos líneas y el disparador del menú se salía 16 px
-  de la pantalla. El wordmark además pasa a `whitespace-nowrap`: una marca no
-  se parte nunca.
-- **2026-09-14** · El menú de sesión gana "Grupo" (`/miembros`). Es la única
-  vía a esa pantalla en un teléfono desde que la barra inferior cambió Grupo
-  por Recomendaciones, y hace cierta la frase que este documento ya daba por
-  hecha. Por encima de 768 px repite el enlace de la barra, a diferencia de
-  `/recomendaciones`, que ya tenía dos entradas y sigue fuera del menú.
+  (antes, a 640 px). Medido sobre el código anterior: a 768 px la fila pedía
+  819 px (775 de contenido más 44 de padding), el wordmark partía en dos líneas
+  y el disparador del menú terminaba en 792 px — 24 px fuera de la pantalla— con
+  scroll horizontal. El wordmark además pasa a `whitespace-nowrap`: una marca
+  no se parte nunca. No es un escalón de la escalera móvil/tablet/escritorio:
+  la maqueta no dibuja ningún handle en ninguna anchura, así que 1024 px aquí
+  es "donde cabe", no "donde empieza el escritorio".
+- **2026-09-14** · El menú de sesión gana "Grupo" (`/miembros`), **solo por
+  debajo de 768 px**. Es la única vía a esa pantalla en un teléfono desde que
+  la barra inferior cambió Grupo por Recomendaciones, y hace cierta la frase
+  que este documento ya daba por hecha. Por encima de 768 px se oculta con
+  `md:hidden`, por el mismo motivo por el que `/recomendaciones` no está en el
+  menú: no se repite lo que ya está a un clic. Ocultar un elemento de un menú
+  de Radix es seguro salvo que sea el primero, que es el que lleva el
+  `tabindex="0"`.
+- **2026-09-14** · El disparador del menú de sesión deja de decir su nombre dos
+  veces. `Avatar` etiqueta su `<img>` con el nombre y el menú añadía una copia
+  `sr-only`, así que con la foto cargada se anunciaba "Álvaro Fernández Álvaro
+  Fernández". Se oculta la imagen con `aria-hidden` y se conserva el `sr-only`,
+  no al revés: sin foto, `Avatar` cae a unas iniciales que ya oculta a la
+  tecnología asistiva, y este disparador es el único acceso a la sesión en un
+  teléfono. Ningún test lo cubría porque todos pasaban `avatarUrl: null`.
