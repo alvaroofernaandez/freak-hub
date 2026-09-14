@@ -23,7 +23,7 @@ describe("ManualAddPage", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
-  it("renders the common Work fields and a disabled submit button", async () => {
+  it("renders the common Work fields, the required status picker and a live submit button", async () => {
     const page = await ManualAddPage({
       params: Promise.resolve({ categoria: "boardgame" }),
     });
@@ -32,7 +32,10 @@ describe("ManualAddPage", () => {
     expect(screen.getByLabelText("Título")).toBeInTheDocument();
     expect(screen.getByLabelText("Año")).toBeInTheDocument();
     expect(screen.getByLabelText("Sinopsis")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /guardar/i })).toBeDisabled();
+    expect(screen.getByRole("radiogroup", { name: /estado/i })).toBeVisible();
+    // It was `disabled` until the write half of issue #73: a button that
+    // looks live and does nothing is worse than no button at all.
+    expect(screen.getByRole("button", { name: /guardar/i })).toBeEnabled();
     expect(notFound).not.toHaveBeenCalled();
   });
 
