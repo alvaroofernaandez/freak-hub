@@ -255,6 +255,32 @@ usuario, foto).
   de lectura y una foto de 5 MB en una conexión lenta podía agotarlo aunque
   el servidor siguiera dispuesto a aceptarla.
 
+## El catálogo externo no es la API
+
+`features/library/lib/anilist.ts` no lanza: devuelve una unión de estados
+(`ok · empty · rate_limited · unavailable`). No pasa por `normalizeError`
+porque ese camino interpreta el sobre Problem Details de `/v1`, y su copia
+habla de «el servidor»: un catálogo de terceros caído es otra situación, con
+otra salida —el alta manual— y otro texto.
+
+`features/library/lib/catalog-search.ts` es el único sitio que traduce esa
+unión, y lo hace **a la forma de siempre**: construye un `NormalizedAppError`
+(`kind: "rate_limited"` o `"service_unavailable"`, `scope: "section"`,
+`recovery: "retry"`) para que `ErrorState` y `RetryButton` lo pinten como
+cualquier otro fallo y nada aguas abajo sepa que este llegó por otro camino.
+El reintento es `router.refresh()`, que vuelve a lanzar la misma búsqueda
+porque el término vive en la URL.
+
+Un componente que ramificara sobre `CatalogSearchOutcome` por su cuenta sería
+el «mapa de copia propio» que prohíbe la lista de anti-patrones, y habría uno
+por pantalla el día que lleguen las otras cinco categorías. La copia no nombra
+nunca al proveedor ni su modo de fallo: ni «AniList», ni «GraphQL», ni un
+código HTTP.
+
+El fichero se borra entero, con `anilist.ts`, cuando `/v1/works` tenga su
+propia integración (épica #10): a partir de ahí los fallos del catálogo son
+problemas de la API y vuelven a `normalizeError`.
+
 ## Estados vacíos, por motivo
 
 `EmptyState` nunca es genérico: cada sitio dice, con sus propias palabras,
@@ -267,7 +293,9 @@ hacer). La tabla cubre los motivos reales del producto:
 | Búsqueda sin resultados | `category-works-browser.tsx` (con `filters.search`) | «No hay resultados para "‹término›"» — el término se ve tal cual se escribió | «Limpiar búsqueda» (solo el campo) |
 | Filtros sin resultados | `category-works-browser.tsx` (sin búsqueda, con estado/favorito/en propiedad activos) | «No hay obras con estos filtros» | «Quitar filtros» — los chips se ven pulsados hasta que se pulsa esto |
 | Ambos a la vez | `category-works-browser.tsx` | Gana la búsqueda (más específica) | «Limpiar búsqueda» |
-| Sin conexión de catálogo externo | `app/(app)/anadir/[categoria]/page.tsx` | «La búsqueda en el catálogo externo todavía no está disponible» | Ninguna — no es un «no hay resultados», es una función que no existe todavía; el enlace a alta manual ya está fuera del `EmptyState` |
+| Categoría sin catálogo integrado | `app/(app)/anadir/[categoria]/page.tsx`, las cinco que no son anime | «La búsqueda en el catálogo externo todavía no está disponible» | Ninguna — no es un «no hay resultados», es una función que no existe todavía; el enlace a alta manual ya está fuera del `EmptyState` |
+| Antes de buscar | `app/(app)/anadir/anime` sin `?q=` | «Busca un anime por su título» | Ninguna — la acción es el propio campo, que está justo encima |
+| Búsqueda de catálogo sin resultados | `app/(app)/anadir/anime` con `?q=` | «No hay resultados para "‹término›"» (`size="inline"`) | Ninguna aparte del enlace a alta manual, que ya vive al pie de la pantalla |
 | Nada en curso | `home-dashboard.tsx` | «Nada en curso todavía» | Enlace a `/biblioteca` |
 | Sin recomendaciones / sin actividad | `home-dashboard.tsx`, `activity-section.tsx`/`recommendations-section.tsx` de perfil | «Sin recomendaciones pendientes», «Sin actividad reciente» | Ninguna — nadie puede generar una recomendación o actividad ajena desde aquí |
 | Biblioteca del perfil vacía, perfil propio | `library-section.tsx` con `canAdd` | «Sin favoritos todavía» | «Añadir una obra» — abre el selector de categoría (`useAddCategoryModal`) |
@@ -281,6 +309,20 @@ hacer). La tabla cubre los motivos reales del producto:
 El recuento de resultados se anuncia por voz (`role="status"` vía
 `<output aria-live="polite">`) 400 ms después de que se asiente — no en cada
 tecla de una búsqueda, para no convertir el tecleo en una ráfaga de avisos.
+
+En la búsqueda de catálogo el retardo no hace falta: la petición ya va
+retrasada 300 ms y solo se envía una por término, así que el recuento se
+anuncia en cuanto llega. La región viva vive en `CatalogSearchField` y no se
+desmonta entre búsquedas: **solo cambia su texto**. La razón está escrita en
+`shared/ui/pending-label.tsx` y vale aquí igual — una región viva que entra en
+el DOM con su mensaje ya puesto se la pierde el observador del navegador,
+porque solo vigila nodos que ya estaban. Por eso el esqueleto de carga no
+lleva región propia (es `aria-hidden` entero): mientras la búsqueda está en
+vuelo, la región de siempre dice «Buscando…», lo que además impide que el
+recuento anterior se quede como lo último dicho.
+Un fallo también se anuncia ahí, solo el título: `ErrorState` es un
+encabezado y un párrafo, no una región viva, así que en una navegación de
+cliente aparecería en silencio.
 
 ## No aplica hoy
 
