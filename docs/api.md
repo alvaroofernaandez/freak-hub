@@ -105,6 +105,8 @@ desde el ADR-0011 son todos los que listan: `GET /v1/members`,
 | `work_not_found` | 404 | no | El `work_id` referenciado no existe en el catálogo compartido |
 | `rating_not_allowed` | 422 | no | Llega una valoración con un estado que no es `completed` ni `dropped` (regla 2 del dominio) |
 | `invalid_progress` | 422 | no | El progreso no encaja con la categoría de la obra. La unidad la valida el dominio, no la base de datos (regla 5) |
+| `library_entry_not_found` | 404 | no | No hay una entrada con ese identificador en la biblioteca de quien llama. El mismo código cubre «no existe» y «es de otra persona»: un 403 confirmaría que existe |
+| `invalid_transition` | 422 | no | El cambio de estado que pide un `PATCH` no lo permite la máquina de estados de [domain.md](domain.md). Crear una entrada no es una transición y no pasa por aquí |
 | `method_not_allowed` | 405 | no | La ruta existe, pero no para ese verbo |
 | `payload_too_large` | 413 | no | El cuerpo de la petición supera el límite del endpoint (1 MB en JSON) |
 | `request_timeout` | 504 | sí | La petición no terminó dentro del plazo del servidor |
