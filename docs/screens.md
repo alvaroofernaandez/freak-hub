@@ -7,8 +7,8 @@ la paleta y la tipografía con las que se construirán están en [design.md](des
 Wireframes de baja fidelidad de las diez pantallas principales (núcleo de
 biblioteca más perfil propio y de un amigo, con sus secciones de actividad,
 top y recomendaciones): [wireframes/low-fidelity-wireframes.html](wireframes/low-fidelity-wireframes.html).
-Escala de grises a propósito: solo estructura, la estética final es la de
-[design.md](design.md) y todavía no se ha aplicado.
+Escala de grises a propósito: esos wireframes son solo estructura y no llevan
+la estética de [design.md](design.md), que en la aplicación ya está aplicada.
 
 Alta fidelidad de las mismas diez pantallas, con la paleta y tipografía de
 [design.md](design.md) ya aplicadas: [design/high-fidelity-desktop.html](design/high-fidelity-desktop.html).
