@@ -120,7 +120,7 @@ export function progressPercentage(item: LibraryItem): number | null {
  * because the contract does not name a unit for them: the figure is shown
  * bare rather than guessed at.
  */
-const PROGRESS_UNIT: Partial<
+export const PROGRESS_UNIT: Partial<
   Record<WorkCategory, { one: string; many: string }>
 > = {
   anime: { one: "episodio", many: "episodios" },

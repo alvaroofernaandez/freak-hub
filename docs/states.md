@@ -224,11 +224,13 @@ patrón en una página nueva.
 
 ## Formularios
 
-Tres formularios comparten `shared/ui/form-field.tsx`:
+Cuatro formularios comparten `shared/ui/form-field.tsx`:
 `features/invitations/ui/invitation-form.tsx` (`/invitar`),
 `features/invitations/ui/invite-popover.tsx` (el mismo campo de correo, en
-popover) y `features/profile/ui/edit-profile-dialog.tsx` (nombre, apellidos,
-usuario, foto).
+popover), `features/profile/ui/edit-profile-dialog.tsx` (nombre, apellidos,
+usuario, foto) y `features/library/ui/manual-add-form.tsx` (el alta manual:
+título, año, sinopsis y estado). `features/library/ui/entry-editor.tsx` es el
+quinto que escribe, pero no es un `<form>`: ver «Escrituras de biblioteca».
 
 - **Foco en el primer campo inválido.** Cada formulario guarda una `ref` por
   campo y, en un `useEffect` sobre el estado de la acción, mueve el foco al
@@ -242,7 +244,7 @@ usuario, foto).
   segundo mapa de copia. Un error sin campo (`no_profile_changes`,
   `name_too_long`, un fallo de red) se queda en un `InlineMessage` de
   formulario, no en un campo.
-- **`edit-profile-dialog.tsx` no usa `<form action={formAction}>`.** React
+- **Ni `edit-profile-dialog.tsx` ni `manual-add-form.tsx` usan `<form action={formAction}>`.** React
   reinicia los campos no controlados de un formulario en cuanto la acción
   ligada a `action` termina, éxito o no — eso borraba lo escrito y la foto
   elegida justo después de un fallo recuperable. El formulario usa
@@ -253,6 +255,13 @@ usuario, foto).
   `useFormStatus` (que solo sabe de una `<form action>`, no de este
   camino manual). `invitation-form.tsx` e `invite-popover.tsx` sí controlan
   su único campo (`value`/`onChange`) por la misma razón, con menos coste.
+- **El alta manual no elige un estado por ti.** `CreateLibraryEntryRequest.status`
+  es obligatorio y **no tiene valor por defecto**, y el motivo que da el
+  contrato es que no hay nada sensato que adivinar: querer algo, tenerlo ya y
+  haberlo terminado hace años son formas igual de normales de empezar. El
+  grupo de fichas arranca sin nada marcado y el fallo de validación se ata al
+  campo, como cualquier otro. Se ofrecen los seis, porque crear es la entrada
+  al ciclo de vida y no una transición.
 - **La foto se valida en el cliente antes de subir nada,** con los mismos
   límites que el backend (`AVATAR_MAX_BYTES` = 5 MiB,
   `AVATAR_ACCEPTED_TYPES` = `image/jpeg`, `image/png`, `image/webp`,
@@ -282,6 +291,59 @@ usuario, foto).
   `DEFAULT_TIMEOUT_MS` de 10 s. Antes, la subida de avatar heredaba el plazo
   de lectura y una foto de 5 MB en una conexión lenta podía agotarlo aunque
   el servidor siguiera dispuesto a aceptarla.
+
+## Escrituras de biblioteca
+
+Las cuatro escrituras de la #73 (`POST /v1/works`, `POST /v1/library`,
+`PATCH /v1/library/{id}`, `DELETE /v1/library/{id}`) siguen el mismo carril
+que `create-invitation.ts` —zod primero, `ErrorContext` fijo de módulo,
+`MUTATION_TIMEOUT_MS`, `normalizeError` como único intérprete— con cuatro
+particularidades que no tenía ninguna escritura anterior.
+
+- **El `PATCH` envía un diferencial, nunca la entrada entera.** El contrato
+  distingue ausente (no lo toques), `null` (bórralo) y valor (escríbelo), así
+  que `buildPatch` compara el borrador contra lo guardado y solo viaja lo que
+  se movió. De ahí salen gratis dos reglas que de otra forma habría que
+  recordar: reenviar el estado actual es un no-op que **no llega a enviarse**,
+  y **una valoración guardada sobrevive a un cambio de estado**, porque un
+  cambio de estado a secas produce `{status}` y la valoración no está en el
+  cuerpo. Borrarla es un `null` explícito y siempre algo que se pide.
+- **El estado del `PATCH` es una transición.** `features/library/lib/transitions.ts`
+  repite la máquina de `docs/domain.md` para no ofrecer movimientos que el
+  dominio va a rechazar con `422 invalid_transition`. Ver
+  [ADR-0016](decisions/0016-maquina-de-estados-en-la-interfaz.md).
+- **Valorar solo se ofrece donde se acepta**, en `completed` y `dropped`
+  (`rating_not_allowed`). Fuera de ahí el campo está deshabilitado, pero
+  **«Quitar la valoración» no**: el contrato dice que `null` se acepta en
+  cualquier estado, así que la única salida de una puntuación no puede quedar
+  encerrada detrás de los estados que sí pueden ponerla. Y al salir de un
+  estado que admitía valoración, el campo **vuelve a la guardada**: la API
+  valida la valoración entrante contra el estado **resultante** y en la misma
+  petición atómica que la transición, así que un 8 recién escrito que viajara
+  con un «En curso» devolvería un 422 que se llevaría por delante el cambio de
+  estado. Ver [ADR-0016](decisions/0016-maquina-de-estados-en-la-interfaz.md).
+- **Los dos campos numéricos son de texto, no `<input type="number">`.** Un
+  campo numérico sanea su valor: la caja enseña `12e` mientras `.value` vale
+  `""`, y como el valor controlado de React también es `""`, React no
+  repinta. Leído sin cuidado eso escribía `progress: 0` sobre 47 episodios y
+  `rating: null` sobre un 8. Ninguna prueba de vitest podía cazarlo porque
+  jsdom no implementa ese saneado. Las reglas de lectura viven en
+  `features/library/lib/entry-draft.ts`, un campo ilegible **bloquea el
+  guardado** en vez de convertirse en un valor, y el tope del progreso se
+  comprueba ahí: `min`/`max` en el elemento serían decorativos, porque el
+  panel guarda desde un `onClick` y nunca envía un formulario, así que la
+  validación de restricciones del navegador no llega a correr.
+- **`DELETE` no es idempotente.** El segundo es un 404, así que su
+  `ErrorContext` lleva `idempotent: false` —un plazo agotado no invita a
+  repetir— y, al completarse, la interfaz **se va** a
+  `/biblioteca/[categoria]` con `router.replace` en vez de quedarse sobre un
+  id que ya no resuelve. No hay deshacer: por eso hay confirmación antes.
+
+El progreso es un **recuento absoluto** en la unidad de la categoría, nunca un
+porcentaje, y solo lleva tope cuando el catálogo declaró un total
+(`metadata.episodes` de un anime). Un anime en emisión no trae número de
+episodios, y negarle el episodio 13 sería inventarnos un dato que nadie dio
+(regla 5 del dominio).
 
 ## El catálogo externo no es la API
 
@@ -393,7 +455,10 @@ sesión caducada o una caída del servicio se explican por su causa real.
   `Descartar`/`Seguir editando` del diálogo de confirmación, «Limpiar
   búsqueda»/«Quitar filtros» de `category-works-browser.tsx`, «Ir a tu
   biblioteca» de `home-dashboard.tsx`, «Añadir una obra» de
-  `library-section.tsx`) siguen el `px-*`/`py-2.5` que ya usa el resto de
+  `library-section.tsx`, y ahora «Guardar cambios» / «Quitar de mi
+  biblioteca» / «Quitar la valoración» de `entry-editor.tsx`, sus dos pasos
+  de progreso —`h-10 w-10`, 40 px— y las fichas de estado de
+  `radio-chips.tsx`) siguen el `px-*`/`py-2.5` que ya usa el resto de
   botones secundarios de la aplicación (`SaveButton` original,
   `RetryButton`, el botón de enviar de `invitation-form.tsx`), que no llega
   a los 44 px de alto declarados y no está auditado ni documentado en

@@ -14,9 +14,19 @@ type CatalogSearchResultsProps = {
  *
  * Two things the mockup has and this does not, both on purpose:
  *
- * - The «Añadir» and wishlist buttons. There is no `/v1/library` to add to
- *   yet (epic #20 puts it out of scope), and a button that looks live and
- *   does nothing is worse than no button.
+ * - The «Añadir» and wishlist buttons. `/v1/library` exists now and the web
+ *   writes to it (issue #73), so the old reason for leaving them out is gone
+ *   and the real one has to be stated or somebody will add the button on the
+ *   strength of a stale comment: **`POST /v1/works` always creates
+ *   `source: manual` with `source_id: null`, and refuses a `source` on
+ *   purpose.** An «Añadir» here could therefore only register the anime as a
+ *   manual work. It would lie about where the record came from, and it would
+ *   create a separate row per person who added the same series — exactly what
+ *   the partial unique index `works_source_idx` and the
+ *   `works_source_id_matches_source` constraint exist to prevent. Adding from
+ *   a catalogue hit needs an import route in the API (`source: anilist` with
+ *   its `source_id`), which is a vertical of its own. Until that exists, a
+ *   button that looks live and does the wrong thing is worse than no button.
  * - Motion. The list is replaced on every debounced keystroke, so an entrance
  *   animation here would fire hundreds of times a session; the `stagger-in`
  *   cascade used by the library grid is deliberately not applied (ADR-0012).

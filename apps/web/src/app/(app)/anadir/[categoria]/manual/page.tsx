@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "reicon-react";
+import { ManualAddForm } from "@/features/library/ui/manual-add-form";
 import type { WorkCategory } from "@/shared/api/types";
 import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/shared/ui/category-stripe";
 
@@ -21,9 +22,13 @@ export async function generateMetadata({
 }
 
 /**
- * Step three of adding a work: manual entry for what the catalog search
- * does not find (docs/catalogs.md). No submit action yet — that requires
- * the real POST /v1/library endpoint (docs/roadmap.md).
+ * Step three of adding a work: manual entry for what the catalogue search
+ * does not find (docs/catalogs.md).
+ *
+ * The page stays a server component and owns only what the route decides:
+ * the category is validated here, so a URL nobody typed on purpose is a 404
+ * rather than a form that submits a category the contract will refuse. The
+ * fields, the status picker and the two writes live in `ManualAddForm`.
  */
 export default async function ManualAddPage({ params }: ManualAddPageProps) {
   const { categoria } = await params;
@@ -50,60 +55,7 @@ export default async function ManualAddPage({ params }: ManualAddPageProps) {
         <p className="text-ink-muted">Para lo que no aparece en el catálogo.</p>
       </div>
 
-      <form
-        data-testid="manual-add-form"
-        className="flex max-w-[520px] flex-col gap-4"
-      >
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="title"
-            className="font-mono text-xs uppercase tracking-widest text-ink-muted"
-          >
-            Título
-          </label>
-          <input
-            id="title"
-            name="title"
-            type="text"
-            className="rounded-lg border border-border bg-surface px-4 py-2.5"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="year"
-            className="font-mono text-xs uppercase tracking-widest text-ink-muted"
-          >
-            Año
-          </label>
-          <input
-            id="year"
-            name="year"
-            type="number"
-            className="rounded-lg border border-border bg-surface px-4 py-2.5"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="synopsis"
-            className="font-mono text-xs uppercase tracking-widest text-ink-muted"
-          >
-            Sinopsis
-          </label>
-          <textarea
-            id="synopsis"
-            name="synopsis"
-            rows={4}
-            className="rounded-lg border border-border bg-surface px-4 py-2.5"
-          />
-        </div>
-        <button
-          type="button"
-          disabled
-          className="self-start rounded-lg bg-accent px-5 py-2.5 font-medium text-accent-ink disabled:opacity-50"
-        >
-          Guardar
-        </button>
-      </form>
+      <ManualAddForm category={categoria} />
     </section>
   );
 }

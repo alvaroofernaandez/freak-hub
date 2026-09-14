@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { toLibraryItem } from "@/features/library/lib/library-item";
+import { EntryEditor } from "@/features/library/ui/entry-editor";
 import { EntrySummary } from "@/features/library/ui/entry-summary";
 import { WorkPageHeader } from "@/features/library/ui/work-page-header";
 import type { LibraryEntry } from "@/shared/api/types";
@@ -31,6 +32,11 @@ type WorkPageProps = {
  * what is nobody else's business. Every other failure is a state on the page,
  * never a 404: "the server is down" and "this does not exist" are different
  * things to tell somebody.
+ *
+ * "Tu entrada" is editable from the write half of issue #73: status,
+ * progress, rating, favourite and ownership go out as a `PATCH` carrying
+ * only what changed, and the entry can be removed. The dates and the note
+ * stay read-only — same endpoint, outside that change's scope.
  */
 export default async function WorkPage({ params }: WorkPageProps) {
   const { id } = await params;
@@ -66,7 +72,9 @@ export default async function WorkPage({ params }: WorkPageProps) {
     <section className="space-y-[30px]">
       <SetActiveCategory category={item.category} />
       <WorkPageHeader item={item} />
-      <EntrySummary item={item} />
+      <EntryEditor item={item}>
+        <EntrySummary item={item} />
+      </EntryEditor>
     </section>
   );
 }

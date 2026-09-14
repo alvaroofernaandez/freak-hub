@@ -27,58 +27,6 @@ function item(overrides: Partial<LibraryItem> = {}): LibraryItem {
 }
 
 describe("EntrySummary", () => {
-  it("says the status with an icon and a word, never with colour", () => {
-    render(<EntrySummary item={item({ status: "on_hold" })} />);
-
-    expect(screen.getByText("En pausa")).toBeInTheDocument();
-  });
-
-  it("shows the progress in the category's own unit", () => {
-    render(<EntrySummary item={item({ progress: 12, progressTotal: 64 })} />);
-
-    expect(screen.getByTestId("entry-summary-progress")).toHaveTextContent(
-      "12 / 64 episodios",
-    );
-    expect(
-      screen.getByRole("progressbar", { name: /progreso/i }),
-    ).toHaveAttribute("aria-valuenow", "19");
-  });
-
-  it("says nothing has been started rather than printing a zero", () => {
-    render(<EntrySummary item={item({ progress: 0 })} />);
-
-    expect(screen.getByTestId("entry-summary-progress")).toHaveTextContent(
-      "Sin empezar",
-    );
-    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
-  });
-
-  it("shows the rating, and says so plainly when there is none", () => {
-    const { rerender } = render(<EntrySummary item={item({ rating: 7 })} />);
-    expect(screen.getByTestId("entry-summary-rating")).toHaveTextContent(
-      "7/10",
-    );
-
-    rerender(<EntrySummary item={item({ rating: null })} />);
-    expect(screen.getByTestId("entry-summary-rating")).toHaveTextContent(
-      "Sin valorar",
-    );
-  });
-
-  it("marks a favourite, and a copy the member owns", () => {
-    render(<EntrySummary item={item({ isFavourite: true, owned: true })} />);
-
-    expect(screen.getByText("Favorito")).toBeInTheDocument();
-    expect(screen.getByText("En propiedad")).toBeInTheDocument();
-  });
-
-  it("leaves the marks out entirely when neither applies", () => {
-    render(<EntrySummary item={item({ isFavourite: false, owned: false })} />);
-
-    expect(screen.queryByText("Favorito")).not.toBeInTheDocument();
-    expect(screen.queryByText("En propiedad")).not.toBeInTheDocument();
-  });
-
   it("shows the dates it has, and omits the ones it does not", () => {
     render(
       <EntrySummary
@@ -105,5 +53,37 @@ describe("EntrySummary", () => {
     expect(
       screen.queryByText(/pública para el grupo/i),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders nothing at all when there is neither a date nor a note, rather than an empty rule", () => {
+    const { container } = render(
+      <EntrySummary
+        item={item({ startedAt: null, finishedAt: null, note: null })}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("leaves the fields that became controls to EntryEditor, so neither shows them twice", () => {
+    render(
+      <EntrySummary
+        item={item({
+          status: "on_hold",
+          rating: 7,
+          progress: 12,
+          progressTotal: 64,
+          isFavourite: true,
+          owned: true,
+          note: "Una nota.",
+        })}
+      />,
+    );
+
+    expect(screen.queryByText("En pausa")).not.toBeInTheDocument();
+    expect(screen.queryByText("7/10")).not.toBeInTheDocument();
+    expect(screen.queryByText(/episodios/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Favorito")).not.toBeInTheDocument();
+    expect(screen.queryByText("En propiedad")).not.toBeInTheDocument();
   });
 });
