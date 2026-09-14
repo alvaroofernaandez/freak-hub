@@ -37,9 +37,24 @@ decisiones en vez de replantearlas, así que no bloquea al dominio.
 ## Siguiente — el dominio
 
 1. **`works` y `library_entries`.** El corazón del producto: registrar algo con su
-   estado y su progreso. Empezar por **una sola categoría** (anime, vía AniList) y
-   generalizar cuando el modelo haya sobrevivido al uso real.
+   estado y su progreso, en **una sola categoría** (anime) hasta que el modelo
+   sobreviva al uso real.
+
+   **La mitad de la API está hecha** (épica #10): contrato, esquema con sus
+   índices, dominio con su máquina de estados, adaptador de Postgres y las ocho
+   rutas bajo `/v1`. Una persona puede dar de alta un anime, avanzar su
+   progreso, valorarlo y borrarlo, y hay una prueba de extremo a extremo contra
+   Postgres real que lo recorre entero.
+
+   **Falta que la web lo consuma.** Hoy `biblioteca/[categoria]` pasa una lista
+   vacía a mano, `/obras/[id]` responde 404 siempre y el inicio solo pinta
+   estados vacíos. Ese cableado es lo siguiente, y es también lo que permitirá
+   comparar contra la maqueta las seis pantallas que la épica #17 dejó sin
+   verificar por no tener datos que pintar.
 2. **Búsqueda e importación desde AniList**, con alta manual como alternativa.
+   La web ya busca anime de verdad contra AniList desde `/anadir/anime` (épica
+   #20), con un cliente deliberadamente desechable: lo retira el día que la API
+   traiga su propia integración.
 3. **Las otras cinco categorías**, una a una: manga, videojuegos, películas, juegos
    de mesa, TCG.
 4. **Wishlist**, que no es una tabla nueva sino `status = 'wishlist'`.
