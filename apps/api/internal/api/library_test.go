@@ -829,21 +829,54 @@ func TestGetLibraryEntryIs404ForAnotherMembersEntry(t *testing.T) {
 	assert.Equal(t, "library_entry_not_found", errorCode(t, recorder))
 }
 
-func TestGetLibraryEntryAnswersAnotherMembersEntryExactlyLikeAMissingOne(t *testing.T) {
+// TestTheThreeEntryRoutesAnswerAnotherMembersEntryExactlyLikeAMissingOne
+// compares the whole body, not just the status and the code, and does it on
+// all three verbs.
+//
+// The parity holds today on every one of them, and the reason to assert it
+// three times rather than once is that nothing would catch it breaking on
+// the other two: a detail written per handler, or a field_errors entry added
+// to one code and not another, is a difference a caller can measure — and
+// measuring a difference is how you learn which uuids are real.
+func TestTheThreeEntryRoutesAnswerAnotherMembersEntryExactlyLikeAMissingOne(t *testing.T) {
 	t.Parallel()
 
-	s := newSuite(t)
-	s.seedMember(t, "user_alex", "alex")
-	alvaro := s.seedMember(t, "user_alvaro", "alvaro")
-	work := s.seedAnime("Frieren", seedTime)
-	theirs := s.seedEntry(alvaro.ID, work.ID, library.StatusInProgress, seedTime)
+	probes := []struct {
+		method string
+		body   any
+	}{
+		{http.MethodGet, nil},
+		{http.MethodPatch, map[string]any{"progress": 12}},
+		{http.MethodDelete, nil},
+	}
 
-	someoneElses := s.do(t, http.MethodGet, "/v1/library/"+theirs.ID.String(), "valid-user_alex", nil)
-	neverExisted := s.do(t, http.MethodGet, "/v1/library/"+uuid.New().String(), "valid-user_alex", nil)
+	for _, probe := range probes {
+		s := newSuite(t)
+		s.seedMember(t, "user_alex", "alex")
+		alvaro := s.seedMember(t, "user_alvaro", "alvaro")
+		work := s.seedAnime("Frieren", seedTime)
+		theirs := s.seedEntry(alvaro.ID, work.ID, library.StatusInProgress, seedTime)
 
-	assert.Equal(t, someoneElses.Code, neverExisted.Code)
-	assert.Equal(t, problemWithoutInstance(t, someoneElses), problemWithoutInstance(t, neverExisted),
-		"walking uuids must not tell anybody which ones are real")
+		someoneElses := s.do(t, probe.method, "/v1/library/"+theirs.ID.String(), "valid-user_alex", probe.body)
+		neverExisted := s.do(t, probe.method, "/v1/library/"+uuid.NewString(), "valid-user_alex", probe.body)
+		malformed := s.do(t, probe.method, "/v1/library/not-a-uuid", "valid-user_alex", probe.body)
+
+		assert.Equalf(t, http.StatusNotFound, someoneElses.Code, "%s", probe.method)
+		assert.Equalf(t, someoneElses.Code, neverExisted.Code, "%s", probe.method)
+		assert.Equalf(t, someoneElses.Code, malformed.Code, "%s", probe.method)
+
+		assert.Equalf(t, problemWithoutInstance(t, someoneElses), problemWithoutInstance(t, neverExisted),
+			"%s: walking uuids must not tell anybody which ones are real", probe.method)
+		assert.Equalf(t, problemWithoutInstance(t, someoneElses), problemWithoutInstance(t, malformed),
+			"%s: a malformed id is not a third answer either", probe.method)
+
+		assert.NotContainsf(t, someoneElses.Body.String(), "field_errors",
+			"%s: a blamed field would be one more thing to read a difference out of", probe.method)
+
+		untouched, err := s.entries.ByID(t.Context(), theirs.ID)
+		require.NoErrorf(t, err, "%s: somebody else's entry is still there", probe.method)
+		assert.Equalf(t, 0, untouched.Progress, "%s: and nothing of it was written", probe.method)
+	}
 }
 
 func TestGetLibraryEntryIs404WhenNothingCarriesThatID(t *testing.T) {

@@ -923,7 +923,11 @@ func TestEveryRouteUnderV1RefusesARequestWithNoSession(t *testing.T) {
 	require.NoError(t, chi.Walk(routes, func(
 		method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler,
 	) error {
-		if !strings.HasPrefix(route, "/v1/") {
+		// The bare "/v1" is checked too, and the slash is not a detail: a
+		// prefix test alone skips a handler mounted on exactly that path,
+		// which is a route of the product surface that nothing would have
+		// looked at.
+		if route != "/v1" && !strings.HasPrefix(route, "/v1/") {
 			return nil
 		}
 
