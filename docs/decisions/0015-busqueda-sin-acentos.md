@@ -4,10 +4,10 @@
 
 ## Contexto
 
-El contrato promete, desde [ADR-0011](0011-paginacion-por-cursor.md) y la
-implementación de los endpoints de biblioteca, que el filtro `q` de
-`GET /v1/works` busca en el título de forma insensible **a mayúsculas y a
-acentos**. No es un adorno: en un producto en español, quien escriba «pokemon»
+El contrato de los endpoints de biblioteca, mergeado con la issue #5, promete
+que el filtro `q` de `GET /v1/works` busca en el título de forma insensible **a
+mayúsculas y a acentos**. La promesa es suya: [ADR-0011](0011-paginacion-por-cursor.md)
+decidió cómo se **pagina** ese listado, no cómo se busca dentro de él. No es un adorno: en un producto en español, quien escriba «pokemon»
 sin tilde tiene que encontrar *Pokémon*, y quien escriba «shogun» tiene que
 encontrar *Shōgun*. Si no, la búsqueda parece rota justo en los títulos que más
 se buscan.
@@ -53,6 +53,11 @@ La consulta usa `LIKE` sobre esa misma expresión, con el término **escapado**
 antes de entrar en el patrón: el texto viene de una query string, y sin escapar,
 quien buscara `100%` estaría escribiendo un comodín en lugar de un signo de
 porcentaje.
+
+El orden de esas dos operaciones no es intercambiable: **el escapado envuelve al
+plegado**. `unaccent` emite comodines —el `％` de ancho completo (U+FF05) se
+pliega a `%`, U+FF3C a `\` y U+FF3F a `_`—, así que plegar después de escapar
+fabricaría un comodín vivo a partir de un término que no tenía ninguno.
 
 ## Consecuencias
 
@@ -102,5 +107,9 @@ porcentaje.
   `to_tsvector` con la configuración en español ya pliega acentos, así que
   tampoco quitaría la dependencia. Si algún día se busca dentro de las sinopsis,
   es un ADR nuevo.
-- *`ILIKE '%…%'` sin plegar acentos*: es lo que había, y es exactamente lo que
-  incumple el contrato.
+- *`ILIKE '%…%'` sin plegar acentos*: la opción de no hacer nada. `works` no
+  existía antes de esta migración, así que no es «lo que había» sino lo que
+  habría sido escribir la tabla ignorando la promesa. Es más barata en todo
+  —ninguna extensión, ningún índice funcional, ningún envoltorio que explicar—
+  y la única pega es que incumple el contrato en los títulos que más se buscan,
+  que es pega suficiente.
