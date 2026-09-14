@@ -28,9 +28,15 @@ export default defineConfig({
    * reporter only writes inline annotations, and the signed-in step is
    * advisory: without a report to download, a journey that breaks leaves an
    * amber step and nothing to read, which is how a suite rots unnoticed.
-   * `test-results/` is deliberately NOT what gets uploaded — the setup project
-   * keeps CI's two retries, and a retry trace would carry the sign-in exchange
-   * and the session cookie.
+   *
+   * Uploading it is only safe because the `setup` project records no trace.
+   * Not uploading `test-results/` is NOT what makes it safe: the HTML reporter
+   * copies attachments into the report directory, so a trace reaches
+   * `playwright-report/data/*.zip` either way. Measured on a failing setup with
+   * CI=true, before that was fixed: one zip carrying 19 `set-cookie` headers,
+   * 92 `__clerk_db_jwt`, 66 `__client` and 4 JWTs — from a sign-in that did not
+   * even succeed. This repository is public, and a public repository's
+   * artifacts are downloadable by anyone who can read it.
    */
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
   globalSetup: "./e2e/global-setup.ts",
@@ -47,7 +53,20 @@ export default defineConfig({
     {
       name: "setup",
       testMatch: /auth\.setup\.ts$/,
-      use: { ...chrome },
+      /*
+       * No trace, ever. This is the one project that handles credentials *and*
+       * retries (it inherits CI's two), and `trace: "on-first-retry"` would
+       * start recording exactly when a transient Clerk hiccup is followed by a
+       * successful second attempt — capturing a complete sign-in, session JWT
+       * and `Set-Cookie` included. That is the same material `storageState`
+       * is git-ignored to keep out of the repository, and the HTML report
+       * would carry it into a downloadable artifact.
+       *
+       * The cost is real and accepted: a sign-in that breaks must be diagnosed
+       * from its error and the reporter's output. That is a worse afternoon
+       * than reading a trace, and still the right trade.
+       */
+      use: { ...chrome, trace: "off" },
     },
     /*
      * The perimeter: what happens with no session. It depends on nothing, so a
