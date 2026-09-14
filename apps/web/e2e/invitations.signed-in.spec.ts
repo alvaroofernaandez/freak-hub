@@ -1,9 +1,8 @@
 import { setupClerkTestingToken } from "@clerk/testing/playwright";
 import { expect, test } from "@playwright/test";
 import {
-  apiIsReachable,
   inviteeEmail,
-  MISSING_API,
+  requireApiOrSkip,
   skipWithoutTestSession,
 } from "./support/session";
 
@@ -30,9 +29,7 @@ const invitee = inviteeEmail();
 test.describe("invitar de punta a punta", () => {
   test.describe.configure({ mode: "serial" });
 
-  test.beforeEach(async () => {
-    test.skip(!(await apiIsReachable()), MISSING_API);
-  });
+  test.beforeEach(requireApiOrSkip);
 
   test("invitar a un correo nuevo confirma el envío", async ({ page }) => {
     await page.goto("/invitar");

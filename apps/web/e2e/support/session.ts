@@ -30,18 +30,25 @@ export const testUserPassword = process.env.E2E_CLERK_USER_PASSWORD ?? "";
 /**
  * Why the signed-in tests cannot run, or `null` when they can.
  *
- * A function, not a constant, and that is the whole subtlety. Playwright
- * collects every test file *before* it runs the global setup, so a module-scope
- * `test.skip(...)` is decided at a moment when `clerkSetup()` has not been
- * called and `CLERK_TESTING_TOKEN` does not exist yet — measured: the gate read
- * `true` inside the test body while every test had already been marked skipped
- * during collection. Called from a `beforeEach`, it reads the environment the
- * setup actually left behind.
+ * A function rather than a module-scope constant, so the environment is read at
+ * the latest possible moment and the answer can never be stale. That is defence
+ * in depth, not a workaround for a known ordering bug — an earlier version of
+ * this file claimed Playwright collects test files before running the global
+ * setup, and that claim was wrong. In `playwright@1.62.1`
+ * (`lib/runner/index.js`) the global setup tasks are created *before* the load
+ * task, and probing confirms it: `CLERK_TESTING_TOKEN` reads back set at module
+ * scope during load, whether read directly, through this module, or as a
+ * constant. Only `--list` loads first, and it runs no global setup.
  *
- * The token is the stricter half on purpose. Checking the *secret key* instead
- * would pass with a key that is present but rotated, or pointed at an instance
- * that is down, and every signed-in test would then fail on bot protection
- * rather than skip.
+ * (The run that prompted the change did mark all six skipped while the gate
+ * read `true` inside a test body. Neither load order nor a stale module cache
+ * explains it, and it has not been reproduced since. The hook shape is the one
+ * that cannot go stale either way, so it stays.)
+ *
+ * The token is the stricter half of the check, on purpose. Testing the *secret
+ * key* instead would pass with a key that is present but rotated, or pointed at
+ * an instance that is down, and every signed-in test would then fail on bot
+ * protection rather than skip.
  */
 export function missingSessionReason(): string | null {
   if (!testUserIdentifier) {
@@ -86,15 +93,11 @@ const apiBaseUrl =
 
 export const MISSING_API = `La API en Go no responde en ${apiBaseUrl}: los recorridos que la atraviesan no se pueden probar (ver docs/testing.md).`;
 
+const UNREACHABLE_API = `La API en Go no responde en ${apiBaseUrl} y E2E_REQUIRE_API está activo: este entorno se comprometió a tenerla en pie.`;
+
 let apiProbe: Promise<boolean> | undefined;
 
-/**
- * Two of the invitation journeys cross the whole chain — `getToken()` →
- * `Authorization` → JWKS → Go — so they need the API up with its database
- * behind it. When it is not, they skip with a message that names what is
- * missing instead of failing as if the web app were broken.
- */
-export function apiIsReachable(): Promise<boolean> {
+function probeApi(): Promise<boolean> {
   apiProbe ??= fetch(`${apiBaseUrl}/healthz`, {
     signal: AbortSignal.timeout(2_000),
   })
@@ -102,4 +105,26 @@ export function apiIsReachable(): Promise<boolean> {
     .catch(() => false);
 
   return apiProbe;
+}
+
+/**
+ * Gate for the two journeys that cross into the Go API.
+ *
+ * Skipping is right on a laptop, where not everyone has Postgres up. In CI it
+ * would be a lie: the job starts the API on purpose, so if the probe fails
+ * there something broke — and a skip would let the exact coverage this suite
+ * exists for vanish behind a green tick, since that step is advisory. Hence
+ * `E2E_REQUIRE_API`, which the workflow sets: unreachable then means failure,
+ * not absence.
+ */
+export async function requireApiOrSkip(): Promise<void> {
+  if (await probeApi()) {
+    return;
+  }
+
+  if (process.env.E2E_REQUIRE_API) {
+    throw new Error(UNREACHABLE_API);
+  }
+
+  test.skip(true, MISSING_API);
 }
