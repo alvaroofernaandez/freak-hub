@@ -12,6 +12,7 @@ import {
   Logout,
   UserAdd,
   UserCircle,
+  Users,
 } from "reicon-react";
 import { Avatar } from "@/features/members/ui/avatar";
 import { cn } from "@/shared/lib/cn";
@@ -53,7 +54,14 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
           type="button"
           className="flex min-h-11 items-center gap-2 rounded-full border border-transparent py-1 pr-1 pl-2 transition-colors duration-150 hover:border-border hover:bg-surface focus-visible:border-border"
         >
-          <span className="hidden font-mono text-sm text-ink-muted sm:inline">
+          {/*
+           * The handle waits for 1024 px, the width of the tablet artboard.
+           * Between 768 and 1023 px the header row is already 43 px wider
+           * than the viewport with it: the wordmark wrapped onto two lines
+           * and this trigger was clipped (issue #63). The avatar carries the
+           * identity in that band, as both artboards draw it.
+           */}
+          <span className="hidden font-mono text-sm text-ink-muted lg:inline">
             @{username}
           </span>
           <span className="h-8 w-8 shrink-0 overflow-hidden rounded-full">
@@ -64,7 +72,7 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
             size={14}
             aria-hidden="true"
             className={cn(
-              "hidden text-ink-muted transition-transform duration-150 motion-reduce:transition-none sm:block",
+              "hidden text-ink-muted transition-transform duration-150 motion-reduce:transition-none lg:block",
               isOpen && "rotate-180",
             )}
           />
@@ -104,6 +112,20 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
                     <Link href={`/miembros/${username}`} className={ITEM_CLASS}>
                       <UserCircle size={16} aria-hidden="true" />
                       Mi perfil
+                    </Link>
+                  </DropdownMenu.Item>
+                  {/*
+                   * The group repeats a navbar link above `md`, and that is
+                   * the price of one menu serving every width: the mobile
+                   * bottom bar traded "Grupo" for "Recomendaciones", so below
+                   * 768 px this is the only route to /miembros (issue #63).
+                   * Unlike /recomendaciones — which already has the badge and
+                   * the bottom bar — the group had zero entries on a phone.
+                   */}
+                  <DropdownMenu.Item asChild>
+                    <Link href="/miembros" className={ITEM_CLASS}>
+                      <Users size={16} aria-hidden="true" />
+                      Grupo
                     </Link>
                   </DropdownMenu.Item>
                   <DropdownMenu.Item asChild>

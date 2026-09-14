@@ -29,6 +29,18 @@ describe("UserMenu", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  /*
+   * Between 768 and 1023 px the header row does not have room for the handle:
+   * with it, the wordmark wrapped and the trigger was clipped (issue #63).
+   * The avatar alone carries the identity there, exactly as the tablet
+   * artboard draws it.
+   */
+  it("drops the handle in the band where the header row has no room for it", () => {
+    render(<UserMenu {...PROPS} />);
+
+    expect(screen.getByText("@alvaro")).toHaveClass("hidden", "lg:inline");
+  });
+
   it("opens a menu and marks the trigger as expanded", async () => {
     const user = userEvent.setup();
     render(<UserMenu {...PROPS} />);
@@ -53,6 +65,22 @@ describe("UserMenu", () => {
     expect(screen.getByRole("menuitem", { name: /invitar/i })).toHaveAttribute(
       "href",
       "/invitar",
+    );
+  });
+
+  /*
+   * The mobile bottom bar traded "Grupo" for "Recomendaciones", so below
+   * 768 px this menu is the only route to the group (issue #63).
+   */
+  it("links to the group, the one destination the mobile bottom bar gave up", async () => {
+    const user = userEvent.setup();
+    render(<UserMenu {...PROPS} />);
+
+    await user.click(screen.getByRole("button", { name: /álvaro fernández/i }));
+
+    expect(screen.getByRole("menuitem", { name: /grupo/i })).toHaveAttribute(
+      "href",
+      "/miembros",
     );
   });
 
