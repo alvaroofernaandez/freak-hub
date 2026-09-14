@@ -21,6 +21,7 @@ const (
 	CodeInternal              ErrorCode = "internal_error"
 	CodeInvalidLimit          ErrorCode = "invalid_limit"
 	CodeInvalidCursor         ErrorCode = "invalid_cursor"
+	CodeInvalidFilter         ErrorCode = "invalid_filter"
 	CodeNoProfileChanges      ErrorCode = "no_profile_changes"
 	CodeNameTooLong           ErrorCode = "name_too_long"
 	CodeUsernameInvalidLength ErrorCode = "username_invalid_length"
@@ -31,6 +32,12 @@ const (
 	CodeInvalidEmail          ErrorCode = "invalid_email"
 	CodeInvitationAlreadySent ErrorCode = "invitation_already_sent"
 	CodeAlreadyMember         ErrorCode = "already_member"
+	CodeAlreadyInLibrary      ErrorCode = "already_in_library"
+	CodeWorkNotFound          ErrorCode = "work_not_found"
+	CodeRatingNotAllowed      ErrorCode = "rating_not_allowed"
+	CodeInvalidProgress       ErrorCode = "invalid_progress"
+	CodeLibraryEntryNotFound  ErrorCode = "library_entry_not_found"
+	CodeInvalidTransition     ErrorCode = "invalid_transition"
 	CodeMethodNotAllowed      ErrorCode = "method_not_allowed"
 	CodePayloadTooLarge       ErrorCode = "payload_too_large"
 	CodeRequestTimeout        ErrorCode = "request_timeout"
@@ -60,6 +67,7 @@ var codeRegistry = map[ErrorCode]codeInfo{
 	CodeInternal:              {Title: "Error interno del servidor"},
 	CodeInvalidLimit:          {Title: "Parámetro limit no válido"},
 	CodeInvalidCursor:         {Title: "Parámetro cursor no válido"},
+	CodeInvalidFilter:         {Title: "Filtro no válido"},
 	CodeNoProfileChanges:      {Title: "Sin cambios que aplicar"},
 	CodeNameTooLong:           {Title: "Nombre demasiado largo"},
 	CodeUsernameInvalidLength: {Title: "Longitud de usuario no válida", Field: "username"},
@@ -70,6 +78,12 @@ var codeRegistry = map[ErrorCode]codeInfo{
 	CodeInvalidEmail:          {Title: "Correo no válido", Field: "email"},
 	CodeInvitationAlreadySent: {Title: "Invitación ya enviada", Field: "email"},
 	CodeAlreadyMember:         {Title: "Ya es miembro", Field: "email"},
+	CodeAlreadyInLibrary:      {Title: "Ya está en tu biblioteca", Field: "work_id"},
+	CodeWorkNotFound:          {Title: "Obra no encontrada"},
+	CodeRatingNotAllowed:      {Title: "Valoración no permitida", Field: "rating"},
+	CodeInvalidProgress:       {Title: "Progreso no válido", Field: "progress"},
+	CodeLibraryEntryNotFound:  {Title: "Entrada no encontrada"},
+	CodeInvalidTransition:     {Title: "Cambio de estado no válido", Field: "status"},
 	CodeMethodNotAllowed:      {Title: "Método no permitido"},
 	CodePayloadTooLarge:       {Title: "Cuerpo de la petición demasiado grande"},
 	CodeRequestTimeout:        {Title: "Tiempo de espera agotado", Retryable: true},
