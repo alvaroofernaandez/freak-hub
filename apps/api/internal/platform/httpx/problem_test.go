@@ -166,10 +166,14 @@ func TestWriteProblemDescribesTheLibraryCodes(t *testing.T) {
 		{name: "already in library", code: httpx.CodeAlreadyInLibrary, field: "work_id"},
 		{name: "rating not allowed", code: httpx.CodeRatingNotAllowed, field: "rating"},
 		{name: "invalid progress", code: httpx.CodeInvalidProgress, field: "progress"},
+		{name: "invalid transition", code: httpx.CodeInvalidTransition, field: "status"},
 		// work_not_found blames no single field: it answers both
 		// GET /v1/works/{id}, where the id is a path segment, and
 		// POST /v1/library, where it is the work_id property.
 		{name: "work not found", code: httpx.CodeWorkNotFound, field: ""},
+		// library_entry_not_found blames none either: the id it rejects is
+		// a path segment, never a body property.
+		{name: "library entry not found", code: httpx.CodeLibraryEntryNotFound, field: ""},
 	}
 
 	for _, testCase := range cases {

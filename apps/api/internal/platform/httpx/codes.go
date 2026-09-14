@@ -35,6 +35,8 @@ const (
 	CodeWorkNotFound          ErrorCode = "work_not_found"
 	CodeRatingNotAllowed      ErrorCode = "rating_not_allowed"
 	CodeInvalidProgress       ErrorCode = "invalid_progress"
+	CodeLibraryEntryNotFound  ErrorCode = "library_entry_not_found"
+	CodeInvalidTransition     ErrorCode = "invalid_transition"
 	CodeMethodNotAllowed      ErrorCode = "method_not_allowed"
 	CodePayloadTooLarge       ErrorCode = "payload_too_large"
 	CodeRequestTimeout        ErrorCode = "request_timeout"
@@ -78,6 +80,8 @@ var codeRegistry = map[ErrorCode]codeInfo{
 	CodeWorkNotFound:          {Title: "Obra no encontrada"},
 	CodeRatingNotAllowed:      {Title: "Valoración no permitida", Field: "rating"},
 	CodeInvalidProgress:       {Title: "Progreso no válido", Field: "progress"},
+	CodeLibraryEntryNotFound:  {Title: "Entrada no encontrada"},
+	CodeInvalidTransition:     {Title: "Cambio de estado no válido", Field: "status"},
 	CodeMethodNotAllowed:      {Title: "Método no permitido"},
 	CodePayloadTooLarge:       {Title: "Cuerpo de la petición demasiado grande"},
 	CodeRequestTimeout:        {Title: "Tiempo de espera agotado", Retryable: true},
