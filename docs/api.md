@@ -115,6 +115,18 @@ desde el ADR-0011 son todos los que listan: `GET /v1/members`,
 como el `enum` de `code`, y un test de Go falla si alguno de los dos cambia
 sin el otro.
 
+Añadir un código toca **tres** sitios, no dos, y los tres avisan solos:
+
+| Dónde | Qué lo comprueba |
+| :--- | :--- |
+| `apps/api/internal/platform/httpx/codes.go` | `TestContractCodesMatchTheRegistry`, en `internal/api`. Es simétrico: falla en las dos direcciones |
+| `apps/web/src/shared/errors/problem.ts` | `KNOWN_CODES`, exhaustivo con `satisfies Record<…, true>`. Rompe `pnpm typecheck` |
+| `apps/web/src/shared/errors/messages.ts` | `MESSAGES`, un `Record<ProblemCode, CopyResolver>`: sin copy no compila |
+
+Que el test de Go sea simétrico tiene una consecuencia práctica: un código
+nuevo **no se puede repartir en dos PR**. O el contrato y el registro entran
+juntos, o `main` se queda en rojo entre los dos.
+
 ## Reclasificaciones de transporte (ADR-0014)
 
 Estos cambios de status o código son deliberados y forman parte de este mismo
