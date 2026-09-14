@@ -159,6 +159,10 @@ CREATE INDEX library_entries_member_status_idx
 -- Recorrer el catálogo compartido por categoría, con el mismo orden.
 CREATE INDEX works_category_created_idx
     ON works (category, created_at DESC, id DESC);
+
+-- Buscar por título sin que importen mayúsculas ni acentos (ADR-0015).
+CREATE INDEX works_title_search_idx
+    ON works USING gin (immutable_unaccent(lower(title)) gin_trgm_ops);
 ```
 
 Tres de ellos merecen explicación:
@@ -176,13 +180,38 @@ Tres de ellos merecen explicación:
   es única, y una frontera de página entre dos filas con la misma marca de
   tiempo saltaría una o repetiría otra.
 
-> [!NOTE]
-> El contrato promete que la búsqueda por título de `GET /v1/works?q=` es
-> insensible a mayúsculas **y a acentos**. Esta migración solo habilita lo
-> primero: `ListWorks` usa `strpos(lower(title), lower(...))`. La
-> insensibilidad a acentos necesita una decisión de esquema que esta migración
-> no toma —extensión `unaccent` o columna normalizada con su índice— y queda
-> pendiente antes de que la búsqueda se dé por terminada.
+#### La búsqueda por título
+
+`GET /v1/works?q=` busca de forma insensible a mayúsculas **y a acentos**: quien
+escriba «pokemon» encuentra *Pokémon*, y quien escriba «shogun» encuentra
+*Shōgun*. Eso obliga al esquema a depender de dos extensiones contrib, que es la
+decisión que recoge [ADR-0015](decisions/0015-busqueda-sin-acentos.md) y que hay
+que verificar **antes de elegir dónde se despliega Postgres**:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS unaccent;   -- pliega los acentos
+CREATE EXTENSION IF NOT EXISTS pg_trgm;    -- hace buscable la subcadena
+
+-- unaccent() es STABLE, no IMMUTABLE, y Postgres se niega a indexar una función
+-- así. Este envoltorio fija el diccionario y promete IMMUTABLE: sin él, el
+-- índice de abajo no se puede crear.
+CREATE FUNCTION immutable_unaccent(input text) RETURNS text
+    LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
+    AS $$ SELECT public.unaccent('public.unaccent'::regdictionary, input) $$;
+
+CREATE INDEX works_title_search_idx
+    ON works USING gin (immutable_unaccent(lower(title)) gin_trgm_ops);
+```
+
+GIN de trigramas y no B-tree porque la búsqueda es **por subcadena**: un B-tree
+sabe responder «empieza por», nunca «contiene». `ListWorks` escribe la expresión
+exactamente igual que el índice —si no, el planificador no lo reconoce— y escapa
+el término antes de meterlo en el patrón, para que un `%` escrito por alguien sea
+un signo de porcentaje y no un comodín.
+
+Si algún día se edita el fichero de reglas de `unaccent`, hay que hacer `REINDEX`
+de `works_title_search_idx`: la promesa de `IMMUTABLE` es nuestra, y Postgres
+seguirá confiando en lo que calculó con las reglas viejas.
 
 ## Convenciones
 
@@ -221,6 +250,15 @@ Reglas:
    migración ya aplicada, goose la considera fuera de orden: `down` no la
    revierte y `up` no la vuelve a aplicar, sin decir nada. Renombra el fichero a
    un número mayor que el último antes de escribir una sola línea de SQL.
+
+> [!WARNING]
+> El `Down` de `20260914130000_create_library.sql` hace `DROP EXTENSION` de
+> `unaccent` y `pg_trgm`. Sin `CASCADE` a propósito: si algo ajeno a esa
+> migración llegara a depender de ellas, la vuelta atrás **falla en voz alta** en
+> lugar de llevarse por delante ese algo. La asimetría que hay que conocer es la
+> contraria: el `Up` usa `CREATE EXTENSION IF NOT EXISTS`, así que en una base
+> donde alguien ya las hubiera instalado a mano, el `Down` retira algo que esa
+> migración nunca creó.
 
 > [!WARNING]
 > El `Down` de `20260914120000_backfill_members_invited_by.sql` **borra datos en
