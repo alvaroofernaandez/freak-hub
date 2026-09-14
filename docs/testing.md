@@ -215,11 +215,16 @@ dice exactamente qué falta. Sin credenciales —o si `clerkSetup()` no consigui
 su *testing token*—, se omiten todos los que llevan sesión. **Ninguno pasa en
 silencio**: un test que se salta sin decirlo es peor que no tenerlo.
 
-Esa comprobación vive en un `beforeEach`, no en el ámbito del módulo, y el
-motivo es medible: Playwright **recoge** los ficheros de test antes de ejecutar
-el *global setup*, así que un `test.skip(...)` de módulo se decide cuando
-`CLERK_TESTING_TOKEN` todavía no existe. Se vio en una pasada donde la condición
-valía `true` dentro del test y aun así los seis salían marcados como omitidos.
+Esa comprobación vive en un `beforeEach` y no en el ámbito del módulo, para que
+el entorno se lea lo más tarde posible y la respuesta no pueda quedarse vieja.
+Es defensa en profundidad, no el arreglo de un orden conocido: una versión
+anterior de esta documentación afirmaba que Playwright recoge los ficheros antes
+del *global setup*, y **era falso**. En `playwright@1.62.1`
+(`lib/runner/index.js`) las tareas de *global setup* se crean **antes** que la de
+carga, y sondeándolo se confirma: `CLERK_TESTING_TOKEN` se lee ya puesto en el
+ámbito del módulo, tanto directamente como a través de este módulo y tanto en
+función como en constante. Solo `--list` carga primero, y ahí no hay *global
+setup*.
 
 El correo al que se invita se genera con el sufijo `+clerk_test`, la convención
 de Clerk para una dirección que nunca se entrega de verdad, y lleva una marca de
@@ -232,20 +237,44 @@ El trabajo `e2e` de `.github/workflows/ci.yml` no depende de `web`, `api` ni
 `contracts` ni ellos de él: no bloquea a nadie. Levanta Postgres como servicio,
 aplica las migraciones, siembra la fila de miembro del usuario de prueba
 —resolviendo su `clerk_user_id` contra la Backend API, para no guardar un
-secreto más—, arranca la API en Go y corre los dos proyectos. Al terminar revoca
-las invitaciones que la pasada haya dejado pendientes.
+secreto más—, arranca la API en Go y corre los dos proyectos.
+
+Al terminar revoca invitaciones, y con cuidado: la instancia es **compartida** y
+`concurrency` solo serializa por *ref*, no entre PRs distintas. Un barrido por
+prefijo borraría la invitación pendiente de otra PR en marcha, cuyo test de «ya
+hay una pendiente» recibiría un 201 en vez de un 409 y fallaría — en ámbar, y se
+despacharía como *flake*. Por eso cada pasada invita a una dirección propia
+(`E2E_INVITEE_EMAIL` lleva `github.run_id` y `run_attempt`), revoca **esa** por
+nombre, y solo barre por prefijo lo que tenga más de dos horas, que es como se
+recogen las huérfanas de un run cancelado.
 
 El paso del perímetro es bloqueante: si falla, es que una ruta protegida dejó de
-redirigir. El de los recorridos con sesión va marcado `continue-on-error`,
-porque atan la suite a una instancia real de Clerk y una incidencia suya no es
-una regresión nuestra. El informe HTML se sube como artefacto —no `test-results/`:
-el proyecto `setup` conserva los dos reintentos de CI y una traza de reintento
-llevaría el intercambio de inicio de sesión y la cookie de sesión.
+redirigir. El de los recorridos con sesión va marcado `continue-on-error`, porque
+atan la suite a una instancia real de Clerk y una incidencia suya no es una
+regresión nuestra.
+
+Pero «advisory» no puede significar «puede desaparecer». Si la API se cae después
+del *health check*, los dos recorridos de frontera se omitirían, el paso saldría
+ámbar y el trabajo verde: la cobertura exacta por la que se abrió el issue se
+esfumaría sin una sola marca roja. Por eso el trabajo exporta `E2E_REQUIRE_API=1`
+y ahí una API inalcanzable es **fallo**, no omisión. Omitir está bien en un
+portátil; en CI sería mentir.
+
+El informe HTML se sube como artefacto, y eso solo es seguro porque el proyecto
+`setup` **no graba traza**. No basta con dejar fuera `test-results/`: el
+reportero HTML **copia los adjuntos dentro del directorio del informe**, así que
+una traza acaba en `playwright-report/data/*.zip` de todos modos. Medido con
+`CI=true` y un inicio de sesión que **falla**, antes de arreglarlo: un zip con 19
+cabeceras `set-cookie`, 92 `__clerk_db_jwt`, 66 `__client` y 4 JWT. Un reintento
+que **funcione** guardaría una sesión válida entera, que es justo lo que el
+`storageState` está en `.gitignore` para evitar. Y este repositorio es público:
+los artefactos de un repositorio público los descarga cualquiera.
 
 Todo el trabajo está condicionado a que existan los secretos de la instancia, y
-eso viene forzado: `clerkMiddleware` se niega a arrancar sin clave secreta, así
-que con una fabricada `next dev` responde 500 y ni el perímetro tiene página
-sobre la que afirmar nada. Una PR desde un *fork* ve el trabajo omitido, no roto.
+eso viene forzado: sin clave secreta válida `clerkMiddleware` falla **en cada
+petición** con `Handshake token verification failed`, que Next renderiza como
+página de error, así que ni el perímetro tiene página sobre la que afirmar nada.
+Una PR desde un *fork* ve el trabajo omitido, no roto.
 
 Secretos de repositorio que necesita:
 
@@ -254,4 +283,4 @@ Secretos de repositorio que necesita:
 | `E2E_CLERK_PUBLISHABLE_KEY` | La web arranca con la instancia de desarrollo |
 | `E2E_CLERK_SECRET_KEY` | `clerkSetup()`, resolver el usuario y revocar invitaciones |
 | `E2E_CLERK_USER_IDENTIFIER` | A quién iniciar sesión |
-| `E2E_CLERK_USER_PASSWORD` | Opcional: solo si el identificador no es `+clerk_test` |
+| `E2E_CLERK_USER_PASSWORD` | **Opcional.** Solo si el identificador no es `+clerk_test`; el job lo pasa vacío si no existe |
