@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const notFound = vi.fn();
 vi.mock("next/navigation", () => ({ notFound: () => notFound() }));
@@ -7,8 +7,15 @@ vi.mock("next/navigation", () => ({ notFound: () => notFound() }));
 const { default: ManualAddPage } = await import("./page");
 
 describe("ManualAddPage", () => {
-  it("calls notFound for a category that does not exist", async () => {
+  // `notFound` lives at module scope and its call history outlives a single
+  // test, so without this the suite passes or fails depending on the order it
+  // runs in (`--sequence.shuffle`): a `not.toHaveBeenCalled()` sees the call
+  // another test made.
+  beforeEach(() => {
     notFound.mockClear();
+  });
+
+  it("calls notFound for a category that does not exist", async () => {
     await ManualAddPage({
       params: Promise.resolve({ categoria: "not-a-category" }),
     });
@@ -17,7 +24,6 @@ describe("ManualAddPage", () => {
   });
 
   it("renders the common Work fields and a disabled submit button", async () => {
-    notFound.mockClear();
     const page = await ManualAddPage({
       params: Promise.resolve({ categoria: "boardgame" }),
     });
