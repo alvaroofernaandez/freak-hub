@@ -78,10 +78,40 @@ describe("UserMenu", () => {
 
     await user.click(screen.getByRole("button", { name: /álvaro fernández/i }));
 
-    expect(screen.getByRole("menuitem", { name: /grupo/i })).toHaveAttribute(
-      "href",
-      "/miembros",
-    );
+    const group = screen.getByRole("menuitem", { name: /grupo/i });
+    expect(group).toHaveAttribute("href", "/miembros");
+    /*
+     * Only below 768 px. Above it the navbar already carries "Grupo", and a
+     * second entry would repeat what is one click away — the same reason
+     * /recomendaciones stays out of this menu (docs/design.md).
+     */
+    expect(group).toHaveClass("md:hidden");
+  });
+
+  /*
+   * The trigger is the only session control on a phone, so its name has to be
+   * said once. `Avatar` labels its <img> with the display name and this menu
+   * adds an sr-only copy of it, so anyone whose picture had actually loaded
+   * heard "Álvaro Fernández Álvaro Fernández". Every other test here passes
+   * `avatarUrl: null`, which is why it went unnoticed.
+   */
+  it("says the name once when the picture has loaded, not twice", () => {
+    render(<UserMenu {...PROPS} avatarUrl="https://example.test/alvaro.png" />);
+
+    expect(
+      screen.queryByRole("img", { name: "Álvaro Fernández" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /álvaro fernández/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("still names the trigger when there is no picture to hide", () => {
+    render(<UserMenu {...PROPS} avatarUrl={null} />);
+
+    expect(
+      screen.getByRole("button", { name: /álvaro fernández/i }),
+    ).toBeInTheDocument();
   });
 
   it("links to settings, now that the route exists", async () => {

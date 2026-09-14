@@ -64,7 +64,19 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
           <span className="hidden font-mono text-sm text-ink-muted lg:inline">
             @{username}
           </span>
-          <span className="h-8 w-8 shrink-0 overflow-hidden rounded-full">
+          {/*
+           * The picture is decorative here: `Avatar` labels its <img> with
+           * the display name, and the sr-only span below already says it. Two
+           * sources announced it twice to anyone whose avatar had loaded.
+           * The span stays rather than the alt text, because with no picture
+           * `Avatar` falls back to initials it hides from assistive tech, and
+           * this trigger cannot afford to go unnamed: on a phone it is the
+           * only way to reach the session.
+           */}
+          <span
+            aria-hidden="true"
+            className="h-8 w-8 shrink-0 overflow-hidden rounded-full"
+          >
             <Avatar displayName={displayName} imageUrl={avatarUrl} />
           </span>
           <span className="sr-only">{displayName}</span>
@@ -115,15 +127,26 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
                     </Link>
                   </DropdownMenu.Item>
                   {/*
-                   * The group repeats a navbar link above `md`, and that is
-                   * the price of one menu serving every width: the mobile
-                   * bottom bar traded "Grupo" for "Recomendaciones", so below
-                   * 768 px this is the only route to /miembros (issue #63).
-                   * Unlike /recomendaciones — which already has the badge and
-                   * the bottom bar — the group had zero entries on a phone.
+                   * Only on a phone. The mobile bottom bar traded "Grupo" for
+                   * "Recomendaciones", so below 768 px this is the only route
+                   * to /miembros (issue #63); above it the navbar already
+                   * carries the link and a second entry would repeat what is
+                   * one click away, which is the same reason /recomendaciones
+                   * stays out of this menu.
+                   *
+                   * `md:hidden` on a Radix item is safe as long as it is not
+                   * the first one: `display: none` takes it out of the
+                   * accessibility tree, and Radix's roving focus skips it on
+                   * its own, because it focuses a candidate and then checks
+                   * whether `document.activeElement` actually moved. The
+                   * first item is the one that carries `tabindex="0"`, so
+                   * hiding that one would cost the menu its tab stop.
                    */}
                   <DropdownMenu.Item asChild>
-                    <Link href="/miembros" className={ITEM_CLASS}>
+                    <Link
+                      href="/miembros"
+                      className={cn(ITEM_CLASS, "md:hidden")}
+                    >
                       <Users size={16} aria-hidden="true" />
                       Grupo
                     </Link>
