@@ -12,10 +12,11 @@ import {
   useState,
 } from "react";
 import { X } from "reicon-react";
+import type { WorkCategory } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 import { useMediaQuery } from "@/shared/lib/use-media-query";
 import { CategoryCard } from "./category-card";
-import { CATEGORY_ORDER, type CategoryId } from "./category-stripe";
+import { CATEGORY_ORDER } from "./category-stripe";
 import { Dialog } from "./dialog";
 import { Drawer } from "./drawer";
 
@@ -101,8 +102,8 @@ const CONFIRM_FLASH_MS = 180;
 type AddCategoryModalBodyProps = {
   titleId: string;
   dismiss: () => void;
-  confirming: CategoryId | null;
-  selectCategory: (category: CategoryId) => void;
+  confirming: WorkCategory | null;
+  selectCategory: (category: WorkCategory) => void;
 };
 
 /**
@@ -165,7 +166,7 @@ export function AddCategoryModalHost() {
   const { isOpen, close } = useAddCategoryModal();
   const router = useRouter();
   const titleId = useId();
-  const [confirming, setConfirming] = useState<CategoryId | null>(null);
+  const [confirming, setConfirming] = useState<WorkCategory | null>(null);
   const pendingNavigation = useRef<number | null>(null);
   // Defaults to `true` (the `Dialog` path) so environments without
   // `matchMedia` — this component mounts unconditionally in the app shell,
@@ -194,7 +195,7 @@ export function AddCategoryModalHost() {
     [],
   );
 
-  function selectCategory(category: CategoryId) {
+  function selectCategory(category: WorkCategory) {
     // A second tap during the flash would queue a second navigation.
     if (confirming) {
       return;

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Member } from "@/shared/api/types";
+import type { LibraryEntry, Member } from "@/shared/api/types";
 
 const getToken = vi.fn();
 const currentUser = vi.fn();
@@ -30,6 +30,46 @@ const PROFILE: Member = {
   created_at: "2026-01-04T00:00:00.000Z",
 };
 
+const IN_PROGRESS: LibraryEntry = {
+  id: "entry-hxh",
+  work: {
+    id: "work-hxh",
+    title: "Hunter x Hunter (2011)",
+    category: "anime",
+    source: "anilist",
+    source_id: "11061",
+    cover_url: null,
+    synopsis: null,
+    year: 2011,
+    metadata: { episodes: 148 },
+    expansion_of: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  },
+  status: "in_progress",
+  progress: 68,
+  rating: null,
+  is_favourite: false,
+  owned: false,
+  note: null,
+  started_at: null,
+  finished_at: null,
+  created_at: "2026-01-01T00:00:00.000Z",
+  updated_at: "2026-01-01T00:00:00.000Z",
+};
+
+/** Answers each endpoint with its own payload, whatever the call order. */
+function respondWith(profile: unknown | Error, rail: unknown | Error): void {
+  apiFetch.mockImplementation((path: string) => {
+    const payload = path.startsWith("/v1/me") ? profile : rail;
+    return payload instanceof Error
+      ? Promise.reject(payload)
+      : Promise.resolve(payload);
+  });
+}
+
+const RAIL = { items: [IN_PROGRESS], next_cursor: null };
+
 describe("HomePage", () => {
   beforeEach(() => {
     apiFetch.mockReset();
@@ -39,8 +79,85 @@ describe("HomePage", () => {
     currentUser.mockResolvedValue({ username: "alvaro", fullName: "Álvaro" });
   });
 
+  it("asks the API for what is in progress, which is exactly what the rail shows", async () => {
+    respondWith(PROFILE, RAIL);
+
+    render(await HomePage());
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/v1/library?status=in_progress&limit=100",
+      { token: "session-token" },
+    );
+  });
+
+  it("fills the continue rail with the entries it got back", async () => {
+    respondWith(PROFILE, RAIL);
+
+    render(await HomePage());
+
+    expect(screen.getByText("Hunter x Hunter (2011)")).toBeInTheDocument();
+  });
+
+  it("leaves recommendations and activity empty, because neither has an endpoint", async () => {
+    respondWith(PROFILE, RAIL);
+
+    render(await HomePage());
+
+    expect(
+      screen.getByText(/sin recomendaciones pendientes/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/sin actividad reciente/i)).toBeInTheDocument();
+  });
+
+  it("shows the rail's own failure as a section error, not as an empty rail", async () => {
+    respondWith(PROFILE, new ApiError("boom", 503, "service_unavailable"));
+
+    render(await HomePage());
+
+    expect(screen.queryByText(/nada en curso/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reintentar" }),
+    ).toBeInTheDocument();
+    // The profile block survives it: two independent requests, two outcomes.
+    expect(screen.getByText(/sesión verificada/i)).toBeInTheDocument();
+  });
+
+  it("keeps the rail when the profile check is the one that fails", async () => {
+    respondWith(new ApiError("boom", 500, "internal_error"), RAIL);
+
+    render(await HomePage());
+
+    expect(screen.getByText("Hunter x Hunter (2011)")).toBeInTheDocument();
+  });
+
+  it("says there is more in progress than the rail shows, instead of truncating in silence", async () => {
+    respondWith(PROFILE, { items: [IN_PROGRESS], next_cursor: "cursor-1" });
+
+    render(await HomePage());
+
+    expect(screen.getByTestId("continue-rail-has-more")).toBeInTheDocument();
+  });
+
+  it("says nothing about truncation when everything in progress fits in one page", async () => {
+    respondWith(PROFILE, RAIL);
+
+    render(await HomePage());
+
+    expect(
+      screen.queryByTestId("continue-rail-has-more"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows an empty rail, with somewhere to go, when nothing is in progress", async () => {
+    respondWith(PROFILE, { items: [], next_cursor: null });
+
+    render(await HomePage());
+
+    expect(screen.getByText(/nada en curso/i)).toBeInTheDocument();
+  });
+
   it("shows the verified session once the API answers", async () => {
-    apiFetch.mockResolvedValue(PROFILE);
+    respondWith(PROFILE, RAIL);
 
     render(await HomePage());
 
@@ -49,7 +166,8 @@ describe("HomePage", () => {
   });
 
   it("shows the session-expired state for a 401, with a sign-in link", async () => {
-    apiFetch.mockRejectedValue(new ApiError("no token", 401, "invalid_token"));
+    const expired = new ApiError("no token", 401, "invalid_token");
+    respondWith(expired, expired);
 
     render(await HomePage());
 
@@ -62,9 +180,8 @@ describe("HomePage", () => {
   });
 
   it("shows the account-pending state for a 404 unknown_identity", async () => {
-    apiFetch.mockRejectedValue(
-      new ApiError("not ready", 404, "unknown_identity"),
-    );
+    const pending = new ApiError("not ready", 404, "unknown_identity");
+    respondWith(pending, pending);
 
     render(await HomePage());
 
@@ -74,7 +191,7 @@ describe("HomePage", () => {
   });
 
   it("shows a recoverable error state with retry for anything else", async () => {
-    apiFetch.mockRejectedValue(new ApiError("boom", 500, "internal_error"));
+    respondWith(new ApiError("boom", 500, "internal_error"), RAIL);
 
     render(await HomePage());
 

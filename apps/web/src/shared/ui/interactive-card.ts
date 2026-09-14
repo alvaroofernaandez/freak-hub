@@ -1,10 +1,10 @@
-import type { CategoryId } from "./category-stripe";
+import type { WorkCategory } from "@/shared/api/types";
 
 /**
  * Tailwind cannot see a class name built at runtime, so the hover border is
  * written out per category rather than derived from CATEGORY_COLOR_CLASS.
  */
-const HOVER_BORDER: Record<CategoryId, string> = {
+const HOVER_BORDER: Record<WorkCategory, string> = {
   anime: "hover:border-cat-anime focus-visible:border-cat-anime",
   manga: "hover:border-cat-manga focus-visible:border-cat-manga",
   game: "hover:border-cat-games focus-visible:border-cat-games",
@@ -23,7 +23,7 @@ const HOVER_BORDER: Record<CategoryId, string> = {
  * since `transform: none` cannot cancel a `scale`, the lift only exists under
  * `motion-safe:` rather than being switched off for reduced motion afterwards.
  */
-export function interactiveCardClasses(category: CategoryId): string {
+export function interactiveCardClasses(category: WorkCategory): string {
   return [
     "transition-[scale,border-color] duration-150 ease-out-quint",
     "motion-safe:hover:scale-[1.02] motion-safe:focus-visible:scale-[1.02]",

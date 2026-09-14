@@ -1,18 +1,7 @@
+import type { WorkCategory } from "@/shared/api/types";
 import { cn } from "@/shared/lib/cn";
 
-/**
- * No contract type exists for category yet (Work is not implemented), so
- * this union lives local to the component until then.
- */
-export type CategoryId =
-  | "anime"
-  | "manga"
-  | "game"
-  | "film"
-  | "boardgame"
-  | "tcg";
-
-const SEGMENTS: { id: CategoryId; colorClass: string }[] = [
+const SEGMENTS: { id: WorkCategory; colorClass: string }[] = [
   { id: "anime", colorClass: "bg-cat-anime" },
   { id: "manga", colorClass: "bg-cat-manga" },
   { id: "game", colorClass: "bg-cat-games" },
@@ -22,22 +11,22 @@ const SEGMENTS: { id: CategoryId; colorClass: string }[] = [
 ];
 
 /** The six categories, in their canonical order (docs/screens.md). */
-export const CATEGORY_ORDER: CategoryId[] = SEGMENTS.map(
+export const CATEGORY_ORDER: WorkCategory[] = SEGMENTS.map(
   (segment) => segment.id,
 );
 
 /** Category -> stripe color class, the single source of truth for the roster colors. */
-export const CATEGORY_COLOR_CLASS: Record<CategoryId, string> =
+export const CATEGORY_COLOR_CLASS: Record<WorkCategory, string> =
   Object.fromEntries(
     SEGMENTS.map((segment) => [segment.id, segment.colorClass]),
-  ) as Record<CategoryId, string>;
+  ) as Record<WorkCategory, string>;
 
 /**
  * Category -> "border + text" classes: color as an accent (outline), never a
  * solid fill (docs/design/high-fidelity-desktop.html §4, same criterion
  * applied to the lobby tile in issue #23).
  */
-export const CATEGORY_ACCENT_CLASS: Record<CategoryId, string> =
+export const CATEGORY_ACCENT_CLASS: Record<WorkCategory, string> =
   Object.fromEntries(
     SEGMENTS.map((segment) => [
       segment.id,
@@ -46,10 +35,10 @@ export const CATEGORY_ACCENT_CLASS: Record<CategoryId, string> =
         segment.colorClass.replace("bg-", "text-"),
       ),
     ]),
-  ) as Record<CategoryId, string>;
+  ) as Record<WorkCategory, string>;
 
 /** Category -> Spanish display label. */
-export const CATEGORY_LABELS: Record<CategoryId, string> = {
+export const CATEGORY_LABELS: Record<WorkCategory, string> = {
   anime: "Anime",
   manga: "Manga",
   game: "Videojuegos",
@@ -59,7 +48,7 @@ export const CATEGORY_LABELS: Record<CategoryId, string> = {
 };
 
 type CategoryStripeProps = {
-  activeCategory?: CategoryId;
+  activeCategory?: WorkCategory;
 };
 
 /** The "moldura": the six-color category stripe below the navbar (docs/design.md). */

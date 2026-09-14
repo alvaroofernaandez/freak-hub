@@ -29,12 +29,22 @@ parciales → vacío → sin resultados.
 ## El flujo, de la petición a la pantalla
 
 ```
-apiFetch()
+loadResource(path, { token, resource, route, scope })
+  → apiFetch()
   → ApiProblemError | ApiNetworkError | ApiTimeoutError | ApiAbortError
   → normalizeError(error, context)
   → NormalizedAppError { kind, severity, scope, retryable, copy, recovery, correlationId… }
   → un componente de shared/ui/state/*
 ```
+
+`shared/lib/load-resource.ts` es la puerta de entrada de toda lectura de
+servidor: hace la petición, captura, normaliza y registra, y devuelve un
+`LoadResult<T>` (`ready` | `error`). Ninguna pantalla vuelve a escribir ese
+`try/catch` a mano — que es como acaba colándose un `catch { return null }`
+que convierte un fallo en una lista vacía, el primer anti-patrón de la lista
+de abajo. No tiene rama `empty`: una colección vacía es un `ready` con cero
+elementos, y quién dice qué significa ese vacío es el componente que lo
+pinta, con la copia concreta de su motivo.
 
 1. **`shared/errors/problem.ts`** — `parseProblem(body, status, headers)` lee
    el sobre Problem Details (o el `{code, message}` heredado) y produce un
@@ -139,7 +149,11 @@ estados de fallo/vacío sino piezas de formulario y de marca de estado:
 ## Ejemplo: una página que carga un recurso
 
 ```tsx
-const result = await fetchResource<Member>("/v1/miembros", token, "el grupo");
+const result = await loadResource<MemberPage>("/v1/members?limit=100", {
+  token,
+  resource: "el grupo",
+  route: "/miembros",
+});
 
 if (result.status === "error") {
   if (result.error.kind === "session_expired") {
@@ -165,7 +179,21 @@ patrón en una página nueva.
   esto por ti con `afterUserAction`.
 - Truncar una lista paginada en silencio cuando `next_cursor` sigue sin ser
   `null`: pide el máximo del contrato (100) y dilo (`membersHasMore` /
-  `invitationsHasMore` en `MembersDirectory`).
+  `invitationsHasMore` en `MembersDirectory`, `category-has-more` en
+  `/biblioteca/[categoria]`, `inProgressHasMore` en `home-dashboard.tsx`). El
+  carril de inicio es el caso que más lo necesita y el que más fácil se olvida:
+  al desplazarse en horizontal **no tiene borde inferior**, así que lo truncado
+  no se ve truncado, se ve completo. Donde lo truncado es **una cifra** y no una
+  lista, el aviso no basta y hay que tocar la cifra: en `/biblioteca` el aviso
+  reencuadra los seis recuentos, y en `/biblioteca/[categoria]` la cifra junto
+  al `<h1>` pasa a decir «más de N obras». Una cifra a medias no se lee como
+  incompleta, se lee como falsa, y un aviso al pie no alcanza a un encabezado.
+- Dibujar una barra de progreso con un `progress` del contrato. `progress` es
+  un recuento absoluto en la unidad de la categoría (episodios, capítulos,
+  horas, partidas), no un porcentaje: `ProgressBar` solo aparece cuando hay un
+  total con el que dividirlo (`progressPercentage` en
+  `features/library/lib/library-item.ts`). Sin total, la cifra en JetBrains
+  Mono es toda la respuesta honesta.
 - Un `<form action={formAction}>` con campos que hay que conservar tras un
   fallo. React reinicia los campos no controlados en cuanto la acción
   termina, éxito o no — un formulario con más de un campo controla sus
@@ -297,6 +325,7 @@ hacer). La tabla cubre los motivos reales del producto:
 | Antes de buscar | `app/(app)/anadir/anime` sin `?q=` | «Busca un anime por su título» | Ninguna — la acción es el propio campo, que está justo encima |
 | Búsqueda de catálogo sin resultados | `app/(app)/anadir/anime` con `?q=` | «No hay resultados para "‹término›"» (`size="inline"`) | Ninguna aparte del enlace a alta manual, que ya vive al pie de la pantalla |
 | Nada en curso | `home-dashboard.tsx` | «Nada en curso todavía» | Enlace a `/biblioteca` |
+| El carril de «en curso» falló | `home-dashboard.tsx` con `inProgressError` | La copia de `normalizeError` | `ErrorState size="section"` — nunca el vacío de arriba: «no tienes nada empezado» y «no hemos podido preguntarlo» son cosas distintas |
 | Sin recomendaciones / sin actividad | `home-dashboard.tsx`, `activity-section.tsx`/`recommendations-section.tsx` de perfil | «Sin recomendaciones pendientes», «Sin actividad reciente» | Ninguna — nadie puede generar una recomendación o actividad ajena desde aquí |
 | Biblioteca del perfil vacía, perfil propio | `library-section.tsx` con `canAdd` | «Sin favoritos todavía» | «Añadir una obra» — abre el selector de categoría (`useAddCategoryModal`) |
 | Biblioteca del perfil vacía, perfil ajeno | `library-section.tsx` sin `canAdd` (`FriendProfileView` nunca lo pasa) | «Sin favoritos todavía» | Ninguna — un perfil ajeno es de solo lectura, nunca ofrece una acción de escritura |

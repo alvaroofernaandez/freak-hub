@@ -1,21 +1,21 @@
 "use client";
 
-import type { Work } from "@/features/library/lib/work";
+import type { LibraryItem } from "@/features/library/lib/library-item";
 import { WorkCard } from "@/features/library/ui/work-card";
 import { useAddCategoryModal } from "@/shared/ui/add-category-modal";
 import { EmptyState } from "@/shared/ui/empty-state";
 
 type LibrarySectionProps = {
-  works: Work[];
+  items: LibraryItem[];
   /** Only the profile owner can add a work from their own empty library —
    * never shown on a friend's read-only profile (docs/states.md). */
   canAdd?: boolean;
 };
 
 /** The profile's public library: favourites only (docs/screens.md, ADR-0009). */
-export function LibrarySection({ works, canAdd = false }: LibrarySectionProps) {
+export function LibrarySection({ items, canAdd = false }: LibrarySectionProps) {
   const { open } = useAddCategoryModal();
-  const favourites = works.filter((work) => work.isFavourite);
+  const favourites = items.filter((item) => item.isFavourite);
 
   if (favourites.length === 0) {
     return (
@@ -39,8 +39,8 @@ export function LibrarySection({ works, canAdd = false }: LibrarySectionProps) {
 
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-      {favourites.map((work) => (
-        <WorkCard key={work.id} work={work} />
+      {favourites.map((item) => (
+        <WorkCard key={item.id} item={item} />
       ))}
     </div>
   );

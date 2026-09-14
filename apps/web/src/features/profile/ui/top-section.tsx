@@ -1,33 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import type { Work } from "@/features/library/lib/work";
+import type { LibraryItem } from "@/features/library/lib/library-item";
 import { WorkCard } from "@/features/library/ui/work-card";
-import {
-  CATEGORY_LABELS,
-  CATEGORY_ORDER,
-  type CategoryId,
-} from "@/shared/ui/category-stripe";
+import type { WorkCategory } from "@/shared/api/types";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Select } from "@/shared/ui/select";
 
 type TopSectionProps = {
-  works: Work[];
+  items: LibraryItem[];
 };
 
 /** The profile's best-rated works, filterable by category (docs/screens.md, ADR-0010). */
-export function TopSection({ works }: TopSectionProps) {
-  const [category, setCategory] = useState<CategoryId | "all">("all");
+export function TopSection({ items }: TopSectionProps) {
+  const [category, setCategory] = useState<WorkCategory | "all">("all");
 
   const categoriesWithRatedWorks = CATEGORY_ORDER.filter((id) =>
-    works.some(
-      (work) => work.category === id && typeof work.rating === "number",
+    items.some(
+      (item) => item.category === id && typeof item.rating === "number",
     ),
   );
 
-  const top = works
-    .filter((work) => typeof work.rating === "number")
-    .filter((work) => category === "all" || work.category === category)
+  const top = items
+    .filter((item) => typeof item.rating === "number")
+    .filter((item) => category === "all" || item.category === category)
     .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
 
   return (
@@ -37,7 +34,7 @@ export function TopSection({ works }: TopSectionProps) {
         <Select
           label="Categoría"
           value={category}
-          onValueChange={(value) => setCategory(value as CategoryId | "all")}
+          onValueChange={(value) => setCategory(value as WorkCategory | "all")}
           options={[
             { value: "all", label: "Todas" },
             ...categoriesWithRatedWorks.map((id) => ({
@@ -50,8 +47,8 @@ export function TopSection({ works }: TopSectionProps) {
 
       {top.length > 0 ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {top.map((work) => (
-            <WorkCard key={work.id} work={work} />
+          {top.map((item) => (
+            <WorkCard key={item.id} item={item} />
           ))}
         </div>
       ) : (

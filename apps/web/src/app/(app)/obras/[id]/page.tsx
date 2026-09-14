@@ -1,18 +1,72 @@
+import { auth } from "@clerk/nextjs/server";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { toLibraryItem } from "@/features/library/lib/library-item";
+import { EntrySummary } from "@/features/library/ui/entry-summary";
+import { WorkPageHeader } from "@/features/library/ui/work-page-header";
+import type { LibraryEntry } from "@/shared/api/types";
+import { loadResource } from "@/shared/lib/load-resource";
+import { SetActiveCategory } from "@/shared/ui/active-category";
+import { AccountPendingState } from "@/shared/ui/state/account-pending-state";
+import { ErrorState } from "@/shared/ui/state/error-state";
+import { SessionExpiredState } from "@/shared/ui/state/session-expired-state";
+
+export const metadata: Metadata = { title: "Obra" };
 
 type WorkPageProps = {
   params: Promise<{ id: string }>;
 };
 
 /**
- * A work's own page (docs/screens.md, ADR-0006, ADR-0007). There is no
- * library endpoint yet (docs/roadmap.md), so there is no way to know
- * whether any given id is a real entry: every id is treated as not found,
- * with `notFound()`, rather than faking a work page for it. This is
- * deliberately a hard 404 and not an empty state, because an empty state
- * would claim the page exists with nothing in it, which isn't true either.
+ * One library entry's own page (docs/screens.md, ADR-0006, ADR-0007).
+ *
+ * The `[id]` segment is the **entry's** id, not the work's: the page reads
+ * `GET /v1/library/{id}`, which is the caller's own entry with its `Work`
+ * embedded. Until the library endpoint was consumed this called `notFound()`
+ * for every id, because no id could be confirmed real.
+ *
+ * `library_entry_not_found` is now a real 404. The contract answers it both
+ * for an entry that never existed and for one belonging to somebody else, on
+ * purpose — a `403` would confirm the entry exists, and whose library holds
+ * what is nobody else's business. Every other failure is a state on the page,
+ * never a 404: "the server is down" and "this does not exist" are different
+ * things to tell somebody.
  */
 export default async function WorkPage({ params }: WorkPageProps) {
-  await params;
-  notFound();
+  const { id } = await params;
+  const { getToken } = await auth();
+  const token = await getToken();
+
+  const state = await loadResource<LibraryEntry>(`/v1/library/${id}`, {
+    token,
+    resource: "esta obra",
+    route: "/obras/[id]",
+  });
+
+  if (state.status === "error") {
+    if (state.error.kind === "session_expired") {
+      return <SessionExpiredState size="page" redirectPath={`/obras/${id}`} />;
+    }
+    // `unknown_identity` shares this endpoint's 404, and `normalizeError`
+    // already tells the two apart: the session is real, the member row is
+    // just not there yet.
+    if (state.error.kind === "account_pending") {
+      return <AccountPendingState size="page" />;
+    }
+    if (state.error.kind === "not_found") {
+      notFound();
+    }
+
+    return <ErrorState error={state.error} size="page" />;
+  }
+
+  const item = toLibraryItem(state.data);
+
+  return (
+    <section className="space-y-[30px]">
+      <SetActiveCategory category={item.category} />
+      <WorkPageHeader item={item} />
+      <EntrySummary item={item} />
+    </section>
+  );
 }

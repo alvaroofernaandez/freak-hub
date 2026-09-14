@@ -46,11 +46,17 @@ decisiones en vez de replantearlas, así que no bloquea al dominio.
    progreso, valorarlo y borrarlo, y hay una prueba de extremo a extremo contra
    Postgres real que lo recorre entero.
 
-   **Falta que la web lo consuma.** Hoy `biblioteca/[categoria]` pasa una lista
-   vacía a mano, `/obras/[id]` responde 404 siempre y el inicio solo pinta
-   estados vacíos. Ese cableado es lo siguiente, y es también lo que permitirá
-   comparar contra la maqueta las seis pantallas que la épica #17 dejó sin
-   verificar por no tener datos que pintar.
+   **La web ya lee.** El camino de lectura de la issue #73 está cableado:
+   `/biblioteca` cuenta de verdad, `/biblioteca/[categoria]` lista las entradas
+   reales —y con ellas aparecen por fin los chips, la búsqueda y el orden que
+   entregó la #24—, `/obras/[id]` carga la entrada y devuelve un 404 solo
+   cuando la API dice `library_entry_not_found`, y el carril «Sigue donde lo
+   dejaste» de `/inicio` sale de `?status=in_progress`. Las recomendaciones y
+   la actividad del inicio siguen vacías porque no tienen endpoint.
+
+   **Falta el camino de escritura**: el alta manual (`POST /v1/works` y después
+   `POST /v1/library`) y las mutaciones desde la ficha (`PATCH`/`DELETE`). Es
+   la segunda mitad de la #73.
 2. **Búsqueda e importación desde AniList**, con alta manual como alternativa.
    La web ya busca anime de verdad contra AniList desde `/anadir/anime` (épica
    #20), con un cliente deliberadamente desechable: lo retira el día que la API

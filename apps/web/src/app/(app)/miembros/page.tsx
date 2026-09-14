@@ -5,10 +5,8 @@ import {
   MembersDirectory,
 } from "@/features/members/ui/members-directory";
 import type { GroupInvitationPage, MemberPage } from "@/shared/api/types";
-import { normalizeError } from "@/shared/errors/normalize-error";
-import { reportError } from "@/shared/errors/report-error";
 import type { NormalizedAppError } from "@/shared/errors/types";
-import { apiFetch } from "@/shared/lib/api-client";
+import { loadResource } from "@/shared/lib/load-resource";
 import { ErrorState } from "@/shared/ui/state/error-state";
 import { SessionExpiredState } from "@/shared/ui/state/session-expired-state";
 
@@ -19,31 +17,6 @@ export const metadata: Metadata = { title: "Grupo" };
  * page still says so if `next_cursor` remains non-null rather than
  * truncating in silence (ADR-0014). */
 const PAGE_LIMIT = 100;
-
-/** Both requests here either succeed or fail outright — neither has an
- * "empty" outcome distinct from `data` being an empty list — so this omits
- * `ViewState`'s third `empty` branch rather than reusing it unnarrowed. */
-type LoadResult<T> =
-  | { status: "ready"; data: T }
-  | { status: "error"; error: NormalizedAppError };
-
-async function fetchResource<T>(
-  path: string,
-  token: string | null,
-  resource: string,
-): Promise<LoadResult<T>> {
-  try {
-    return { status: "ready", data: await apiFetch<T>(path, { token }) };
-  } catch (cause) {
-    const normalized = normalizeError(cause, {
-      resource,
-      operation: "load",
-      scope: "page",
-    });
-    reportError(normalized, { route: "/miembros" });
-    return { status: "error", error: normalized };
-  }
-}
 
 /**
  * Who is inside the group, and who has been invited but has not walked in yet
@@ -59,15 +32,14 @@ export default async function MembersPage() {
   const token = await getToken();
 
   const [rosterState, invitationsState, you] = await Promise.all([
-    fetchResource<MemberPage>(
-      `/v1/members?limit=${PAGE_LIMIT}`,
+    loadResource<MemberPage>(`/v1/members?limit=${PAGE_LIMIT}`, {
       token,
-      "el grupo",
-    ),
-    fetchResource<GroupInvitationPage>(
+      resource: "el grupo",
+      route: "/miembros",
+    }),
+    loadResource<GroupInvitationPage>(
       `/v1/invitations/group?limit=${PAGE_LIMIT}`,
-      token,
-      "las invitaciones",
+      { token, resource: "las invitaciones", route: "/miembros" },
     ),
     currentUser(),
   ]);

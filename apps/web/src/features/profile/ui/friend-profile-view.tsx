@@ -36,9 +36,9 @@ export function FriendProfileView({
         visibleSections={SECTION_ORDER}
         defaultSection="library"
         sections={{
-          library: <LibrarySection works={[]} />,
+          library: <LibrarySection items={[]} />,
           activity: <ActivitySection stats={activityStatsByCategory([])} />,
-          top: <TopSection works={[]} />,
+          top: <TopSection items={[]} />,
           recommendations: (
             <RecommendationsSection
               recommendations={recommendationsForMember([], username)}

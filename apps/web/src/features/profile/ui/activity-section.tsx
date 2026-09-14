@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import type { CategoryActivityStat } from "@/features/profile/lib/activity-stats";
+import type { WorkCategory } from "@/shared/api/types";
 import { AnimatedNumber } from "@/shared/ui/animated-number";
-import { CATEGORY_LABELS, type CategoryId } from "@/shared/ui/category-stripe";
+import { CATEGORY_LABELS } from "@/shared/ui/category-stripe";
 import { EmptyState } from "@/shared/ui/empty-state";
 import { Select } from "@/shared/ui/select";
 
@@ -13,7 +14,7 @@ type ActivitySectionProps = {
 
 /** Personal, non-comparative stats per category (ADR-0010): bare div bars, no charting library. */
 export function ActivitySection({ stats }: ActivitySectionProps) {
-  const [category, setCategory] = useState<CategoryId | "all">("all");
+  const [category, setCategory] = useState<WorkCategory | "all">("all");
 
   const hasActivity = stats.some(
     (stat) => stat.completed > 0 || stat.inProgress > 0,
@@ -44,7 +45,7 @@ export function ActivitySection({ stats }: ActivitySectionProps) {
         <Select
           label="Categoría"
           value={category}
-          onValueChange={(value) => setCategory(value as CategoryId | "all")}
+          onValueChange={(value) => setCategory(value as WorkCategory | "all")}
           options={[
             { value: "all", label: "Todas" },
             ...stats.map((stat) => ({

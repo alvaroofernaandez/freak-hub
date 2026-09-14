@@ -3,7 +3,7 @@ import { ResourceUnavailableState } from "@/shared/ui/state/resource-unavailable
 
 export const metadata: Metadata = { title: "Categoría no encontrada" };
 
-/** `isCategoryId` in `page.tsx` calls `notFound()` for a `categoria` segment
+/** `isWorkCategory` in `page.tsx` calls `notFound()` for a `categoria` segment
  * that is not one of the six known categories. */
 export default function NotFound() {
   return (

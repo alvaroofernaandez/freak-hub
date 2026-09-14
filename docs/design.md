@@ -1154,3 +1154,59 @@ Definition of Done de la épica #18.
   que el color de categoría nunca va solo se cumple en la página, no en la
   banda. Ver
   [La moldura bajo la navbar: solo color](#la-moldura-bajo-la-navbar-solo-color).
+- **2026-09-14** · **El progreso deja de dibujarse como porcentaje cuando no lo
+  es.** `LibraryEntry.progress` del contrato es un recuento absoluto en la
+  unidad de la categoría —episodios, capítulos, horas, partidas— y no un
+  0-100; `ProgressBar` sí toma 0-100. Hasta ahora el carril de inicio le
+  pasaba el número tal cual, lo que con datos reales habría pintado «12
+  episodios vistos» como una barra al 12 %: una cifra que la API nunca
+  mandó. A partir de ahora la barra solo aparece cuando hay un total con el
+  que dividir (hoy, `metadata.episodes` de un anime) y siempre acompañada de
+  la cifra en JetBrains Mono. Sin total, la cifra sola es toda la respuesta.
+  La función es `progressPercentage` en
+  `apps/web/src/features/library/lib/library-item.ts`.
+- **2026-09-14** · **Se recupera la línea de progreso de la maqueta**, que
+  estaba sin dibujar porque no había nada que contar: `{{ w.prog }}` bajo cada
+  tarjeta de la rejilla (§3) y `◐ {{ c.prog }}` en las tarjetas del carril de
+  inicio (§1). En `--ink-muted`, **no** en el `--ink-faint` que usa la maqueta:
+  ese token se queda entre **2,52:1 y 3,07:1** según el fondo —3,07 sobre
+  `--ground`, 2,85 sobre `--surface`, 2,52 sobre `--surface-raised`, la tabla
+  medida de [Contraste: `--ink-faint` no es para texto](#contraste---ink-faint-no-es-para-texto)—
+  y ninguna de las tres superficies llega al 4,5:1 que pide el texto normal.
+  Las líneas nuevas caen sobre `--surface` (tarjetas de obra) y sobre
+  `--ground` (el recuento junto al `<h1>`), así que fallan las dos;
+  `app/token-contrast.test.ts` prohíbe el token en todo el repositorio. Misma decisión para el recuento «N obras» que
+  la maqueta pone junto al `<h1>` de la categoría (§3), que ahora existe.
+- **2026-09-14** · **«Tu entrada» de la ficha de obra (§4 de la maqueta) se
+  dibuja en solo lectura.** La maqueta la enseña como controles con un botón
+  Guardar; el camino de escritura todavía no existe, y un chip de estado que
+  parece pulsable y no cambia nada es la misma afordancia falsa por la que se
+  retiró el «+1» del carril de inicio. Los valores se muestran, los controles
+  llegan con la segunda mitad de la issue #73. La nota lleva su distintivo de
+  «Nota pública para el grupo» desde ya (ADR-0005): quien la escriba tiene que
+  saber quién la lee antes de escribirla, no después.
+- **2026-09-14** · **La línea de metadatos de la ficha se rehace con lo que el
+  contrato sabe.** Era «2019 · 40–70 min · 1–5 jugadores · Stonemaier Games»,
+  cuatro campos de un tipo escrito a mano que el contrato no tiene. Ahora es
+  el año y, para anime, el número de episodios y la temporada
+  (`metadata.episodes` / `metadata.season`). La temporada llega como la
+  etiqueta su catálogo (`"2024-spring"`): se traduce el nombre y se tira el
+  año, que ya es el primer elemento de la misma línea; lo que no encaje en esa
+  forma se muestra tal cual en vez de destrozarlo. «Fuente:» sobrevive con el
+  `enum` real `WorkSource`, y desaparece para `manual`, donde no hay catálogo
+  al que dar crédito.
+- **2026-09-14** · **Una cifra junto a un `<h1>` se lee como el total, así que
+  deja de serlo cuando no lo es.** El recuento de `/biblioteca/[categoria]`
+  decía «100 obras» cuando `next_cursor` no era nulo, con el aviso de «hay más
+  obras de las que caben» doscientos píxeles más abajo. Ese aviso califica la
+  **lista**; la cifra del encabezado no la lee nadie con esa nota delante.
+  Ahora dice «más de 100 obras». Es el mismo fallo que el lobby ya tenía
+  resuelto —allí el aviso reencuadra las cifras de las seis tarjetas— y que
+  esta misma regla describe en `docs/states.md`: una cifra a medias no se lee
+  como incompleta, se lee como falsa.
+- **2026-09-14** · **El carril de «Sigue donde lo dejaste» avisa cuando está
+  truncado.** Es la única lista paginada de la aplicación que **no tiene borde
+  inferior**: al desplazarse en horizontal, la entrada 101 no se corta a la
+  vista, simplemente no existe. Un vertical se delata solo al llegar al final;
+  este no, así que el aviso es más necesario aquí que en las dos pantallas
+  donde ya estaba.
