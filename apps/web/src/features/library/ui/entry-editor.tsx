@@ -223,7 +223,12 @@ export function EntryEditor({ item, children }: EntryEditorProps) {
 
       <div className="mt-[18px] space-y-[18px]">
         <div className="space-y-2">
-          <p className={FIELD_LABEL_CLASS}>Estado</p>
+          {/* `aria-hidden`: `RadioChips` already names the group "Estado"
+              for assistive tech, and announcing it twice is noise. This is
+              the visible half of the same label. */}
+          <p aria-hidden="true" className={FIELD_LABEL_CLASS}>
+            Estado
+          </p>
           <RadioChips
             label="Estado"
             value={draft.status}

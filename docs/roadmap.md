@@ -54,9 +54,16 @@ decisiones en vez de replantearlas, así que no bloquea al dominio.
    dejaste» de `/inicio` sale de `?status=in_progress`. Las recomendaciones y
    la actividad del inicio siguen vacías porque no tienen endpoint.
 
-   **Falta el camino de escritura**: el alta manual (`POST /v1/works` y después
-   `POST /v1/library`) y las mutaciones desde la ficha (`PATCH`/`DELETE`). Es
-   la segunda mitad de la #73.
+   **Y la web ya escribe.** El alta manual crea la obra (`POST /v1/works`) y
+   la añade a la biblioteca (`POST /v1/library`), con el campo de estado que
+   el contrato exige; desde la ficha se cambian estado, progreso, valoración,
+   favorito y propiedad (`PATCH /v1/library/{id}`, enviando solo lo que
+   cambia) y se quita la entrada (`DELETE`). Cierra la issue #73.
+
+   **Falta**: la nota y las dos fechas de la entrada, que el mismo `PATCH`
+   acepta y que la ficha sigue mostrando en solo lectura, y añadir una obra
+   directamente desde un resultado de AniList, que necesita una ruta de
+   importación en la API y es un vertical propio.
 2. **Búsqueda e importación desde AniList**, con alta manual como alternativa.
    La web ya busca anime de verdad contra AniList desde `/anadir/anime` (épica
    #20), con un cliente deliberadamente desechable: lo retira el día que la API

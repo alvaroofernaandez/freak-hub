@@ -438,6 +438,7 @@ sin un segundo sistema de color compitiendo con el de aquí.
 | Modal | `@radix-ui/react-dialog` | `shared/ui/dialog.tsx` |
 | Casilla | `@radix-ui/react-checkbox` | `shared/ui/checkbox.tsx` |
 | Desplegable de opciones | `@radix-ui/react-select` | `shared/ui/select.tsx` |
+| Elección única en fichas | `@radix-ui/react-radio-group` | `shared/ui/radio-chips.tsx` |
 | Menú de sesión | `@radix-ui/react-dropdown-menu` | `features/members/ui/user-menu.tsx` |
 | Reordenar arrastrando | `@dnd-kit/*` | `features/profile/ui/edit-sections-panel.tsx` |
 
@@ -751,6 +752,25 @@ pasada manual antes de dar la pantalla por terminada, igual que fija la
 Definition of Done de la épica #18.
 
 ## Registro de decisiones
+
+- **2026-09-14** · «Tu entrada» deja de ser de solo lectura. Los seis estados
+  pasan a ser una elección única sobre `@radix-ui/react-radio-group`
+  (`shared/ui/radio-chips.tsx`), no seis botones con `aria-pressed`: una fila
+  de filtros son varios interruptores independientes, esto es un valor con
+  varios candidatos, y la primitiva es la que trae el rol, el tabulador único
+  con flechas y las opciones deshabilitadas.
+- **2026-09-14** · Un estado al que no se puede llegar se pinta **apagado, no
+  se oculta**, y la razón se escribe debajo en palabras. La forma del ciclo de
+  vida es información; una lista que encoge sola no enseña nada. Ver
+  [ADR-0016](decisions/0016-maquina-de-estados-en-la-interfaz.md).
+- **2026-09-14** · La ficha guarda con **un solo botón** para todo el panel,
+  como dibuja la maqueta, y no con una escritura por control. Motivo: `PATCH`
+  distingue ausente de `null` y de valor, así que lo que se envía es un
+  diferencial contra lo guardado, y un diferencial necesita un momento en el
+  que cerrarse.
+- **2026-09-14** · Quitar una entrada pide confirmación en el `Dialog` de
+  siempre y luego **sale de la página**. `DELETE` no es idempotente: repetirlo
+  da 404, así que no hay «vuelve a intentarlo» al que volver.
 
 - **2026-09-09** · Estados de invitación con marca + palabra, y contorno
   discontinuo para lo pendiente. Extiende la regla de "el estado no usa color".
@@ -1177,12 +1197,17 @@ Definition of Done de la épica #18.
   `--ground` (el recuento junto al `<h1>`), así que fallan las dos;
   `app/token-contrast.test.ts` prohíbe el token en todo el repositorio. Misma decisión para el recuento «N obras» que
   la maqueta pone junto al `<h1>` de la categoría (§3), que ahora existe.
-- **2026-09-14** · **«Tu entrada» de la ficha de obra (§4 de la maqueta) se
-  dibuja en solo lectura.** La maqueta la enseña como controles con un botón
-  Guardar; el camino de escritura todavía no existe, y un chip de estado que
-  parece pulsable y no cambia nada es la misma afordancia falsa por la que se
-  retiró el «+1» del carril de inicio. Los valores se muestran, los controles
-  llegan con la segunda mitad de la issue #73. La nota lleva su distintivo de
+- **2026-09-14** · ~~**«Tu entrada» de la ficha de obra (§4 de la maqueta) se
+  dibuja en solo lectura.**~~ **Superada el 2026-09-14** por la segunda mitad
+  de la issue #73, que trajo el camino de escritura: estado, progreso,
+  valoración, favorito y propiedad son controles, y la entrada se puede
+  quitar. Las fechas y la nota siguen en solo lectura, por el mismo motivo que
+  valía para todo el panel: el `PATCH` las acepta, pero cablearlas queda fuera
+  de ese cambio, y como texto dicen un dato mientras que como campos muertos
+  mentirían. El razonamiento original se conserva porque sigue siendo la regla
+  —un chip de estado que parece pulsable y no cambia nada es la misma
+  afordancia falsa por la que se retiró el «+1» del carril de inicio— y es lo
+  que decidió qué se cableaba y qué no. La nota lleva su distintivo de
   «Nota pública para el grupo» desde ya (ADR-0005): quien la escriba tiene que
   saber quién la lee antes de escribirla, no después.
 - **2026-09-14** · **La línea de metadatos de la ficha se rehace con lo que el

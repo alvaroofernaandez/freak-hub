@@ -25,3 +25,4 @@ qué se decidió algo vale tanto como la decisión.
 | [0013](0013-componentes-de-cult-ui.md) | Componentes de Cult UI, copiados y adaptados a mano | Aceptada |
 | [0014](0014-sistema-de-estados-y-errores.md) | Sistema de estados y contrato de errores de extremo a extremo | Aceptada |
 | [0015](0015-busqueda-sin-acentos.md) | La búsqueda de obras depende de `unaccent` y `pg_trgm` | Aceptada |
+| [0016](0016-maquina-de-estados-en-la-interfaz.md) | La interfaz repite la máquina de estados en vez de descubrirla por el 422 | Aceptada |
