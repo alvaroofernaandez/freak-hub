@@ -83,6 +83,12 @@ var errorRules = []errorRule{
 		"El estado no es uno de los declarados."},
 	{library.ErrInvalidRating, http.StatusBadRequest, httpx.CodeInvalidPayload,
 		"La valoración debe estar entre 1 y 10."},
+	// Unreachable over HTTP today, and listed anyway. Every library route
+	// that needs an owner gets it from resolveCaller, which either answers a
+	// real member id or has already written a 404 — so nothing can hand the
+	// domain a nil member. It is here because the mapping is meant to be
+	// exhaustive: the day a route takes the member from somewhere else, this
+	// is a 401 rather than a 500 nobody predicted.
 	{library.ErrMissingMember, http.StatusUnauthorized, httpx.CodeUnauthorized,
 		"No hay ningún miembro identificado para esta operación."},
 	{library.ErrEntryNotFound, http.StatusNotFound, httpx.CodeLibraryEntryNotFound,
