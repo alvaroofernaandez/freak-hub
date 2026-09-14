@@ -23,7 +23,16 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? "github" : "html",
+  /*
+   * The HTML report is emitted in CI too, not just locally. The "github"
+   * reporter only writes inline annotations, and the signed-in step is
+   * advisory: without a report to download, a journey that breaks leaves an
+   * amber step and nothing to read, which is how a suite rots unnoticed.
+   * `test-results/` is deliberately NOT what gets uploaded — the setup project
+   * keeps CI's two retries, and a retry trace would carry the sign-in exchange
+   * and the session cookie.
+   */
+  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "html",
   globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL,
@@ -45,10 +54,16 @@ export default defineConfig({
      * Clerk outage, a missing secret or a fork's pull request cannot stop it
      * from running — it is the suite that catches a protected route going
      * public, which is the worst regression this product can ship.
+     *
+     * Defined by what it excludes, never by a list of filenames. A project that
+     * matched only `auth.spec.ts` would silently drop every perimeter spec
+     * written after it: a new `biblioteca.spec.ts` would belong to no project,
+     * be collected by none, and the run would still print green. With eight
+     * authenticated routes arriving in epic #10, that is not a hypothetical.
      */
     {
       name: "signed-out",
-      testMatch: /auth\.spec\.ts$/,
+      testIgnore: /\.signed-in\.spec\.ts$/,
       use: { ...chrome },
     },
     /*
