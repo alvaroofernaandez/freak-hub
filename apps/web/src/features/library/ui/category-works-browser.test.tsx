@@ -255,12 +255,17 @@ describe("CategoryWorksBrowser", () => {
     expect(titles).toEqual(["Diez", "Ocho", "Sin nota"]);
   });
 
-  it("renders works in a six-column grid on desktop", () => {
+  it("follows the three artboards: two columns, then three, then six", () => {
     render(<CategoryWorksBrowser works={WORKS} category="anime" />);
 
-    expect(screen.getByTestId("category-works-grid")).toHaveClass(
-      "lg:grid-cols-6",
-    );
+    /*
+     * The mockup draws `1fr 1fr` at 390 px, `repeat(3,1fr)` at 1024 px and
+     * `repeat(6,1fr)` at 1440 px. Six columns used to start at `lg:`
+     * (1024 px), so the tablet artboard's width rendered the desktop grid
+     * under a tablet header (issue #63).
+     */
+    const grid = screen.getByTestId("category-works-grid");
+    expect(grid).toHaveClass("grid-cols-2", "md:grid-cols-3", "xl:grid-cols-6");
   });
 
   it("cascades cards in, each a beat after the last", () => {

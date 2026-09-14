@@ -46,17 +46,31 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
         Saltar al contenido
       </a>
 
+      {/*
+       * Present at every width. It used to be `hidden md:flex`, which left a
+       * 1 px header on a phone: no wordmark, no badge and no session menu, so
+       * signing out was unreachable there (issue #63). Below `md` it keeps
+       * only what the `(móvil)` artboard draws — wordmark, badge, avatar —
+       * and hands the destinations to the bottom bar.
+       *
+       * The metrics follow the three artboards: 56/16/12 at 390 px,
+       * 58/22/22 at 1024 px and 64/28/32 at 1440 px. Desktop starts at `xl`
+       * (1280 px) and not at `lg` (1024 px), because 1024 px *is* the tablet
+       * artboard: the tablet variant never rendered at the width it was drawn
+       * for. The whole app follows that rule now, and
+       * `app/desktop-breakpoint.test.ts` keeps it that way.
+       */}
       <nav
         aria-label="Navegación principal"
-        className="mx-auto hidden max-w-5xl items-center justify-between gap-5 px-[22px] md:flex md:h-[58px] lg:h-16 lg:gap-8 lg:px-7"
+        className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 md:h-[58px] md:gap-[22px] md:px-[22px] xl:h-16 xl:gap-8 xl:px-7"
       >
         <Link
           href="/inicio"
-          className="font-display text-lg transition-opacity duration-150 hover:opacity-80"
+          className="font-display text-lg whitespace-nowrap transition-opacity duration-150 hover:opacity-80"
         >
           Freak Hub
         </Link>
-        <div className="flex items-center gap-5 lg:gap-6">
+        <div className="hidden items-center gap-5 md:flex xl:gap-6">
           {navLinks.map(({ href, label, Icon }) => (
             <Link
               key={href}
@@ -76,11 +90,13 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
             </Link>
           ))}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-0.5 md:gap-3 xl:gap-4">
+          {/* The phone reaches "Añadir" through the centre button of the
+              bottom bar, so the header does not repeat it there. */}
           <button
             type="button"
             onClick={openAddCategoryModal}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
+            className="hidden items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 md:inline-flex"
           >
             <Plus size={16} aria-hidden="true" />
             Añadir
@@ -99,9 +115,18 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
                   : `${pendingRecommendations} recomendaciones pendientes`
               }
               aria-current={isCurrent("/recomendaciones") ? "page" : undefined}
-              className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium text-accent-ink transition-opacity duration-150 hover:opacity-90"
+              /*
+               * The tap area is the 44 px box of the `(móvil)` artboard, not
+               * the pill: 24 px clears WCAG 2.2 for a pointer, not for a
+               * thumb. Above `md` the box collapses back to the pill so the
+               * header keeps the spacing the tablet and desktop artboards
+               * draw.
+               */
+              className="flex min-h-11 min-w-11 items-center justify-center transition-opacity duration-150 hover:opacity-90 md:min-h-0 md:min-w-0"
             >
-              {pendingRecommendations}
+              <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium text-accent-ink">
+                {pendingRecommendations}
+              </span>
             </Link>
           ) : null}
           {userSlot}

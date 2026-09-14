@@ -195,7 +195,7 @@ export function CategoryWorksBrowser({
       {filtered.length > 0 ? (
         <div
           data-testid="category-works-grid"
-          className="grid grid-cols-2 gap-[14px] md:grid-cols-3 md:gap-4 lg:grid-cols-6 lg:gap-[18px]"
+          className="grid grid-cols-2 gap-[14px] md:grid-cols-3 md:gap-4 xl:grid-cols-6 xl:gap-[18px]"
         >
           <AnimatePresence mode="popLayout">
             {filtered.map((work, index) => (

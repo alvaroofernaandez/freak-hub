@@ -9,7 +9,10 @@ import { join } from "node:path";
  * Implemented with node:fs rather than by shelling out to ripgrep: a guard
  * that depends on a tool being installed fails for the wrong reason on CI.
  */
-export function sourceFilesContaining(needle: string, root: string): string[] {
+export function sourceFilesContaining(
+  needle: string | RegExp,
+  root: string,
+): string[] {
   const hits: string[] = [];
 
   function walk(dir: string): void {
@@ -31,7 +34,13 @@ export function sourceFilesContaining(needle: string, root: string): string[] {
         continue;
       }
 
-      if (readFileSync(path, "utf8").includes(needle)) {
+      const source = readFileSync(path, "utf8");
+      const found =
+        typeof needle === "string"
+          ? source.includes(needle)
+          : needle.test(source);
+
+      if (found) {
         hits.push(path);
       }
     }

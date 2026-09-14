@@ -71,7 +71,15 @@ colores del roster (ver [design.md](design.md#motivo-recurrente-la-moldura)); el
 ensancha cuando estás dentro de `/biblioteca/[categoria]` o de una ficha.
 
 **Barra inferior (móvil):** Inicio · Biblioteca · Añadir (centro) ·
-Actividad · Recomendaciones. Grupo y perfil propio pasan al header.
+Actividad · Recomendaciones.
+
+La cabecera **no desaparece en el móvil**: se queda con el wordmark, el badge
+de pendientes y el menú de usuario, que es lo que dibuja el artboard `(móvil)`
+de la maqueta. Lo que baja a la barra inferior son los destinos, no la
+identidad. Desde ese menú se llega al perfil propio, a invitar, a ajustes, al
+tema y a cerrar sesión —que no tiene ninguna otra vía en toda la interfaz—, y
+por debajo de 768 px también a Grupo, que es la entrada que la barra inferior
+cedió a Recomendaciones.
 
 **El único badge de notificación de toda la app** es el contador de
 recomendaciones recibidas pendientes. Ningún otro contador es comparativo

@@ -31,6 +31,27 @@ function renderWithAddCategoryModal() {
   );
 }
 
+/**
+ * jsdom has neither layout nor media queries, so "reachable on a phone" is
+ * read off the utility classes: an element is out of reach below `md` when it,
+ * or anything between it and the header, is `hidden` at the base breakpoint.
+ */
+function hiddenBelowMd(element: HTMLElement, header: HTMLElement): boolean {
+  let node: HTMLElement | null = element;
+
+  while (node) {
+    if (node.classList.contains("hidden")) {
+      return true;
+    }
+    if (node === header) {
+      return false;
+    }
+    node = node.parentElement;
+  }
+
+  return false;
+}
+
 describe("Navbar", () => {
   afterEach(() => {
     offlineNoticeVisible.mockReturnValue(false);
@@ -152,6 +173,19 @@ describe("Navbar", () => {
     expect(wordmark).toHaveClass("font-display");
   });
 
+  it("never lets the wordmark wrap, however tight the row gets", () => {
+    render(<Navbar />);
+
+    /*
+     * Measured at 768 px before this: the row needed 811 px, so "FREAK HUB"
+     * broke onto a second line and pushed the session menu 16 px past the
+     * right edge of the viewport (issue #63).
+     */
+    expect(screen.getByRole("link", { name: "Freak Hub" })).toHaveClass(
+      "whitespace-nowrap",
+    );
+  });
+
   it("renders the four top-level links with their href", () => {
     render(<Navbar />);
 
@@ -260,5 +294,78 @@ describe("Navbar", () => {
     expect(
       screen.getByRole("dialog", { name: "¿Qué quieres añadir?" }),
     ).toBeInTheDocument();
+  });
+  /*
+   * Below 768 px the whole top navigation used to be `hidden md:flex`, which
+   * left a 1 px header: no wordmark, no badge and — the part that hurt — no
+   * session menu, so there was no way to sign out from a phone (issue #63).
+   */
+  describe("on a phone", () => {
+    it("keeps the wordmark, the pending badge and the session menu within reach", () => {
+      render(
+        <Navbar
+          pendingRecommendations={3}
+          userSlot={<button type="button">Tu sesión</button>}
+        />,
+      );
+      const header = screen.getByRole("banner");
+
+      for (const element of [
+        screen.getByRole("link", { name: "Freak Hub" }),
+        screen.getByRole("link", { name: "3 recomendaciones pendientes" }),
+        screen.getByRole("button", { name: "Tu sesión" }),
+      ]) {
+        expect(hiddenBelowMd(element, header)).toBe(false);
+      }
+    });
+
+    it("leaves the top-level links and the add button to the bottom bar, as the mockup does", () => {
+      render(<Navbar />);
+      const header = screen.getByRole("banner");
+      const topNav = screen.getByRole("navigation", {
+        name: /navegación principal/i,
+      });
+
+      for (const { label } of navLinks) {
+        expect(
+          hiddenBelowMd(
+            within(topNav).getByRole("link", { name: label }),
+            header,
+          ),
+        ).toBe(true);
+      }
+      expect(
+        hiddenBelowMd(
+          within(topNav).getByRole("button", { name: /añadir/i }),
+          header,
+        ),
+      ).toBe(true);
+    });
+
+    it("gives the pending badge a thumb-sized target, like every other mobile destination", () => {
+      render(<Navbar pendingRecommendations={3} />);
+
+      expect(
+        screen.getByRole("link", { name: "3 recomendaciones pendientes" }),
+      ).toHaveClass("min-h-11", "min-w-11");
+    });
+  });
+
+  it("keeps the tablet metrics at 1024 px, the width of the tablet artboard", () => {
+    render(<Navbar />);
+
+    const topNav = screen.getByRole("navigation", {
+      name: /navegación principal/i,
+    });
+
+    expect(topNav).toHaveClass("h-14", "px-4", "gap-3");
+    expect(topNav).toHaveClass("md:h-[58px]", "md:px-[22px]", "md:gap-[22px]");
+    expect(topNav).toHaveClass("xl:h-16", "xl:px-7", "xl:gap-8");
+    /*
+     * `lg:` starts at 1024 px, which is exactly the width of the tablet
+     * artboard: desktop metrics there meant the tablet variant never rendered
+     * at the width the mockup defines it for.
+     */
+    expect(topNav.className).not.toMatch(/\blg:/);
   });
 });
