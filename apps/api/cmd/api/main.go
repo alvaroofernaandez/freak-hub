@@ -21,6 +21,7 @@ import (
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/api"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/config"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/clerkadapter"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/postgres"
@@ -69,6 +70,14 @@ func run() error {
 		RedirectURL: signUpURL(cfg),
 	})
 
+	// The catalogue and the library, both Postgres-backed. The domain service
+	// is the same one the tests build over the in-memory doubles: which side of
+	// the port it is talking to is decided here and nowhere else.
+	libraryService := library.NewService(library.ServiceDeps{
+		Works:   postgres.NewWorkRepository(pool),
+		Entries: postgres.NewEntryRepository(pool),
+	})
+
 	signature, err := svixadapter.NewVerifier(cfg.Clerk.WebhookSigningSecret)
 	if err != nil {
 		return err
@@ -77,6 +86,7 @@ func run() error {
 	handler := api.NewRouter(api.Deps{
 		Users:          usersService,
 		Invitations:    invitationsService,
+		Library:        libraryService,
 		Verifier:       clerkadapter.NewVerifier(authorizedParty(cfg)),
 		AllowedOrigins: cfg.AllowedOrigins,
 		Webhooks: webhooks.NewClerkHandler(webhooks.ClerkDeps{

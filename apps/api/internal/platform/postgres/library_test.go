@@ -619,3 +619,63 @@ FROM works w`, member)
 		assert.NotContains(t, plan, "Sort Method")
 	})
 }
+
+// TestTheLibraryUseCasesRunAgainstPostgres is the composition the API boots
+// with: the domain service over these two adapters and nothing else.
+//
+// It deliberately does not re-test the five domain rules — librarymem already
+// exercises every branch of them in milliseconds, and running them again
+// against a database would only make them slower. What it proves is the thing
+// the double cannot: that the ports fit, and that the rule the service checks
+// in Go and the database holds in an index agree on the answer.
+func TestTheLibraryUseCasesRunAgainstPostgres(t *testing.T) {
+	pool := libraryDB(t, nil)
+	works := postgres.NewWorkRepository(pool)
+	service := library.NewService(library.ServiceDeps{
+		Works:   works,
+		Entries: postgres.NewEntryRepository(pool),
+	})
+
+	member := seedMember(t, pool, "alvaro")
+
+	work, err := service.CreateManualWork(t.Context(), library.ManualWorkInput{
+		Title:    "Fullmetal Alchemist: Brotherhood",
+		Category: library.CategoryAnime,
+		Metadata: library.Metadata{library.MetadataKeyEpisodes: 64},
+	})
+	require.NoError(t, err)
+
+	added, err := service.AddToLibrary(t.Context(), member, library.AddToLibraryInput{
+		WorkID:   work.ID,
+		Status:   library.StatusInProgress,
+		Progress: 12,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, work.ID, added.Work.ID, "the work comes back inline, not as a bare id")
+
+	_, err = service.AddToLibrary(t.Context(), member, library.AddToLibraryInput{
+		WorkID: work.ID, Status: library.StatusWishlist,
+	})
+	assert.ErrorIs(t, err, library.ErrAlreadyInLibrary,
+		"the check in Go and the unique index have to agree on what a duplicate is")
+
+	rating := 10
+	updated, err := service.UpdateEntry(t.Context(), member, added.ID, library.EntryPatch{
+		Status:   library.Set(library.StatusCompleted),
+		Progress: library.Set(64),
+		Rating:   library.Set(&rating),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated.Rating)
+	assert.Equal(t, 10, *updated.Rating)
+
+	page, next, err := service.ListLibrary(t.Context(), member, library.EntryFilter{}, nil, 25)
+	require.NoError(t, err)
+	require.Len(t, page, 1)
+	assert.Nil(t, next, "one entry is not a full page, so there is no next cursor")
+
+	require.NoError(t, service.RemoveFromLibrary(t.Context(), member, added.ID))
+
+	_, err = works.ByID(t.Context(), work.ID)
+	assert.NoError(t, err, "domain rule 3: the work stays in the shared catalogue")
+}

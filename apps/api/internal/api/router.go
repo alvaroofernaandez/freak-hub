@@ -13,14 +13,21 @@ import (
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/auth"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users"
 )
 
 // Deps are the collaborators the HTTP layer needs.
 type Deps struct {
-	Users          *users.Service
-	Invitations    *invitations.Service
+	Users       *users.Service
+	Invitations *invitations.Service
+	// Library is wired but not yet routed: the handlers for /v1/works and
+	// /v1/library are their own change. It is here so the composition root
+	// builds the real thing from the start — a service the boot path never
+	// constructs is one nobody finds out is misconfigured until the first
+	// request.
+	Library        *library.Service
 	Verifier       auth.Verifier
 	AllowedOrigins []string
 	// Webhooks is optional: without it the Clerk webhook route is not mounted,
@@ -30,7 +37,7 @@ type Deps struct {
 
 // NewRouter wires every route of the API.
 func NewRouter(deps Deps) http.Handler {
-	handlers := &handlers{users: deps.Users, invitations: deps.Invitations}
+	handlers := &handlers{users: deps.Users, invitations: deps.Invitations, library: deps.Library}
 
 	router := chi.NewRouter()
 	// Our own correlation id (httpx.RequestIDMiddleware) replaces

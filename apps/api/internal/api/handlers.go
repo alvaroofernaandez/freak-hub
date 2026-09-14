@@ -9,6 +9,7 @@ import (
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/auth"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users"
 )
@@ -16,6 +17,7 @@ import (
 type handlers struct {
 	users       *users.Service
 	invitations *invitations.Service
+	library     *library.Service
 }
 
 func (h *handlers) health(w http.ResponseWriter, _ *http.Request) {
