@@ -28,7 +28,7 @@ documento explica las decisiones que hay detrás.
 | PATCH | `/v1/me` | sí | Editar el nombre, los apellidos o el nombre de usuario propios |
 | POST | `/v1/me/avatar` | sí | Subir la foto de perfil propia (multipart, hasta 5 MB) |
 | GET | `/v1/members` | sí | Los miembros del grupo, paginados por cursor |
-| GET | `/v1/invitations` | sí | Invitaciones que ha enviado quien llama |
+| GET | `/v1/invitations` | sí | Invitaciones que ha enviado quien llama, paginadas por cursor |
 | POST | `/v1/invitations` | sí | Invitar a alguien |
 | GET | `/v1/invitations/group` | sí | Invitaciones pendientes de todo el grupo, paginadas por cursor |
 | POST | `/webhooks/clerk` | firma Svix | Eventos de Clerk |
@@ -65,8 +65,9 @@ application/problem+json` y este cuerpo (ADR-0014):
 | `retry_after` | Segundos sugeridos antes de reintentar. Solo aparece cuando `retryable` es `true` y el plazo se conoce. |
 | `field_errors` | Solo cuando el error señala uno o más campos sin ambigüedad. La validación sigue devolviendo el primer error, como siempre. |
 
-`invalid_cursor` e `invalid_limit` los devuelven los endpoints paginados
-(`GET /v1/members` y `GET /v1/invitations/group`). Ver
+`invalid_cursor` e `invalid_limit` los devuelven los endpoints paginados, que
+desde el ADR-0011 son todos los que listan: `GET /v1/members`,
+`GET /v1/invitations` y `GET /v1/invitations/group`. Ver
 [ADR-0011](decisions/0011-paginacion-por-cursor.md).
 
 ## Catálogo de códigos
@@ -165,11 +166,6 @@ Todo listado devuelve un objeto, nunca un array desnudo:
 | Total | No se devuelve. Contar exige recorrer la tabla y ninguna pantalla lo necesita |
 | `limit` fuera de rango | `400 invalid_limit`. No se recorta en silencio |
 | Cursor corrupto | `400 invalid_cursor` |
-
-> **Estado.** El criterio está fijado; la implementación llega con el primer
-> endpoint que lista obras. `GET /v1/invitations` todavía devuelve la colección
-> entera como array: su migración al sobre de página es un cambio incompatible
-> **deliberado**, decidido en el ADR-0011 y pendiente de aplicar.
 
 ## Lo que aún no está resuelto
 
