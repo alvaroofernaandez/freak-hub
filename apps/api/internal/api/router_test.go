@@ -21,6 +21,8 @@ import (
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/auth"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations/invitationsmem"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library/librarymem"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users/usersmem"
 )
@@ -52,6 +54,8 @@ type suite struct {
 	memberEmail    *invitationsmem.Members
 	profileUpdater *usersmem.ProfileUpdater
 	avatarUploader *usersmem.AvatarUploader
+	works          *librarymem.WorkRepository
+	entries        *librarymem.EntryRepository
 }
 
 func newSuite(t *testing.T) *suite {
@@ -63,6 +67,8 @@ func newSuite(t *testing.T) *suite {
 	members := invitationsmem.NewMembers()
 	profileUpdater := usersmem.NewProfileUpdater()
 	avatarUploader := usersmem.NewAvatarUploader()
+	works := librarymem.NewWorkRepository()
+	entries := librarymem.NewEntryRepository(works)
 
 	usersService := users.NewService(usersRepo,
 		users.WithProfileUpdater(profileUpdater),
@@ -74,11 +80,13 @@ func newSuite(t *testing.T) *suite {
 		Members:     members,
 		RedirectURL: "https://freakhub.local/registro",
 	})
+	libraryService := library.NewService(library.ServiceDeps{Works: works, Entries: entries})
 
 	return &suite{
 		router: api.NewRouter(api.Deps{
 			Users:          usersService,
 			Invitations:    invitationsService,
+			Library:        libraryService,
 			Verifier:       tokenVerifier{},
 			AllowedOrigins: []string{"http://localhost:3000"},
 		}),
@@ -88,6 +96,8 @@ func newSuite(t *testing.T) *suite {
 		memberEmail:    members,
 		profileUpdater: profileUpdater,
 		avatarUploader: avatarUploader,
+		works:          works,
+		entries:        entries,
 	}
 }
 

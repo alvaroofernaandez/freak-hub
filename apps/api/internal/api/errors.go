@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/invitations"
+	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/library"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/httpx"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/platform/upstream"
 	"github.com/alvaroofernaandez/freak-hub/apps/api/internal/users"
@@ -54,6 +55,16 @@ var errorRules = []errorRule{
 	{invitations.ErrAlreadyMember, http.StatusConflict, httpx.CodeAlreadyMember,
 		"Ese correo ya pertenece a un miembro."},
 	{invitations.ErrInvalidLimit, http.StatusBadRequest, httpx.CodeInvalidLimit,
+		"El parámetro limit debe estar entre 1 y 100."},
+	{library.ErrWorkNotFound, http.StatusNotFound, httpx.CodeWorkNotFound,
+		"Esa obra no está en el catálogo compartido."},
+	{library.ErrInvalidTitle, http.StatusBadRequest, httpx.CodeInvalidPayload,
+		"El título debe tener entre 1 y 300 caracteres."},
+	{library.ErrInvalidCategory, http.StatusBadRequest, httpx.CodeInvalidPayload,
+		"La categoría no es una de las declaradas."},
+	{library.ErrInvalidFilter, http.StatusBadRequest, httpx.CodeInvalidFilter,
+		"Ese filtro no es uno de los valores declarados."},
+	{library.ErrInvalidLimit, http.StatusBadRequest, httpx.CodeInvalidLimit,
 		"El parámetro limit debe estar entre 1 y 100."},
 }
 
