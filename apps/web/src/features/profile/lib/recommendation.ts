@@ -33,6 +33,7 @@ export function pendingRecommendationsFor(
   return recommendations.filter(
     (recommendation) =>
       recommendation.toUsername === username &&
+      recommendation.fromUsername !== username &&
       recommendation.status === "pending",
   );
 }

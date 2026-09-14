@@ -275,6 +275,8 @@ hacer). La tabla cubre los motivos reales del producto:
 | Nadie en el grupo | `members-directory.tsx` | «Todavía no hay nadie» | Ninguna — solo se entra por invitación, ya visible en la cabecera |
 | Sin invitaciones pendientes | `members-directory.tsx` | «No hay invitaciones pendientes» (`size="inline"`, ya no el recuadro de contorno discontinuo) | Ninguna — invitar ya está en la cabecera de la página |
 | Sin actividad del grupo | `activity-feed.tsx` | «Sin actividad todavía» | Ninguna |
+| Nada recomendado por otros | `recommendations-view.tsx`, bloque «Recibidas pendientes» | «Nada pendiente» | Ninguna — nadie puede recomendarse algo a sí mismo desde aquí |
+| Nada recomendado por ti | `recommendations-view.tsx`, bloque «Enviadas» | «Todavía no has recomendado nada» | Ninguna — se recomienda desde la ficha de la obra, no desde esta pantalla |
 
 El recuento de resultados se anuncia por voz (`role="status"` vía
 `<output aria-live="polite">`) 400 ms después de que se asiente — no en cada

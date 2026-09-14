@@ -49,6 +49,23 @@ describe("RecommendationsView", () => {
     expect(within(received).queryByText("Steins;Gate")).not.toBeInTheDocument();
   });
 
+  /**
+   * The page asserts this too, but against an empty list, where it only
+   * proves the empty states render no buttons. With rows on screen it is the
+   * real guard: no endpoint answers an accept or a dismiss yet, and a control
+   * that does nothing is worse than no control.
+   */
+  it("offers no accept or dismiss action on a populated screen", () => {
+    render(
+      <RecommendationsView
+        recommendations={RECOMMENDATIONS}
+        viewerUsername="alvaro"
+      />,
+    );
+
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+
   it("puts in the outbox everything you sent, whatever happened to it", () => {
     render(
       <RecommendationsView

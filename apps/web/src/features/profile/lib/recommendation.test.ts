@@ -69,6 +69,25 @@ describe("pendingRecommendationsFor", () => {
   it("leaves out a received recommendation that is already answered", () => {
     expect(pendingRecommendationsFor(RECOMMENDATIONS, "alphonse")).toEqual([]);
   });
+
+  /**
+   * The inbox labels every row with who sent it. A recommendation addressed to
+   * its own author would render there as «Enviada a @tú» — an inbox row that
+   * says "sent to". Whether the endpoint ever allows one is not this function's
+   * call; its job is to answer "what did other people send me".
+   */
+  it("leaves out a recommendation the member addressed to themselves", () => {
+    const toSelf: Recommendation = {
+      id: "rec-4",
+      fromUsername: "killua",
+      toUsername: "killua",
+      workTitle: "Monster",
+      reason: "Nota para mí mismo.",
+      status: "pending",
+    };
+
+    expect(pendingRecommendationsFor([toSelf], "killua")).toEqual([]);
+  });
 });
 
 describe("sentRecommendationsBy", () => {

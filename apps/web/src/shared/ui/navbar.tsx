@@ -93,7 +93,11 @@ export function Navbar({ pendingRecommendations, userSlot }: NavbarProps) {
              */
             <Link
               href="/recomendaciones"
-              aria-label={`${pendingRecommendations} recomendaciones pendientes`}
+              aria-label={
+                pendingRecommendations === 1
+                  ? "1 recomendación pendiente"
+                  : `${pendingRecommendations} recomendaciones pendientes`
+              }
               aria-current={isCurrent("/recomendaciones") ? "page" : undefined}
               className="flex h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-medium text-accent-ink transition-opacity duration-150 hover:opacity-90"
             >
