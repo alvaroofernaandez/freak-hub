@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
+import { SEARCH_MAX_LENGTH } from "@/features/library/lib/catalog-search";
 import { cn } from "@/shared/lib/cn";
 import { CoverPlaceholder } from "./cover-placeholder";
 
@@ -88,18 +89,27 @@ export function CatalogSearchField({
       <input
         type="search"
         aria-label="Buscar en el catálogo externo"
+        maxLength={SEARCH_MAX_LENGTH}
         placeholder="Buscar…"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         className="w-full max-w-md rounded-lg border border-accent bg-surface px-4 py-2.5 text-ink placeholder:text-ink-muted"
       />
 
+      {/* One region, mounted from the first render and never unmounted: only
+       * its text changes. A live region that enters the DOM already holding
+       * its message is missed by the browser's watcher, which only observes
+       * nodes that were already there (`shared/ui/pending-label.tsx`,
+       * docs/states.md) — so the wait has to be spoken *here*, not by a node
+       * that appears alongside the skeleton. Emptying it during the search
+       * instead would announce nothing at all on the way out and leave the
+       * previous count as the last thing said. */}
       <output
         data-testid="catalog-search-announcement"
         aria-live="polite"
         className="sr-only"
       >
-        {searching ? "" : announcement}
+        {searching ? "Buscando…" : announcement}
       </output>
 
       {searching ? <SearchingRows /> : children}
@@ -109,18 +119,19 @@ export function CatalogSearchField({
 
 /**
  * Rows in the shape of the results that are coming, rather than a spinner in
- * the middle of the content: the list does not jump when they arrive, and the
- * wait says what is being waited for. Announced once, in words, for anyone
- * who cannot see the shapes.
+ * the middle of the content: the list does not jump when they arrive.
+ *
+ * Entirely decorative, and silent by design: the wait is announced by the
+ * field's own persistent live region. A second `<output>` here would both go
+ * unheard (it enters the DOM with its text already set) and collide with the
+ * first one under a plain `getByRole("status")`.
  */
 function SearchingRows() {
   return (
-    <div className="border-t border-border-soft">
-      <output className="sr-only">Buscando…</output>
+    <div aria-hidden="true" className="border-t border-border-soft">
       {SKELETON_TITLE_WIDTHS.map((width) => (
         <div
           key={width}
-          aria-hidden="true"
           className="flex items-start gap-4 border-b border-border-soft py-3.5 opacity-60"
         >
           <CoverPlaceholder className="h-[78px] w-[58px] rounded-md" />

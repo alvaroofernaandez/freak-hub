@@ -25,7 +25,9 @@ const SIZE_CLASSES: Record<EmptyStateSize, string> = {
 
 const TITLE_CLASSES: Record<EmptyStateSize, string> = {
   section: "text-lg font-semibold text-ink",
-  inline: "text-sm font-semibold text-ink",
+  // `break-words`: an inline empty state quotes what the person searched for,
+  // and a term with no spaces in it has no other place to wrap.
+  inline: "text-sm font-semibold text-ink break-words",
 };
 
 const DESCRIPTION_CLASSES: Record<EmptyStateSize, string> = {

@@ -148,6 +148,24 @@ describe("AddSearchPage", () => {
       ).not.toMatch(/anilist|graphql|http|429|503|fetch/i);
     });
 
+    it("cuts an oversized q down to size, in the search and in the echo", async () => {
+      const { SEARCH_MAX_LENGTH } = await import(
+        "@/features/library/lib/catalog-search"
+      );
+      outcome({ status: "empty" });
+
+      await renderPage("anime", "a".repeat(20_000));
+
+      expect(searchAnime).toHaveBeenCalledWith(
+        "a".repeat(SEARCH_MAX_LENGTH),
+        expect.anything(),
+      );
+      expect(
+        screen.getByRole("heading", { name: /no hay resultados/i }).textContent
+          ?.length ?? 0,
+      ).toBeLessThan(SEARCH_MAX_LENGTH + 40);
+    });
+
     it("ignores a repeated q parameter instead of searching for an array", async () => {
       const page = await AddSearchPage({
         params: Promise.resolve({ categoria: "anime" }),

@@ -25,6 +25,15 @@
 import type { ErrorKind, NormalizedAppError } from "@/shared/errors/types";
 import type { CatalogSearchOutcome, CatalogSearchResult } from "./anilist";
 
+/**
+ * Ceiling for a search term, applied where it enters (`?q=`) and where it is
+ * typed. No title needs more, the catalog would not match it anyway, and the
+ * term is echoed back into a heading when nothing is found: a 20 000-character
+ * `?q=` with no spaces in it has no place to wrap, so a shared link would
+ * push the page sideways for whoever opened it.
+ */
+export const SEARCH_MAX_LENGTH = 100;
+
 export type CatalogSearchViewState =
   | { kind: "idle" }
   | { kind: "results"; results: CatalogSearchResult[] }

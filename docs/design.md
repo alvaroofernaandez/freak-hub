@@ -965,7 +965,10 @@ Definition of Done de la épica #18.
   maqueta §6: lista de filas separadas por filetes de `--border-soft`, portada
   de 58 × 78 (`CoverPlaceholder` cuando el catálogo no da ninguna), título a
   13 px y año en monoespaciada. Fila, no tarjeta: un contorno y una sombra por
-  resultado dirían lo que ya dice el filete. El año usa `--ink-muted`, no
+  resultado dirían lo que ya dice el filete. Se añade lo que la maqueta no
+  dibuja: dos líneas de sinopsis (`line-clamp-2`), porque es lo que pide el
+  efecto esperado de la issue #45 y es lo que distingue dos entradas del mismo
+  título. El año usa `--ink-muted`, no
   `--ink-faint`, por la regla de contraste de este documento — es el único
   punto en el que la maqueta se desvía a propósito. Dos piezas de la maqueta no
   se dibujan: los botones «Añadir» y de deseados, porque no hay `/v1/library`
@@ -977,3 +980,10 @@ Definition of Done de la épica #18.
   espera sí tiene forma: tres filas de esqueleto del tamaño de los resultados
   que vienen, con el ancho del título distinto en cada una, siguiendo
   [«Carga: esqueleto, nunca ruleta»](#carga-esqueleto-nunca-ruleta).
+- **2026-09-14** · El término de búsqueda se acota a 100 caracteres donde entra
+  (`?q=`) y donde se escribe (`maxLength`), y el estado vacío `inline` gana
+  `break-words`. Motivo: cuando no hay resultados el término se cita dentro de
+  un encabezado, y un `?q=` largo sin espacios no tiene dónde partirse — es la
+  primera pantalla donde el término llega desde la URL, así que un enlace
+  compartido podía descuadrar la página de quien lo abriera. No es un problema
+  de seguridad: React escapa el texto.

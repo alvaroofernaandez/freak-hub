@@ -313,9 +313,13 @@ tecla de una búsqueda, para no convertir el tecleo en una ráfaga de avisos.
 En la búsqueda de catálogo el retardo no hace falta: la petición ya va
 retrasada 300 ms y solo se envía una por término, así que el recuento se
 anuncia en cuanto llega. La región viva vive en `CatalogSearchField` y no se
-desmonta entre búsquedas — una región que aparece con su propio texto no se
-anuncia. Mientras la búsqueda está en vuelo dice «Buscando…» y el recuento
-queda en blanco, para no leer el resultado anterior como si fuera el nuevo.
+desmonta entre búsquedas: **solo cambia su texto**. La razón está escrita en
+`shared/ui/pending-label.tsx` y vale aquí igual — una región viva que entra en
+el DOM con su mensaje ya puesto se la pierde el observador del navegador,
+porque solo vigila nodos que ya estaban. Por eso el esqueleto de carga no
+lleva región propia (es `aria-hidden` entero): mientras la búsqueda está en
+vuelo, la región de siempre dice «Buscando…», lo que además impide que el
+recuento anterior se quede como lo último dicho.
 Un fallo también se anuncia ahí, solo el título: `ErrorState` es un
 encabezado y un párrafo, no una región viva, así que en una navegación de
 cliente aparecería en silencio.

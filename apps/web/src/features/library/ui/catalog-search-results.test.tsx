@@ -32,6 +32,12 @@ describe("CatalogSearchResults", () => {
     ).toBeInTheDocument();
   });
 
+  it("sets the title at the 13px the mockup and design.md both call for", () => {
+    render(<CatalogSearchResults results={[DEATH_NOTE]} />);
+
+    expect(screen.getByText("Death Note")).toHaveClass("text-[13px]");
+  });
+
   it("shows the cover the catalog gave", () => {
     render(<CatalogSearchResults results={[DEATH_NOTE]} />);
 

@@ -11,6 +11,9 @@ vi.mock("next/navigation", () => ({
 const { CatalogSearchField, SEARCH_DEBOUNCE_MS } = await import(
   "./catalog-search-field"
 );
+const { SEARCH_MAX_LENGTH } = await import(
+  "@/features/library/lib/catalog-search"
+);
 
 /**
  * `shouldAdvanceTime` keeps user-event's own internal waits running on real
@@ -106,6 +109,44 @@ describe("CatalogSearchField", () => {
     expect(screen.queryByText(/buscando/i)).not.toBeInTheDocument();
   });
 
+  it("says «Buscando…» in the region that was already mounted, not in a new one", async () => {
+    // `pending-label.tsx` and docs/states.md both say it: a live region that
+    // only enters the DOM once the state flips is missed by the browser's
+    // watcher, which only observes nodes that were already there. So the
+    // wait has to land in the region that carries the result count, and
+    // there must not be a second one.
+    const user = setup();
+    render(
+      <CatalogSearchField query="" announcement="">
+        <p>resultados</p>
+      </CatalogSearchField>,
+    );
+    const live = screen.getByTestId("catalog-search-announcement");
+
+    await user.type(screen.getByRole("searchbox"), "death");
+    settle();
+
+    expect(screen.getByTestId("catalog-search-announcement")).toBe(live);
+    expect(live).toHaveTextContent("Buscando…");
+    expect(document.querySelectorAll("output")).toHaveLength(1);
+  });
+
+  it("does not leave the previous count spoken as if it were the new one", async () => {
+    const user = setup();
+    render(
+      <CatalogSearchField query="death" announcement="12 resultados.">
+        <p>resultados</p>
+      </CatalogSearchField>,
+    );
+
+    await user.type(screen.getByRole("searchbox"), " note");
+    settle();
+
+    expect(
+      screen.getByTestId("catalog-search-announcement"),
+    ).not.toHaveTextContent("12 resultados.");
+  });
+
   it("replaces the stale results with a loading state while the new term is on its way", async () => {
     const user = setup();
     render(
@@ -159,6 +200,19 @@ describe("CatalogSearchField", () => {
 
     expect(screen.getByTestId("catalog-search-announcement")).toHaveTextContent(
       "12 resultados.",
+    );
+  });
+
+  it("caps what can be typed, so a pasted wall of text cannot become a heading", () => {
+    render(
+      <CatalogSearchField query="" announcement="">
+        <p>resultados</p>
+      </CatalogSearchField>,
+    );
+
+    expect(screen.getByRole("searchbox")).toHaveAttribute(
+      "maxlength",
+      String(SEARCH_MAX_LENGTH),
     );
   });
 

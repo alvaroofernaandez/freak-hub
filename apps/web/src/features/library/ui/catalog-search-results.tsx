@@ -53,7 +53,7 @@ export function CatalogSearchResults({ results }: CatalogSearchResultsProps) {
           )}
 
           <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-sm text-ink">{result.title}</p>
+            <p className="text-[13px] text-ink">{result.title}</p>
             {result.year ? (
               <p className="font-mono text-[11px] tabular-nums text-ink-muted">
                 {result.year}

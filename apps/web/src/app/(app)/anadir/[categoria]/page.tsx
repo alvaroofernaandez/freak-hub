@@ -7,6 +7,7 @@ import {
   type CatalogSearchViewState,
   catalogSearchAnnouncement,
   catalogSearchState,
+  SEARCH_MAX_LENGTH,
 } from "@/features/library/lib/catalog-search";
 import { CatalogSearchField } from "@/features/library/ui/catalog-search-field";
 import { CatalogSearchResults } from "@/features/library/ui/catalog-search-results";
@@ -76,7 +77,11 @@ export default async function AddSearchPage({
   const { q } = await searchParams;
   // A repeated `?q=` arrives as an array. Searching for "uno,dos" would be an
   // invention; treating it as no search at all is the honest reading.
-  const query = typeof q === "string" ? q.trim() : "";
+  // Capped here, not only in the field: `?q=` is reachable by hand and by a
+  // shared link, so the field's own `maxLength` protects nobody but the
+  // person typing.
+  const query =
+    typeof q === "string" ? q.trim().slice(0, SEARCH_MAX_LENGTH) : "";
   const isAnime = categoria === "anime";
 
   const state = isAnime
