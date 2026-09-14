@@ -1154,3 +1154,39 @@ Definition of Done de la épica #18.
   que el color de categoría nunca va solo se cumple en la página, no en la
   banda. Ver
   [La moldura bajo la navbar: solo color](#la-moldura-bajo-la-navbar-solo-color).
+- **2026-09-14** · **El progreso deja de dibujarse como porcentaje cuando no lo
+  es.** `LibraryEntry.progress` del contrato es un recuento absoluto en la
+  unidad de la categoría —episodios, capítulos, horas, partidas— y no un
+  0-100; `ProgressBar` sí toma 0-100. Hasta ahora el carril de inicio le
+  pasaba el número tal cual, lo que con datos reales habría pintado «12
+  episodios vistos» como una barra al 12 %: una cifra que la API nunca
+  mandó. A partir de ahora la barra solo aparece cuando hay un total con el
+  que dividir (hoy, `metadata.episodes` de un anime) y siempre acompañada de
+  la cifra en JetBrains Mono. Sin total, la cifra sola es toda la respuesta.
+  La función es `progressPercentage` en
+  `apps/web/src/features/library/lib/library-item.ts`.
+- **2026-09-14** · **Se recupera la línea de progreso de la maqueta**, que
+  estaba sin dibujar porque no había nada que contar: `{{ w.prog }}` bajo cada
+  tarjeta de la rejilla (§3) y `◐ {{ c.prog }}` en las tarjetas del carril de
+  inicio (§1). En `--ink-muted`, **no** en el `--ink-faint` que usa la maqueta:
+  ese token se queda en 2,52:1 sobre `--surface` y `app/token-contrast.test.ts`
+  lo prohíbe para texto legible. Misma decisión para el recuento «N obras» que
+  la maqueta pone junto al `<h1>` de la categoría (§3), que ahora existe.
+- **2026-09-14** · **«Tu entrada» de la ficha de obra (§4 de la maqueta) se
+  dibuja en solo lectura.** La maqueta la enseña como controles con un botón
+  Guardar; el camino de escritura todavía no existe, y un chip de estado que
+  parece pulsable y no cambia nada es la misma afordancia falsa por la que se
+  retiró el «+1» del carril de inicio. Los valores se muestran, los controles
+  llegan con la segunda mitad de la issue #73. La nota lleva su distintivo de
+  «Nota pública para el grupo» desde ya (ADR-0005): quien la escriba tiene que
+  saber quién la lee antes de escribirla, no después.
+- **2026-09-14** · **La línea de metadatos de la ficha se rehace con lo que el
+  contrato sabe.** Era «2019 · 40–70 min · 1–5 jugadores · Stonemaier Games»,
+  cuatro campos de un tipo escrito a mano que el contrato no tiene. Ahora es
+  el año y, para anime, el número de episodios y la temporada
+  (`metadata.episodes` / `metadata.season`). La temporada llega como la
+  etiqueta su catálogo (`"2024-spring"`): se traduce el nombre y se tira el
+  año, que ya es el primer elemento de la misma línea; lo que no encaje en esa
+  forma se muestra tal cual en vez de destrozarlo. «Fuente:» sobrevive con el
+  `enum` real `WorkSource`, y desaparece para `manual`, donde no hay catálogo
+  al que dar crédito.
