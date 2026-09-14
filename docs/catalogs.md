@@ -58,6 +58,17 @@ externo de solo lectura, así que la regla 2 de `AGENTS.md` no se rompe, pero
 la regla 1 de aquí —un adaptador por proveedor detrás de un puerto del
 dominio— sí queda pendiente hasta que ese adaptador viva en el backend.
 
+`app/(app)/anadir/anime` ya lo usa: el paso de búsqueda lee el término del
+parámetro `q` de la URL y llama al cliente **desde el componente de servidor**,
+no desde el navegador. Es lo que exige la regla 5 de esta lista para las otras
+cinco integraciones (que sí tienen secretos), y aquí además evita el
+preflight de CORS y hace que el presupuesto de peticiones —que AniList cuenta
+por IP— lo pague el servidor una vez en lugar de cada visitante por separado.
+De paso resuelve la carrera entre búsquedas sin código: lo que hay en pantalla
+es función de la URL, y la URL solo guarda el último término, así que una
+búsqueda lenta no puede pintar encima de otra más nueva. Las otras cinco
+categorías siguen con el campo desactivado.
+
 Ese módulo respeta lo que sí aplica ya: está pensado para ejecutarse en el
 servidor, no persiste nada, no filtra los tipos de AniList fuera de sí mismo y
 trata el límite de peticiones y los fallos de red como estados, no como

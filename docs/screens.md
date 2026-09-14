@@ -34,7 +34,7 @@ criterio para extenderlas está en
 | Biblioteca por categoría | `/biblioteca/[categoria]` | Listado filtrable por estado (la wishlist es el filtro `estado=wishlist`, no ruta propia), favorito y propiedad; campos propios de cada categoría |
 | Ficha de obra | `/obras/[id]` | La obra, tu entrada y lo que ha hecho el grupo con ella. Secciones condicionales: expansiones si es un juego de mesa base (ADR-0006), mazos propios si es TCG (ADR-0007) |
 | Añadir — categoría | `/anadir` | Primer paso del alta: elegir categoría |
-| Añadir — buscar | `/anadir/[categoria]` | Busca en el catálogo externo de la categoría (AniList, IGDB, TMDB, BGG, Scryfall) |
+| Añadir — buscar | `/anadir/[categoria]` | Busca en el catálogo externo de la categoría (AniList, IGDB, TMDB, BGG, Scryfall). Solo anime está conectado: el término viaja en `?q=` y la búsqueda corre en el servidor. Las otras cinco esperan a que el backend las integre |
 | Añadir — manual | `/anadir/[categoria]/manual` | Alta manual, para lo que no aparece en el catálogo |
 | Recomendaciones | `/recomendaciones` | Recibidas pendientes y enviadas, con su motivo |
 | Actividad | `/actividad` | Feed cronológico completo del grupo, sin algoritmo. Separado de inicio a propósito |

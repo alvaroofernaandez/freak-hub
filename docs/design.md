@@ -961,3 +961,19 @@ Definition of Done de la épica #18.
   notificación del producto, así que contar algo sin ofrecer dónde atenderlo lo
   dejaba en decoración. Sin motion nueva: hereda el `transition-opacity` de sus
   vecinos, porque la navbar se pulsa cientos de veces al día.
+- **2026-09-14** · La búsqueda de `/anadir/anime` (issue #45) se dibuja como la
+  maqueta §6: lista de filas separadas por filetes de `--border-soft`, portada
+  de 58 × 78 (`CoverPlaceholder` cuando el catálogo no da ninguna), título a
+  13 px y año en monoespaciada. Fila, no tarjeta: un contorno y una sombra por
+  resultado dirían lo que ya dice el filete. El año usa `--ink-muted`, no
+  `--ink-faint`, por la regla de contraste de este documento — es el único
+  punto en el que la maqueta se desvía a propósito. Dos piezas de la maqueta no
+  se dibujan: los botones «Añadir» y de deseados, porque no hay `/v1/library`
+  donde añadir nada y un botón que finge guardar es peor que ninguno.
+- **2026-09-14** · La lista de resultados no anima. Se sustituye entera en cada
+  pulsación de tecla (con 300 ms de espera), así que una entrada escalonada como
+  la de la rejilla de biblioteca se dispararía cientos de veces por sesión, que
+  es justo lo que prohíbe [«La frecuencia importa»](#la-frecuencia-importa). La
+  espera sí tiene forma: tres filas de esqueleto del tamaño de los resultados
+  que vienen, con el ancho del título distinto en cada una, siguiendo
+  [«Carga: esqueleto, nunca ruleta»](#carga-esqueleto-nunca-ruleta).
