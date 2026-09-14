@@ -41,6 +41,79 @@ documento explica las decisiones que hay detrás.
 | DELETE | `/v1/library/{id}` | sí | Saca la obra de la biblioteca. **No** borra la obra |
 | POST | `/webhooks/clerk` | firma Svix | Eventos de Clerk |
 
+Toda la tabla está **implementada**. Hasta este cambio las ocho rutas de
+`/v1/works` y `/v1/library` existían solo en el contrato: el esquema, el
+dominio y el adaptador estaban listos, pero nadie podía llegar a ellos desde
+fuera.
+
+## Biblioteca y catálogo
+
+Cuatro decisiones del borde HTTP que no se leen en el YAML y conviene tener a
+mano.
+
+### El miembro siempre sale de la sesión
+
+Ni el cuerpo ni la cadena de consulta llevan `member_id`, y no es que se
+ignore: `POST /v1/library` no declara esa propiedad, así que el decodificador
+estricto la rechaza con `400 invalid_payload`. Aceptarla sería aceptar una
+escritura en la biblioteca de otra persona.
+
+El listado tiene además un segundo cerrojo: `library.Service.ListLibrary`
+sobrescribe el propietario del filtro con el de la sesión, de modo que un
+manejador que algún día olvide fijarlo tampoco puede recorrer una estantería
+ajena.
+
+### Una entrada ajena responde 404, nunca 403
+
+`GET`, `PATCH` y `DELETE` sobre `/v1/library/{id}` responden
+`404 library_entry_not_found` tanto si la entrada no existe como si existe y
+es de otro miembro. Un 403 confirmaría que ese identificador es real, y de
+quién es cada biblioteca no es asunto de nadie más.
+
+La indistinguibilidad es literal: mismo estado, mismo `code` y mismo `detail`
+en las dos ramas. Una prosa distinta según el caso sería exactamente la
+confirmación que el 404 existe para no dar. Un identificador mal formado
+—algo que no es un UUID— responde igual, por la misma razón.
+
+La comprobación vive en el servicio de dominio, no en el manejador. El puerto
+`EntryRepository.ByID` no recibe el miembro, así que un manejador que lo
+llamara directamente entregaría cualquier entrada a cualquiera; por eso las
+tres rutas pasan por `GetEntry`, `UpdateEntry` y `RemoveFromLibrary`.
+
+### `PATCH`: ausente, nulo y valor son tres cosas distintas
+
+Una propiedad ausente deja el valor guardado como está. Una propiedad con
+`null` lo borra a propósito, y es la única manera de quitar una valoración,
+una nota o una fecha. Las cuatro propiedades que el contrato declara sin
+`null` —`status`, `progress`, `is_favourite` y `owned`— rechazan un nulo con
+`400 invalid_payload` en lugar de leerlo como su valor cero, que dejaría de
+marcar un favorito que nadie pidió cambiar.
+
+Dos reglas más, ambas sobre *cambios* y no sobre presencia:
+
+- Reenviar el estado que la entrada ya tiene no es una transición ilegal: es
+  no pedir nada, y responder 422 a nada es una trampa.
+- Reenviar la misma valoración guardada tampoco pide nada y pasa en cualquier
+  estado. Solo una valoración **distinta** sobre un estado que no sea
+  `completed` ni `dropped` da `422 rating_not_allowed`. Esa cláusula no se
+  aplica al alta: en un `POST` no hay nada guardado con lo que coincidir.
+
+Una valoración guardada **sobrevive** a un cambio de estado. Volver a ver algo
+no borra la nota que le pusiste.
+
+### Un cursor solo vale para los filtros que lo produjeron
+
+El cursor lleva una posición —`(created_at, id)`— y no los filtros con los que
+se calculó, así que reutilizar uno de otra combinación **no se rechaza**: el
+orden es el mismo para todos los filtros, de modo que la página que vuelve es
+una página correcta del filtro nuevo, solo que empezada por la mitad. Lo que
+no es, es un recorrido completo. Por eso el contrato pide reenviar los mismos
+filtros en cada página y empezar sin cursor cada vez que uno cambie.
+
+Un valor de filtro fuera del enum sí se rechaza, con `400 invalid_filter`: a
+quien pidió una porción, devolverle la lista entera se le parece demasiado a
+que haya funcionado.
+
 ## El sobre de error
 
 Toda respuesta de error, sin excepción, lleva `Content-Type:
@@ -208,3 +281,12 @@ Todo listado devuelve un objeto, nunca un array desnudo:
   bucle accidental.
 - **Idempotencia en escrituras.** Si aparecen reintentos de cliente, hará falta
   `Idempotency-Key`.
+- **Cuatro cotas del contrato que nadie comprueba todavía.** `year` (1800-2200)
+  y `synopsis` (5000) en `CreateWorkRequest`, `note` (1000) en los dos cuerpos
+  de biblioteca y `q` (200) en `GET /v1/works`. El dominio valida el título, la
+  categoría, el estado, la valoración y el progreso, pero no estas cuatro, y el
+  borde HTTP no las inventa por su cuenta: una regla de negocio escrita en un
+  manejador es una regla que el dominio no puede hacer cumplir cuando el mismo
+  caso de uso llegue por otra puerta. Tampoco hay un `code` para ninguna de
+  ellas. Cuando se cierren, se cierran en `internal/library` y con su código en
+  el contrato.
