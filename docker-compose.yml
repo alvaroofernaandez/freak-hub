@@ -111,6 +111,9 @@ services:
       - api
     environment:
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:?set CLERK_SECRET_KEY in .env}
+      # The container has no .env file: anything the server reads at runtime
+      # has to be forwarded here or it is simply absent.
+      ANILIST_API_URL: ${ANILIST_API_URL:-https://graphql.anilist.co}
     ports:
       - "3000:3000"
 
