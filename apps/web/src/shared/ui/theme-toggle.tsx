@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { cn } from "@/shared/lib/cn";
 import { useTheme } from "@/shared/lib/use-theme";
 
@@ -24,6 +24,17 @@ export function ThemeToggle() {
   const isLight = theme === "light";
   const labelId = useId();
   const descriptionId = useId();
+
+  // The server renders the switch in its default position, so a light-theme
+  // visitor sees it correct itself right after hydration. That correction is
+  // not an interaction and must not be animated: with the transition on from
+  // the first paint, every cold load of /ajustes shows the knob sliding into
+  // place on an already-light page, which reads as the page changing its
+  // mind. The knob only animates once the user is the one moving it.
+  const [hasHydrated, setHasHydrated] = useState(false);
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
 
   return (
     <div className="flex items-center justify-between gap-4">
@@ -54,7 +65,9 @@ export function ThemeToggle() {
         >
           <span
             className={cn(
-              "h-5 w-5 rounded-full transition-transform duration-[120ms] ease-out-quint motion-reduce:transition-none",
+              "h-5 w-5 rounded-full",
+              hasHydrated &&
+                "transition-transform duration-[120ms] ease-out-quint motion-reduce:transition-none",
               isLight
                 ? "translate-x-5 bg-accent-ink"
                 : "translate-x-0 bg-ink-muted",

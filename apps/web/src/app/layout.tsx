@@ -41,6 +41,12 @@ export default function RootLayout({
   return (
     <html
       lang="es"
+      // The script below stamps `data-theme` on this element before React
+      // hydrates, so the server markup and the client tree differ here by
+      // design. Without this, React reports that mismatch on every single
+      // load, and a permanent false positive is the fastest way to stop
+      // reading the real ones.
+      suppressHydrationWarning
       className={`${sora.variable} ${bungee.variable} ${jetbrainsMono.variable}`}
     >
       <body className="min-h-dvh antialiased">

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it } from "vitest";
 import { THEME_STORAGE_KEY } from "@/shared/lib/theme";
 import { ThemeToggle } from "./theme-toggle";
@@ -58,5 +59,29 @@ describe("ThemeToggle", () => {
     render(<ThemeToggle />);
 
     expect(screen.getByText(/oscuro/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The server paints the knob in its default position, so a light-theme
+   * visitor sees it correct itself right after hydration. That correction is
+   * not an interaction: with the transition already on, every cold load of
+   * /ajustes shows the knob sliding into place on an already-light page,
+   * which reads as the page changing its mind. The knob earns its animation
+   * only once the user is the one moving it.
+   */
+  it("does not animate itself into the right position on first paint", () => {
+    const markup = renderToStaticMarkup(<ThemeToggle />);
+
+    expect(markup).not.toContain("transition-transform");
+  });
+
+  it("animates once the page is live and the user presses it", () => {
+    render(<ThemeToggle />);
+
+    const knob = screen
+      .getByRole("switch", { name: /tema claro/i })
+      .querySelector("span > span");
+
+    expect(knob).toHaveClass("transition-transform");
   });
 });

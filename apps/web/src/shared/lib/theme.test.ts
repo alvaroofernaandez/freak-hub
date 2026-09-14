@@ -104,4 +104,17 @@ describe("the root layout", () => {
       layout.indexOf("<ClerkProvider"),
     );
   });
+
+  /**
+   * The script stamps `data-theme` on <html> before React hydrates, so the
+   * server markup and the client tree differ there on purpose. Without this
+   * attribute React reports the mismatch on every load, and a permanent false
+   * positive is the fastest way to stop reading the real ones.
+   */
+  it("tells React the <html> mismatch is deliberate", () => {
+    expect(layout).toContain("suppressHydrationWarning");
+    expect(layout.indexOf("suppressHydrationWarning")).toBeLessThan(
+      layout.indexOf("<body"),
+    );
+  });
 });
