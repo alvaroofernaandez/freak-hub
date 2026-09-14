@@ -114,6 +114,29 @@ func TestLibrarySchemaHoldsTheInvariantsTheDomainCannot(t *testing.T) {
 		assert.Contains(t, err.Error(), "works_source_id_matches_source")
 	})
 
+	t.Run("an imported work cannot carry a blank external id", func(t *testing.T) {
+		// The mirror image of the null case, and worse: an empty source_id IS
+		// indexed, so two different anime imported with a blank id collide on
+		// ('anilist', ''). An importer that looks before inserting would find
+		// the first and hand somebody a library entry pointing at a different
+		// anime, silently. Whitespace-only brings back the original bug from a
+		// third door, since '  ' and '   ' never collide with each other.
+		for _, blank := range []string{"", " ", "   ", "\t", "\n"} {
+			err := exec(`INSERT INTO works (title, category, source, source_id)
+                         VALUES ('Ghost blank', 'anime', 'anilist', '` + blank + `')`)
+			require.Errorf(t, err, "a blank source_id (%q) is 'unknown' dressed as an identifier", blank)
+			assert.Contains(t, err.Error(), "works_source_id_matches_source")
+		}
+	})
+
+	t.Run("an external id may not be padded with whitespace", func(t *testing.T) {
+		err := exec(`INSERT INTO works (title, category, source, source_id)
+                     VALUES ('Padded import', 'anime', 'anilist', ' 5114 ')`)
+		require.Error(t, err,
+			"' 5114' and '5114' are different strings, so both would go in and never collide")
+		assert.Contains(t, err.Error(), "works_source_id_matches_source")
+	})
+
 	t.Run("a manual work cannot claim an external id", func(t *testing.T) {
 		err := exec(`INSERT INTO works (title, category, source, source_id)
                      VALUES ('Fake manual', 'anime', 'manual', '5114')`)
@@ -230,14 +253,36 @@ ORDER BY title`
 		"and if it were a wildcard this would match, which is exactly the bug the escaping prevents")
 	assert.Empty(t, found("_"), "the same goes for the single-character wildcard")
 
-	// The one that matters and that no ASCII test reaches: unaccent itself
-	// emits wildcards. Full-width ％ (U+FF05) folds to a plain %, so if the
-	// escaping ran before the folding instead of around it, this term would
-	// arrive at the pattern carrying a live wildcard and match.
-	assert.Empty(t, found("100\uff05Teach"),
-		"a folded full-width percent must stay a literal: escaping wraps folding, never the other way round")
+	// The ones that no ASCII test reaches: unaccent itself emits wildcards.
+	// Six codepoints fold onto LIKE's own metacharacters, so if the escaping
+	// ran before the folding instead of around it, a term carrying one of them
+	// would arrive at the pattern with a live wildcard in it.
+	//
+	// The protection is universal by construction — the escaping wraps the
+	// folding, so it cannot matter which character the fold produces — and
+	// these cases pin it rather than enumerate it. The two that fold to % and
+	// the one that folds to _ are the sharp ones: unescaped they would match
+	// "100% Teacher", escaped they must not. The three that fold to a
+	// backslash cannot be made sharp in the same way, because a stray
+	// backslash in a pattern mostly degrades into escaping whatever follows
+	// it; they assert the weaker but still useful claim that the term stays a
+	// literal and nothing errors.
+	for _, folded := range []struct{ name, term string }{
+		{"U+FF05 ％ folds to %", "100\uff05Teach"},
+		{"U+FE6A ﹪ folds to %", "100\ufe6aTeach"},
+		{"U+FF3F ＿ folds to _", "100\uff3f Teach"},
+		{"U+FF3C ＼ folds to a backslash", "100\uff3c% Teach"},
+		{"U+FE68 ﹨ folds to a backslash", "100\ufe68% Teach"},
+		{"U+2216 ∖ folds to a backslash", "100\u2216% Teach"},
+		{"a mixed term", "AAA\uff05%BBB"},
+		{"another mixed term", "A\uff3f_A"},
+	} {
+		assert.Emptyf(t, found(folded.term),
+			"%s: escaping wraps folding, never the other way round", folded.name)
+	}
+
 	assert.Equal(t, []string{"100% Teacher"}, found("100\uff05"),
-		"and it still finds what somebody typing it actually meant")
+		"and a folded wildcard still finds what somebody typing it actually meant")
 }
 
 // The risk the issue names out loud: a Down that drops the tables and forgets

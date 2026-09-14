@@ -89,16 +89,43 @@ CREATE TABLE works (
     created_at   timestamptz   NOT NULL DEFAULT now(),
     updated_at   timestamptz   NOT NULL DEFAULT now(),
 
-    -- source_id is null if AND ONLY IF the work was typed in by hand. Both
-    -- directions matter, and the second one is the dangerous one: an imported
-    -- work with a null source_id is invisible to works_source_idx, because that
-    -- index is partial over WHERE source_id IS NOT NULL. One nil pointer in an
-    -- importer and the deduplication guarantee is gone without an error — the
-    -- next person importing the same anime gets a second row, and two people
-    -- "watching the same thing" end up pointing at different works, which is the
-    -- premise the whole shared catalogue rests on.
+    -- source_id is null if AND ONLY IF the work was typed in by hand, and when
+    -- it is present it is a real identifier. Three ways in, and only the first
+    -- is obvious.
+    --
+    -- A null source_id on an imported work is invisible to works_source_idx,
+    -- which is partial over WHERE source_id IS NOT NULL. One nil pointer in an
+    -- importer and deduplication stops working with no error at all: the next
+    -- person importing the same anime gets a second row, and two people
+    -- "watching the same thing" end up pointing at different works, which is
+    -- the premise the whole shared catalogue rests on.
+    --
+    -- An EMPTY source_id is the mirror image, and worse, because it DOES get
+    -- indexed. Two different anime imported with a blank external id collide on
+    -- ('anilist', ''): an importer that looks before inserting finds the first
+    -- one and reports the second as already imported, handing somebody a
+    -- library entry pointing at a different anime — silently, no 409, no 500.
+    -- An importer that inserts first gets a unique violation for an anime that
+    -- genuinely is not in the catalogue. An empty string in a deduplication key
+    -- is a value meaning "unknown" wearing the clothes of one meaning "this
+    -- exact anime".
+    --
+    -- And an untrimmed one brings the first bug back through a third door:
+    -- ' 5114' and '5114' are different strings, so they both go in and never
+    -- collide, which is the same two-rows-for-one-work failure. No external
+    -- catalogue — AniList, TMDB, IGDB and BGG are numeric, Scryfall is a uuid —
+    -- has an id where surrounding whitespace means anything.
+    --
+    -- Regular expressions rather than btrim because btrim's default trims
+    -- spaces and nothing else: a source_id of a single tab or newline would
+    -- walk straight past btrim(source_id) <> '' and be exactly the blank id
+    -- this is here to stop. '\S' asks for at least one character that is not
+    -- whitespace, and the second one refuses whitespace at either end.
     CONSTRAINT works_source_id_matches_source
-        CHECK ((source = 'manual') = (source_id IS NULL)),
+        CHECK (
+            (source = 'manual') = (source_id IS NULL)
+            AND (source_id IS NULL OR (source_id ~ '\S' AND source_id !~ '^\s|\s$'))
+        ),
 
     -- A work cannot expand itself. The foreign key is happy to accept it, being
     -- a reference back into the same table.

@@ -91,6 +91,12 @@ vive aquí. Episodios, plataforma, número de jugadores o código de set van en
 > hasta que exista una ruta de actualización —la importación desde catálogos
 > externos, que es donde un `Work` cambiará de verdad—. Es correcto para el
 > alcance de hoy, en el que una obra no se modifica después de crearse.
+>
+> Y la trampa concreta que hay que recordar cuando llegue esa ruta: **no hay
+> disparador**, así que la consulta que actualice una obra tendrá que escribir
+> `updated_at = now()` **a mano**, exactamente como ya hace
+> `UpdateLibraryEntry`. Es lo primero que se olvida, y se olvida en silencio:
+> la fila se actualiza igual y la columna se queda mintiendo.
 
 `expansion_of` implementa [ADR-0006](decisions/0006-expansiones-de-juegos-de-mesa.md):
 una expansión es un `Work` propio —con su ficha, su `source_id` en BGG y su
@@ -136,18 +142,39 @@ catálogo compartido:
 
 ```sql
 CONSTRAINT works_source_id_matches_source
-    CHECK ((source = 'manual') = (source_id IS NULL))
+    CHECK (
+        (source = 'manual') = (source_id IS NULL)
+        AND (source_id IS NULL OR (source_id ~ '\S' AND source_id !~ '^\s|\s$'))
+    )
 CONSTRAINT works_expansion_of_is_another_work
     CHECK (expansion_of IS NULL OR expansion_of <> id)
 ```
 
-La primera es la importante, y su segunda dirección es la peligrosa. Una obra
-importada con `source_id` nulo es **invisible** para `works_source_idx`, que es
-parcial sobre `WHERE source_id IS NOT NULL`: basta un puntero a nil en un
-importador para que la deduplicación deje de funcionar sin dar ningún error, y
-que la siguiente persona que importe el mismo anime cree una **segunda** obra.
-Dos personas «viendo lo mismo» apuntando a filas distintas es justo la premisa
-que rompe las coincidencias y las recomendaciones.
+La primera es la importante, y tiene **tres** puertas, de las que solo la
+primera es evidente:
+
+- **`source_id` nulo en una obra importada**: es **invisible** para
+  `works_source_idx`, que es parcial sobre `WHERE source_id IS NOT NULL`. Basta
+  un puntero a nil en un importador para que la deduplicación deje de funcionar
+  sin dar ningún error, y que la siguiente persona que importe el mismo anime
+  cree una **segunda** obra. Dos personas «viendo lo mismo» apuntando a filas
+  distintas es justo la premisa que rompe las coincidencias.
+- **`source_id` vacío**: la imagen especular, y peor, porque **sí se indexa**.
+  Dos anime distintos importados con el id externo en blanco chocan en
+  `('anilist', '')`: un importador que consulte antes de insertar encuentra el
+  primero y da el segundo por importado, entregando a alguien una entrada de
+  biblioteca que apunta a **otro anime**, sin 409 ni 500 ni nada. Y si inserta
+  primero, se lleva una violación de unicidad por un anime que de verdad no
+  está. Una cadena vacía en una clave de deduplicación es un valor que significa
+  «no se sabe» disfrazado de uno que significa «este anime concreto».
+- **`source_id` con espacios alrededor**: vuelve el primer fallo por una tercera
+  puerta, porque `' 5114'` y `'5114'` son cadenas distintas, entran las dos y no
+  colisionan nunca.
+
+Las expresiones regulares están en lugar de `btrim` porque `btrim` por defecto
+recorta espacios y nada más: un `source_id` de un solo tabulador pasaría por
+encima de `btrim(source_id) <> ''` siendo exactamente el id en blanco que esto
+viene a impedir.
 
 Que solo los juegos de mesa tengan expansión **no** está en el esquema: esa
 categoría todavía no existe, [ADR-0006](decisions/0006-expansiones-de-juegos-de-mesa.md)
