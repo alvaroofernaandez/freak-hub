@@ -130,6 +130,24 @@ describe("HomePage", () => {
     expect(screen.getByText("Hunter x Hunter (2011)")).toBeInTheDocument();
   });
 
+  it("says there is more in progress than the rail shows, instead of truncating in silence", async () => {
+    respondWith(PROFILE, { items: [IN_PROGRESS], next_cursor: "cursor-1" });
+
+    render(await HomePage());
+
+    expect(screen.getByTestId("continue-rail-has-more")).toBeInTheDocument();
+  });
+
+  it("says nothing about truncation when everything in progress fits in one page", async () => {
+    respondWith(PROFILE, RAIL);
+
+    render(await HomePage());
+
+    expect(
+      screen.queryByTestId("continue-rail-has-more"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows an empty rail, with somewhere to go, when nothing is in progress", async () => {
     respondWith(PROFILE, { items: [], next_cursor: null });
 

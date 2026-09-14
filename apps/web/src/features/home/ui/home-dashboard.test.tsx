@@ -215,6 +215,35 @@ describe("HomeDashboard", () => {
     ).toBeInTheDocument();
   });
 
+  it("says the rail is truncated, which a horizontal rail has no bottom edge to show", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressItems={IN_PROGRESS}
+        inProgressHasMore
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(screen.getByTestId("continue-rail-has-more")).toBeInTheDocument();
+  });
+
+  it("says nothing about truncation when the whole rail fits", () => {
+    render(
+      <HomeDashboard
+        displayName="Ada Lovelace"
+        inProgressItems={IN_PROGRESS}
+        recommendations={RECOMMENDATIONS}
+        activity={ACTIVITY}
+      />,
+    );
+
+    expect(
+      screen.queryByTestId("continue-rail-has-more"),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows an empty state when nothing is in progress", () => {
     render(
       <HomeDashboard

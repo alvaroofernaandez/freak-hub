@@ -100,6 +100,16 @@ describe("toLibraryItem", () => {
     expect(mapped.season).toBe("2009-spring");
   });
 
+  it("ignores an episode count on a category the contract never gives one to", () => {
+    const mapped = toLibraryItem(
+      entry({
+        work: work({ category: "film", metadata: { episodes: 12 } }),
+      }),
+    );
+
+    expect(mapped.progressTotal).toBeNull();
+  });
+
   it("leaves the total null when the catalogue does not know it", () => {
     const mapped = toLibraryItem(entry({ work: work({ metadata: {} }) }));
 

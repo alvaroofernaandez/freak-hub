@@ -82,6 +82,9 @@ export default async function HomePage() {
             : []
         }
         inProgressError={railError}
+        inProgressHasMore={
+          railState.status === "ready" && railState.data.next_cursor !== null
+        }
         recommendations={[]}
         activity={[]}
       />

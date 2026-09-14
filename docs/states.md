@@ -180,9 +180,14 @@ patrón en una página nueva.
 - Truncar una lista paginada en silencio cuando `next_cursor` sigue sin ser
   `null`: pide el máximo del contrato (100) y dilo (`membersHasMore` /
   `invitationsHasMore` en `MembersDirectory`, `category-has-more` en
-  `/biblioteca/[categoria]`). En `/biblioteca` el aviso importa todavía más:
-  ahí lo truncado no es una lista sino **un recuento**, y una cifra a medias
-  no se lee como incompleta, se lee como falsa.
+  `/biblioteca/[categoria]`, `inProgressHasMore` en `home-dashboard.tsx`). El
+  carril de inicio es el caso que más lo necesita y el que más fácil se olvida:
+  al desplazarse en horizontal **no tiene borde inferior**, así que lo truncado
+  no se ve truncado, se ve completo. Donde lo truncado es **una cifra** y no una
+  lista, el aviso no basta y hay que tocar la cifra: en `/biblioteca` el aviso
+  reencuadra los seis recuentos, y en `/biblioteca/[categoria]` la cifra junto
+  al `<h1>` pasa a decir «más de N obras». Una cifra a medias no se lee como
+  incompleta, se lee como falsa, y un aviso al pie no alcanza a un encabezado.
 - Dibujar una barra de progreso con un `progress` del contrato. `progress` es
   un recuento absoluto en la unidad de la categoría (episodios, capítulos,
   horas, partidas), no un porcentaje: `ProgressBar` solo aparece cuando hay un

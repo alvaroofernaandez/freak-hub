@@ -181,6 +181,18 @@ describe("CategoryLibraryPage", () => {
     expect(screen.getByTestId("category-has-more")).toBeInTheDocument();
   });
 
+  it("stops the figure beside the title from reading as a total it does not know", async () => {
+    apiFetch.mockResolvedValue({ ...PAGE, next_cursor: "cursor-1" });
+
+    render(await CategoryLibraryPage(params("anime")));
+
+    // Two entries came back, but there are more: "2 obras" would be a wrong
+    // number, not a truncated list.
+    expect(screen.getByTestId("category-count")).toHaveTextContent(
+      "más de 2 obras",
+    );
+  });
+
   it("shows the session-expired state for a 401, returning to this category", async () => {
     apiFetch.mockRejectedValue(new ApiError("no token", 401, "invalid_token"));
 

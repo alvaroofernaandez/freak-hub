@@ -26,6 +26,10 @@ type HomeDashboardProps = {
    * "nothing in progress" invites you to start something, and saying that
    * when the request never landed would be a lie (docs/states.md). */
   inProgressError?: NormalizedAppError | null;
+  /** True while `next_cursor` is non-null. A rail scrolls sideways, so it has
+   * no bottom edge for a reader to notice they reached: without saying so,
+   * entry 101 simply never exists (docs/states.md). */
+  inProgressHasMore?: boolean;
   recommendations: PendingRecommendation[];
   activity: ActivityEntry[];
 };
@@ -35,6 +39,7 @@ export function HomeDashboard({
   displayName,
   inProgressItems,
   inProgressError = null,
+  inProgressHasMore = false,
   recommendations,
   activity,
 }: HomeDashboardProps) {
@@ -56,14 +61,25 @@ export function HomeDashboard({
         {inProgressError ? (
           <ErrorState error={inProgressError} size="section" />
         ) : inProgressItems.length > 0 ? (
-          <div
-            data-testid="continue-rail"
-            className="flex gap-3 overflow-x-auto pb-1 md:gap-4 xl:gap-5"
-          >
-            {inProgressItems.map((item, index) => (
-              <ContinueCard key={item.id} item={item} index={index} />
-            ))}
-          </div>
+          <>
+            <div
+              data-testid="continue-rail"
+              className="flex gap-3 overflow-x-auto pb-1 md:gap-4 xl:gap-5"
+            >
+              {inProgressItems.map((item, index) => (
+                <ContinueCard key={item.id} item={item} index={index} />
+              ))}
+            </div>
+            {inProgressHasMore ? (
+              <p
+                data-testid="continue-rail-has-more"
+                className="text-sm text-ink-muted"
+              >
+                Tienes más cosas en curso de las que caben aquí: se muestran las
+                más recientes.
+              </p>
+            ) : null}
+          </>
         ) : (
           <EmptyState
             size="inline"

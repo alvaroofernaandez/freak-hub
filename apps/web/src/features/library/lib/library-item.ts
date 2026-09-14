@@ -73,7 +73,16 @@ export function toLibraryItem(entry: LibraryEntry): LibraryItem {
     category: work.category,
     status: entry.status,
     progress: entry.progress,
-    progressTotal: positiveInteger(work.metadata.episodes),
+    // `episodes` is documented "Anime only" (packages/contracts/openapi.yaml,
+    // `WorkMetadata`), and `metadata` is an open object, so nothing stops an
+    // importer writing the key on a film. Filtering here, exactly as
+    // `metadataLine` filters in the header, keeps a stray key from becoming a
+    // denominator: a bar drawn from an episode count on a film would be the
+    // same "figure the API never sent" this whole change exists to remove.
+    progressTotal:
+      work.category === "anime"
+        ? positiveInteger(work.metadata.episodes)
+        : null,
     rating: entry.rating,
     isFavourite: entry.is_favourite,
     owned: entry.owned,

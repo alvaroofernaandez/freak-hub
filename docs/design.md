@@ -1169,8 +1169,13 @@ Definition of Done de la épica #18.
   estaba sin dibujar porque no había nada que contar: `{{ w.prog }}` bajo cada
   tarjeta de la rejilla (§3) y `◐ {{ c.prog }}` en las tarjetas del carril de
   inicio (§1). En `--ink-muted`, **no** en el `--ink-faint` que usa la maqueta:
-  ese token se queda en 2,52:1 sobre `--surface` y `app/token-contrast.test.ts`
-  lo prohíbe para texto legible. Misma decisión para el recuento «N obras» que
+  ese token se queda entre **2,52:1 y 3,07:1** según el fondo —3,07 sobre
+  `--ground`, 2,85 sobre `--surface`, 2,52 sobre `--surface-raised`, la tabla
+  medida de [Contraste: `--ink-faint` no es para texto](#contraste---ink-faint-no-es-para-texto)—
+  y ninguna de las tres superficies llega al 4,5:1 que pide el texto normal.
+  Las líneas nuevas caen sobre `--surface` (tarjetas de obra) y sobre
+  `--ground` (el recuento junto al `<h1>`), así que fallan las dos;
+  `app/token-contrast.test.ts` prohíbe el token en todo el repositorio. Misma decisión para el recuento «N obras» que
   la maqueta pone junto al `<h1>` de la categoría (§3), que ahora existe.
 - **2026-09-14** · **«Tu entrada» de la ficha de obra (§4 de la maqueta) se
   dibuja en solo lectura.** La maqueta la enseña como controles con un botón
@@ -1190,3 +1195,18 @@ Definition of Done de la épica #18.
   forma se muestra tal cual en vez de destrozarlo. «Fuente:» sobrevive con el
   `enum` real `WorkSource`, y desaparece para `manual`, donde no hay catálogo
   al que dar crédito.
+- **2026-09-14** · **Una cifra junto a un `<h1>` se lee como el total, así que
+  deja de serlo cuando no lo es.** El recuento de `/biblioteca/[categoria]`
+  decía «100 obras» cuando `next_cursor` no era nulo, con el aviso de «hay más
+  obras de las que caben» doscientos píxeles más abajo. Ese aviso califica la
+  **lista**; la cifra del encabezado no la lee nadie con esa nota delante.
+  Ahora dice «más de 100 obras». Es el mismo fallo que el lobby ya tenía
+  resuelto —allí el aviso reencuadra las cifras de las seis tarjetas— y que
+  esta misma regla describe en `docs/states.md`: una cifra a medias no se lee
+  como incompleta, se lee como falsa.
+- **2026-09-14** · **El carril de «Sigue donde lo dejaste» avisa cuando está
+  truncado.** Es la única lista paginada de la aplicación que **no tiene borde
+  inferior**: al desplazarse en horizontal, la entrada 101 no se corta a la
+  vista, simplemente no existe. Un vertical se delata solo al llegar al final;
+  este no, así que el aviso es más necesario aquí que en las dos pantallas
+  donde ya estaba.

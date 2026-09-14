@@ -29,8 +29,17 @@ export async function generateMetadata({
   return { title: isWorkCategory(categoria) ? CATEGORY_LABELS[categoria] : "" };
 }
 
-function countLabel(count: number): string {
-  return count === 1 ? "1 obra" : `${count} obras`;
+/**
+ * The figure beside the title. When the page is truncated it becomes a floor
+ * rather than a total: `next_cursor` says there are more entries than came
+ * back, and "100 obras" next to an `<h1>` reads as the whole count, not as a
+ * page of one. The note lower down qualifies the *list*; a reader who only
+ * takes in the heading never gets that far.
+ */
+function countLabel(count: number, hasMore: boolean): string {
+  const figure = count === 1 ? "1 obra" : `${count} obras`;
+
+  return hasMore ? `más de ${figure}` : figure;
 }
 
 /**
@@ -96,7 +105,7 @@ export default async function CategoryLibraryPage({
           data-testid="category-count"
           className="font-mono text-[13px] text-ink-muted"
         >
-          {countLabel(items.length)}
+          {countLabel(items.length, state.data.next_cursor !== null)}
         </span>
       </div>
       <CategoryWorksBrowser items={items} category={categoria} />
