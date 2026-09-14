@@ -25,7 +25,7 @@ type DrawerProps = {
  * safe-area-aware snap-to-bottom behaviour, which `Dialog` has no reason to
  * implement.
  *
- * The overlay matches `Dialog`'s: `--color-ground-deep` at 55% with a 6px
+ * The overlay matches `Dialog`'s: `--color-scrim` at 55% with a 6px
  * blur, so switching between the two at the `sm` breakpoint (a resize, or a
  * device rotation) never reads as a different surface.
  */
@@ -57,7 +57,7 @@ export function Drawer({
       }}
     >
       <VaulDrawer.Portal>
-        <VaulDrawer.Overlay className="fixed inset-0 z-50 bg-ground-deep/55 backdrop-blur-[6px]" />
+        <VaulDrawer.Overlay className="fixed inset-0 z-50 bg-scrim/55 backdrop-blur-[6px]" />
         <VaulDrawer.Content
           aria-labelledby={titleId}
           onCloseAutoFocus={(event) => {

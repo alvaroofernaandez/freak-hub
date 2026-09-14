@@ -5,9 +5,17 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { AnimatePresence, m } from "motion/react";
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, Logout, UserAdd, UserCircle } from "reicon-react";
+import {
+  Check,
+  ChevronDown,
+  Gear,
+  Logout,
+  UserAdd,
+  UserCircle,
+} from "reicon-react";
 import { Avatar } from "@/features/members/ui/avatar";
 import { cn } from "@/shared/lib/cn";
+import { useTheme } from "@/shared/lib/use-theme";
 import { DURATION, EXIT_RATIO, variants } from "@/shared/motion/tokens";
 
 const ENTER_TRANSITION = { duration: DURATION.fast };
@@ -34,6 +42,7 @@ const ITEM_CLASS =
 export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { signOut } = useClerk();
+  const { theme, setTheme } = useTheme();
 
   // Not modal: a session menu should not hide the rest of the page from
   // assistive tech, nor lock scrolling behind it.
@@ -103,6 +112,34 @@ export function UserMenu({ displayName, username, avatarUrl }: UserMenuProps) {
                       Invitar a alguien
                     </Link>
                   </DropdownMenu.Item>
+                  <DropdownMenu.Item asChild>
+                    <Link href="/ajustes" className={ITEM_CLASS}>
+                      <Gear size={16} aria-hidden="true" />
+                      Ajustes
+                    </Link>
+                  </DropdownMenu.Item>
+                  {/*
+                   * A checkbox item, not a plain one: it carries a state, and
+                   * `menuitemcheckbox` is what announces that state. It keeps
+                   * the menu open on select, because switching the theme is
+                   * not a reason to lose your place — and the full switch,
+                   * with its explanation, still lives in /ajustes.
+                   */}
+                  <DropdownMenu.CheckboxItem
+                    className={ITEM_CLASS}
+                    checked={theme === "light"}
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={(checked) =>
+                      setTheme(checked ? "light" : "dark")
+                    }
+                  >
+                    <span className="flex w-4 justify-center">
+                      <DropdownMenu.ItemIndicator>
+                        <Check size={14} aria-hidden="true" />
+                      </DropdownMenu.ItemIndicator>
+                    </span>
+                    Tema claro
+                  </DropdownMenu.CheckboxItem>
                   <DropdownMenu.Item
                     className={ITEM_CLASS}
                     onSelect={() => signOut()}
