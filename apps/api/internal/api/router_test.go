@@ -974,3 +974,39 @@ func TestEveryRouteUnderV1RefusesARequestWithNoSession(t *testing.T) {
 
 	assert.Subset(t, walked, v1Surface, "a route of the documented surface is no longer mounted")
 }
+
+// The two routes outside the library that share httpx.DecodeJSON. The change
+// that rejects a second document is theirs as much as it is /v1/works', and
+// a behaviour change nothing asserts at the route level is one the next
+// person has to rediscover by reading httpx.
+func TestPatchMeRejectsASecondDocumentAfterTheBody(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.doRaw(t, http.MethodPatch, "/v1/me", "valid-user_alex",
+		`{"username":"alex2"}{"username":"alex3"}`)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+
+	unchanged, err := s.usersRepo.ByClerkID(t.Context(), "user_alex")
+	require.NoError(t, err)
+	assert.Equal(t, "alex", unchanged.Username,
+		"the first document is not applied before the second is noticed")
+}
+
+func TestCreateInvitationRejectsASecondDocumentAfterTheBody(t *testing.T) {
+	t.Parallel()
+
+	s := newSuite(t)
+	s.seedMember(t, "user_alex", "alex")
+
+	recorder := s.doRaw(t, http.MethodPost, "/v1/invitations", "valid-user_alex",
+		`{"email":"uno@freakhub.test"}{"email":"dos@freakhub.test"}`)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code, "body: %s", recorder.Body.String())
+	assert.Equal(t, "invalid_payload", errorCode(t, recorder))
+	assert.Empty(t, s.sender.Emails, "nothing is sent when the body is refused")
+}
