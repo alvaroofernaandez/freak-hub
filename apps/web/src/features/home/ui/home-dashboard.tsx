@@ -30,22 +30,22 @@ export function HomeDashboard({
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-[22px] font-bold text-ink md:text-[24px] lg:text-[27px]">
+        <h1 className="text-[22px] font-bold text-ink md:text-[24px] xl:text-[27px]">
           Hola, {displayName}
         </h1>
-        <p className="mt-1 text-[12px] text-ink-muted lg:text-[13px]">
+        <p className="mt-1 text-[12px] text-ink-muted xl:text-[13px]">
           Esto es lo que pasa en tu biblioteca
         </p>
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-[14px] font-bold text-ink lg:text-[15px]">
+        <h2 className="text-[14px] font-bold text-ink xl:text-[15px]">
           Sigue donde lo dejaste
         </h2>
         {inProgressWorks.length > 0 ? (
           <div
             data-testid="continue-rail"
-            className="flex gap-3 overflow-x-auto pb-1 md:gap-4 lg:gap-5"
+            className="flex gap-3 overflow-x-auto pb-1 md:gap-4 xl:gap-5"
           >
             {inProgressWorks.map((work, index) => (
               <ContinueCard key={work.id} work={work} index={index} />
@@ -132,7 +132,7 @@ function ContinueCard({ work, index }: ContinueCardProps) {
   return (
     <div
       data-testid="continue-card"
-      className="stagger-in flex w-[210px] flex-none flex-col gap-2 md:w-[230px] lg:w-[280px]"
+      className="stagger-in flex w-[210px] flex-none flex-col gap-2 md:w-[230px] xl:w-[280px]"
       style={staggerStyle(index) as CSSProperties}
     >
       <Link
@@ -141,7 +141,7 @@ function ContinueCard({ work, index }: ContinueCardProps) {
       >
         <div
           className={cn(
-            "flex h-[110px] flex-col justify-end rounded-xl p-3 text-accent-ink md:h-[120px] lg:h-[140px]",
+            "flex h-[110px] flex-col justify-end rounded-xl p-3 text-accent-ink md:h-[120px] xl:h-[140px]",
             CATEGORY_COLOR_CLASS[work.category],
           )}
         >

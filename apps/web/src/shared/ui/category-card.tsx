@@ -41,8 +41,8 @@ export type CategoryCardProps = CategoryCardLinkProps | CategoryCardButtonProps;
 
 const SIZE = {
   roster: {
-    card: "h-[190px] p-5 md:h-[210px] lg:h-[230px] lg:p-6",
-    name: "text-xl lg:text-2xl",
+    card: "h-[190px] p-5 md:h-[210px] xl:h-[230px] xl:p-6",
+    name: "text-xl xl:text-2xl",
     nameWidth: "max-w-[62%]",
     art: "top-3 w-[52%]",
     sizes: "(min-width: 640px) 22vw, 45vw",

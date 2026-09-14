@@ -17,11 +17,11 @@ export default function LibraryLobbyPage() {
   const counts = countByCategory([]);
 
   return (
-    <section className="space-y-[22px] md:space-y-[18px] lg:space-y-[30px]">
-      <h1 className="text-[24px] font-bold text-ink md:text-[25px] lg:text-[28px]">
+    <section className="space-y-[22px] md:space-y-[18px] xl:space-y-[30px]">
+      <h1 className="text-[24px] font-bold text-ink md:text-[25px] xl:text-[28px]">
         Tu biblioteca
       </h1>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:gap-5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:gap-5">
         {CATEGORY_ORDER.map((category, index) => (
           <CategoryCard
             key={category}

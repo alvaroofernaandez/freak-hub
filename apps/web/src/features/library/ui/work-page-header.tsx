@@ -37,18 +37,18 @@ export function WorkPageHeader({ work }: WorkPageHeaderProps) {
   const metadata = metadataLine(work);
 
   return (
-    <div className="flex flex-col gap-[22px] md:flex-row md:gap-[22px] lg:gap-[30px]">
+    <div className="flex flex-col gap-[22px] md:flex-row md:gap-[22px] xl:gap-[30px]">
       <CoverPlaceholder
         testId="work-page-header-cover"
-        className="h-[220px] w-full md:h-[230px] md:w-[170px] lg:h-[300px] lg:w-[220px]"
+        className="h-[220px] w-full md:h-[230px] md:w-[170px] xl:h-[300px] xl:w-[220px]"
       />
-      <div className="flex flex-col gap-2.5 md:gap-[9px] md:pt-1.5 lg:gap-3 lg:pt-2">
-        <h1 className="text-2xl font-bold text-ink md:text-[23px] lg:text-3xl">
+      <div className="flex flex-col gap-2.5 md:gap-[9px] md:pt-1.5 xl:gap-3 xl:pt-2">
+        <h1 className="text-2xl font-bold text-ink md:text-[23px] xl:text-3xl">
           {work.title}
         </h1>
         <span
           className={cn(
-            "w-fit rounded-full border px-3 py-[5px] text-[11px] font-semibold md:px-[11px] md:py-1 md:text-[10px] lg:px-3 lg:py-[5px] lg:text-[11px]",
+            "w-fit rounded-full border px-3 py-[5px] text-[11px] font-semibold md:px-[11px] md:py-1 md:text-[10px] xl:px-3 xl:py-[5px] xl:text-[11px]",
             CATEGORY_ACCENT_CLASS[work.category],
           )}
         >
@@ -57,7 +57,7 @@ export function WorkPageHeader({ work }: WorkPageHeaderProps) {
         {metadata ? (
           <p
             data-testid="work-page-header-metadata"
-            className="text-xs text-ink-muted lg:text-[13px]"
+            className="text-xs text-ink-muted xl:text-[13px]"
           >
             {metadata}
           </p>
@@ -69,7 +69,7 @@ export function WorkPageHeader({ work }: WorkPageHeaderProps) {
           />
         ) : null}
         {work.source ? (
-          <p className="font-mono text-[10px] text-ink-muted lg:text-[11px]">
+          <p className="font-mono text-[10px] text-ink-muted xl:text-[11px]">
             Fuente: {work.source}
           </p>
         ) : null}
