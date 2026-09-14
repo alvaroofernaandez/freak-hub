@@ -82,10 +82,63 @@ describe("WorkCard", () => {
 
   it("shows the rating when it is present, and hides it otherwise", () => {
     const { rerender } = render(<WorkCard item={item({ rating: 9 })} />);
-    expect(screen.getByText("9/10")).toBeInTheDocument();
+    expect(screen.getByTestId("work-card-rating")).toHaveTextContent(
+      "Valoración 9/10",
+    );
 
     rerender(<WorkCard item={item({ rating: null })} />);
-    expect(screen.queryByText(/\/10/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("work-card-rating")).not.toBeInTheDocument();
+  });
+
+  /*
+   * Issue #76: with `flex items-center justify-between`, a status and a rating
+   * that together exceed the card stop being separated and read as one run —
+   * measured at 1440px, `Abandonado` + `10/10` overflowed the 122px row by
+   * 35px and the card itself by 23px.
+   *
+   * jsdom loads no stylesheet, so it cannot measure that (the same limit
+   * `app/source-scan.ts` documents for colour tokens). What it CAN pin is the
+   * structure that makes the collision impossible: a line each, in one column,
+   * every one of them saying what it is. The geometry itself is a CSS
+   * guarantee — `flex-col` with no `justify-between` — verified in a real
+   * browser at 390 / 1024 / 1440px, and asserted below only as the class
+   * contract those measurements depend on.
+   */
+  it("gives the status and the rating a line each, so they can never share a row", () => {
+    render(<WorkCard item={item({ status: "dropped", rating: 10 })} />);
+
+    const meta = screen.getByTestId("work-card-meta");
+    expect(meta).toContainElement(screen.getByTestId("status-badge"));
+    expect(meta).toContainElement(screen.getByTestId("work-card-rating"));
+    expect([...meta.children].map((line) => line.textContent)).toEqual([
+      "Abandonado",
+      "Valoración 10/10",
+    ]);
+  });
+
+  it("stacks the meta lines instead of pushing them to opposite edges", () => {
+    render(<WorkCard item={item({ status: "dropped", rating: 10 })} />);
+
+    const meta = screen.getByTestId("work-card-meta");
+    expect(meta).toHaveClass("flex-col");
+    expect(meta.className).not.toMatch(/justify-between/);
+  });
+
+  it("keeps a long title from stretching the card past its neighbours", () => {
+    render(
+      <WorkCard
+        item={item({ title: "Ghost in the Shell: Stand Alone Complex" })}
+      />,
+    );
+
+    const title = screen.getByTestId("work-card-title");
+    // Clamped AND reserved: the pair is what keeps every card's status line at
+    // the same height, whether its title took one line or two.
+    expect(title).toHaveClass("line-clamp-2", "min-h-[2lh]");
+    expect(title).toHaveAttribute(
+      "title",
+      "Ghost in the Shell: Stand Alone Complex",
+    );
   });
 
   it("shows how far along the entry is, in the category's own unit", () => {

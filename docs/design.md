@@ -122,6 +122,46 @@ la misma tarjeta.
 | `dropped` | `X` | Abandonado |
 | `on_hold` | `Pause` | Parado a propósito, no abandonado |
 
+## Una tarjeta pone un dato por línea
+
+El cuerpo de una tarjeta es **una columna**: el título, y debajo una línea por
+cada dato. Nunca dos datos en la misma fila repartidos con `justify-between`.
+
+**El motivo es mecánico, no estético.** `justify-between` solo separa mientras
+sobra anchura. En cuanto el contenido llena la fila deja de separar, los dos
+hijos quedan pegados y lo que asome se recorta contra el `overflow-hidden` de
+la tarjeta. Es un fallo que no existe hasta que una cadena crece: pasa la
+revisión, pasa el CI y vive en `main` hasta que llegan datos de verdad.
+
+Pasó exactamente así (issue #76). La tarjeta de biblioteca llevaba el estado y
+la valoración en una fila, y el peor caso medido —`Abandonado` con `10/10`—
+**desbordaba 35 px a 1440 px** (la fila dispone de 122 px y ese par necesita
+156,5 px) **y 19 px a 390 px**, con 23 px y 7 px de tarjeta recortada. Se leía
+«Abandonado10,». `En curso` y `Wishlist` cabían de sobra, y por eso nadie lo
+había visto.
+
+Tres reglas salen de ahí:
+
+1. **Un dato por línea.** Una columna no puede colisionar a ninguna anchura.
+   Envolver la fila con `flex-wrap` no vale: haría que dos tarjetas de la misma
+   rejilla se maquetaran distinto según la palabra que llevara cada una.
+2. **Un número se enuncia.** La valoración se escribe `Valoración 9/10`, no
+   `9/10` a secas. Suelta encima de `12 / 64 episodios` son dos fracciones en
+   la misma monoespaciada, y un lector de pantalla las anuncia sin nada que
+   diga qué cuenta cada una. Misma familia de regla que
+   [el estado](#el-estado-de-una-entrada-no-usa-color): el significado va en
+   palabras, no en la posición.
+3. **Las tarjetas de una rejilla miden lo mismo.** El título se acota **y** se
+   le reserva su altura, con la reserva atada a la escala tipográfica
+   (`line-clamp-2 min-h-[2lh]`), nunca a un píxel fijo que se desincronice de
+   ella. Sin acotar, un título de cuatro líneas arrastraba a toda su fila: las
+   alturas iban de 224 a 288,5 px.
+
+Referencia: `features/library/ui/work-card.tsx`. La maqueta ya lo dibujaba así
+—`design/high-fidelity-desktop.html` §3, en escritorio y en móvil:
+`flex-direction:column; gap:6px`— pero solo estaba dibujado, y un artboard no
+lo aplica quien escribe el componente sin abrirlo. Por eso está aquí.
+
 ## Tipografía
 
 Tres familias, cada una con un trabajo y solo uno.
@@ -751,8 +791,36 @@ No hace falta una captura por anchura ni un test de regresión visual: es una
 pasada manual antes de dar la pantalla por terminada, igual que fija la
 Definition of Done de la épica #18.
 
+#### Limitación conocida: la rejilla de biblioteca al 200 %
+
+Con el tamaño de fuente raíz al 200 %, `/biblioteca/[categoria]` provoca
+**276 px de scroll horizontal de página**. La causa es la rejilla de seis
+columnas fijas (`xl:grid-cols-6`) dentro de `max-w-5xl`: a esa escala las seis
+no caben y ningún arreglo dentro de la tarjeta lo evita. Medido al cerrar #76,
+donde el recorte *dentro* de la tarjeta bajó de 114 px a 30 px sin mover esta
+cifra.
+
+Queda anotado, no resuelto: es anterior a #76 y pide una decisión sobre la
+propia rejilla (columnas fluidas en vez de un número fijo), no sobre la
+tarjeta. Los 30 px restantes de recorte interno salen del `inline-flex` de
+`shared/ui/status-mark.tsx` y del título en tipografía de display, no de la
+línea de valoración.
+
 ## Registro de decisiones
 
+- **2026-09-14** · Una tarjeta pone **un dato por línea**; se prohíbe repartir
+  dos datos en una fila con `justify-between`. Motivo medido: cuando el
+  contenido llena la fila, `justify-between` deja de separar y los hijos quedan
+  adyacentes y recortados — `Abandonado` con `10/10` desbordaba **35 px a
+  1440 px y 19 px a 390 px** y se leía «Abandonado10,» (issue #76). De ahí
+  salen también que una valoración **se enuncie** (`Valoración 9/10`, nunca el
+  número suelto: encima de `12 / 64 episodios` son dos fracciones en la misma
+  monoespaciada y nada dice qué cuenta cada una) y que las tarjetas de una
+  rejilla tengan **altura constante**, con el título acotado y su altura
+  reservada contra la escala tipográfica (`line-clamp-2 min-h-[2lh]`), no
+  contra un píxel fijo. La maqueta ya lo dibujaba así, pero solo dibujado: una
+  regla que únicamente vive en un artboard no la aplica quien escribe el
+  componente. Ver [Una tarjeta pone un dato por línea](#una-tarjeta-pone-un-dato-por-línea).
 - **2026-09-14** · «Tu entrada» deja de ser de solo lectura. Los seis estados
   pasan a ser una elección única sobre `@radix-ui/react-radio-group`
   (`shared/ui/radio-chips.tsx`), no seis botones con `aria-pressed`: una fila
