@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { test } from "@playwright/test";
 
 /**
  * Everything the signed-in Playwright projects need to know about the test
@@ -19,28 +20,50 @@ export const STORAGE_STATE = fileURLToPath(
 export const testUserIdentifier = process.env.E2E_CLERK_USER_IDENTIFIER ?? "";
 
 /**
- * Its password — optional, and only usable where the instance accepts a
- * password as a *first factor*. Freak Hub's development instance does not: it
- * signs in with an email code, so the identifier is a `+clerk_test` address and
- * this stays empty. See `sign-in.ts`.
+ * Its password — optional, and a fallback rather than the default. On Freak
+ * Hub's development instance a password sign-in stops at `needs_client_trust`
+ * and never yields a session in a fresh browser; `sign-in.ts` explains the
+ * measurement. Only an identifier that is not a `+clerk_test` address needs it.
  */
 export const testUserPassword = process.env.E2E_CLERK_USER_PASSWORD ?? "";
 
 /**
- * Signing in needs the user's identifier *and* a Clerk secret key, because
- * `clerkSetup()` trades that key for the testing token that gets the run past
- * bot protection. Missing either is a skip, never a failure: a fork's pull
- * request has no access to the instance and should not be told it broke
- * something it cannot reach.
+ * Why the signed-in tests cannot run, or `null` when they can.
+ *
+ * A function, not a constant, and that is the whole subtlety. Playwright
+ * collects every test file *before* it runs the global setup, so a module-scope
+ * `test.skip(...)` is decided at a moment when `clerkSetup()` has not been
+ * called and `CLERK_TESTING_TOKEN` does not exist yet — measured: the gate read
+ * `true` inside the test body while every test had already been marked skipped
+ * during collection. Called from a `beforeEach`, it reads the environment the
+ * setup actually left behind.
+ *
+ * The token is the stricter half on purpose. Checking the *secret key* instead
+ * would pass with a key that is present but rotated, or pointed at an instance
+ * that is down, and every signed-in test would then fail on bot protection
+ * rather than skip.
  */
-export const hasSignedInCredentials = Boolean(
-  testUserIdentifier && process.env.CLERK_SECRET_KEY,
-);
+export function missingSessionReason(): string | null {
+  if (!testUserIdentifier) {
+    return "Sin E2E_CLERK_USER_IDENTIFIER: no hay usuario de prueba con el que iniciar sesión (ver docs/testing.md).";
+  }
 
-export const MISSING_CREDENTIALS =
-  "Sin credenciales del usuario de prueba: define E2E_CLERK_USER_IDENTIFIER y " +
-  "CLERK_SECRET_KEY (y E2E_CLERK_USER_PASSWORD si tu instancia inicia sesión " +
-  "con contraseña). Ver docs/testing.md.";
+  if (!process.env.CLERK_TESTING_TOKEN) {
+    return "clerkSetup() no consiguió un testing token de Clerk: revisa CLERK_SECRET_KEY (ver docs/testing.md).";
+  }
+
+  return null;
+}
+
+/**
+ * Drop-in `beforeEach` for every signed-in spec. Declare it before any hook
+ * that touches `context` or `page`: fixtures are created lazily, so skipping
+ * first means no browser is launched for a test that is not going to run.
+ */
+export function skipWithoutTestSession(): void {
+  const reason = missingSessionReason();
+  test.skip(reason !== null, reason ?? "");
+}
 
 /**
  * The address the invitation journeys use. `+clerk_test` is Clerk's own

@@ -2,13 +2,12 @@ import { setupClerkTestingToken } from "@clerk/testing/playwright";
 import { expect, test } from "@playwright/test";
 import {
   apiIsReachable,
-  hasSignedInCredentials,
   inviteeEmail,
   MISSING_API,
-  MISSING_CREDENTIALS,
+  skipWithoutTestSession,
 } from "./support/session";
 
-test.skip(!hasSignedInCredentials, MISSING_CREDENTIALS);
+test.beforeEach(skipWithoutTestSession);
 
 test.beforeEach(async ({ context }) => {
   await setupClerkTestingToken({ context });

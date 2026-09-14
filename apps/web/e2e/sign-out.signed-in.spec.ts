@@ -1,9 +1,9 @@
 import { clerk } from "@clerk/testing/playwright";
 import { expect, test } from "@playwright/test";
-import { hasSignedInCredentials, MISSING_CREDENTIALS } from "./support/session";
+import { skipWithoutTestSession } from "./support/session";
 import { signInAsTestUser } from "./support/sign-in";
 
-test.skip(!hasSignedInCredentials, MISSING_CREDENTIALS);
+test.beforeEach(skipWithoutTestSession);
 
 /**
  * The only spec that signs in for itself instead of restoring the stored

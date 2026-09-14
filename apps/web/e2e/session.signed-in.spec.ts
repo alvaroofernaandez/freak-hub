@@ -1,8 +1,8 @@
 import { setupClerkTestingToken } from "@clerk/testing/playwright";
 import { expect, test } from "@playwright/test";
-import { hasSignedInCredentials, MISSING_CREDENTIALS } from "./support/session";
+import { skipWithoutTestSession } from "./support/session";
 
-test.skip(!hasSignedInCredentials, MISSING_CREDENTIALS);
+test.beforeEach(skipWithoutTestSession);
 
 test.beforeEach(async ({ context }) => {
   // The stored session gets the run past the middleware, not past bot

@@ -1,12 +1,8 @@
 import { expect, test as setup } from "@playwright/test";
-import {
-  hasSignedInCredentials,
-  MISSING_CREDENTIALS,
-  STORAGE_STATE,
-} from "./support/session";
+import { STORAGE_STATE, skipWithoutTestSession } from "./support/session";
 import { signInAsTestUser } from "./support/sign-in";
 
-setup.skip(!hasSignedInCredentials, MISSING_CREDENTIALS);
+setup.beforeEach(skipWithoutTestSession);
 
 /**
  * The first signed-in journey, and the one every other one stands on: sign in
