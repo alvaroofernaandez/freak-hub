@@ -151,8 +151,8 @@ export const MESSAGES: Record<ProblemCode, CopyResolver> = {
     "Ya tienes esa obra guardada. Ábrela para cambiar su estado o su progreso.",
   ),
   work_not_found: fixed(
-    "Esa obra ya no está",
-    "No hemos encontrado la obra. Puede que la hayan quitado del catálogo.",
+    "No hemos encontrado esa obra",
+    "Vuelve a buscarla en el catálogo.",
   ),
   rating_not_allowed: fixed(
     "Todavía no puedes valorar",
@@ -161,6 +161,14 @@ export const MESSAGES: Record<ProblemCode, CopyResolver> = {
   invalid_progress: fixed(
     "Progreso no válido",
     "Ese progreso no encaja con la obra. Revisa el número e inténtalo de nuevo.",
+  ),
+  library_entry_not_found: fixed(
+    "No está en tu biblioteca",
+    "Esa entrada ya no está en tu biblioteca. Vuelve a cargar la lista.",
+  ),
+  invalid_transition: fixed(
+    "Ese cambio no es posible",
+    "No se puede pasar a ese estado desde el actual. Comprueba en qué punto está la entrada.",
   ),
   method_not_allowed: fixed(
     "Acción no disponible",

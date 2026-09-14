@@ -89,6 +89,8 @@ describe("normalizeError copy for the library codes", () => {
     { code: "work_not_found", status: 404 },
     { code: "rating_not_allowed", status: 422 },
     { code: "invalid_progress", status: 422 },
+    { code: "library_entry_not_found", status: 404 },
+    { code: "invalid_transition", status: 422 },
   ];
 
   it.each(

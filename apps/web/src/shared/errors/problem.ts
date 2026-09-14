@@ -58,6 +58,8 @@ const KNOWN_CODES = {
   work_not_found: true,
   rating_not_allowed: true,
   invalid_progress: true,
+  library_entry_not_found: true,
+  invalid_transition: true,
   method_not_allowed: true,
   payload_too_large: true,
   request_timeout: true,
