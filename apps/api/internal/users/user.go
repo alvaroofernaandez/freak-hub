@@ -97,4 +97,9 @@ type ClerkProfile struct {
 	DisplayName string
 	AvatarURL   string
 	Email       string
+	// InvitedBy records the member whose invitation this account used. It is
+	// nil for the founders, for anyone Clerk created outside the invitation
+	// flow, and for a redelivered event whose invitation an earlier delivery
+	// already closed — none of which is a failure.
+	InvitedBy *uuid.UUID
 }

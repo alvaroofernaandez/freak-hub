@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -549,4 +550,58 @@ func TestUploadAvatarReturnsTheOptimisticMember(t *testing.T) {
 	stillOld, err := repo.ByClerkID(context.Background(), "user_123")
 	require.NoError(t, err)
 	assert.Equal(t, "https://img.clerk.com/old.png", stillOld.AvatarURL, "the repository row must not have been mutated")
+}
+
+func TestEnsureFromClerkRecordsWhoInvitedTheMember(t *testing.T) {
+	t.Parallel()
+
+	repo := usersmem.New()
+	service := users.NewService(repo)
+
+	inviter := uuid.New()
+	input := profile()
+	input.InvitedBy = &inviter
+
+	user, err := service.EnsureFromClerk(context.Background(), input)
+
+	require.NoError(t, err)
+	require.NotNil(t, user.InvitedBy, "the invitation that let this account sign up knew who sent it")
+	assert.Equal(t, inviter, *user.InvitedBy)
+}
+
+func TestEnsureFromClerkLeavesInvitedByNilWithoutAnInviter(t *testing.T) {
+	t.Parallel()
+
+	repo := usersmem.New()
+	service := users.NewService(repo)
+
+	user, err := service.EnsureFromClerk(context.Background(), profile())
+
+	require.NoError(t, err)
+	assert.Nil(t, user.InvitedBy, "a founder has nobody to point at, and that is not an error")
+}
+
+func TestEnsureFromClerkRedeliveryDoesNotOverwriteInvitedBy(t *testing.T) {
+	t.Parallel()
+
+	repo := usersmem.New()
+	service := users.NewService(repo)
+	ctx := context.Background()
+
+	inviter := uuid.New()
+	first := profile()
+	first.InvitedBy = &inviter
+
+	_, err := service.EnsureFromClerk(ctx, first)
+	require.NoError(t, err)
+
+	// A redelivery finds no pending invitation left to close, so it arrives
+	// without an inviter. Who brought a member in never changes: the second
+	// write must leave the recorded value alone.
+	second, err := service.EnsureFromClerk(ctx, profile())
+
+	require.NoError(t, err)
+	require.NotNil(t, second.InvitedBy)
+	assert.Equal(t, inviter, *second.InvitedBy)
+	assert.Equal(t, 1, repo.Count())
 }

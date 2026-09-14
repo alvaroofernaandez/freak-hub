@@ -407,3 +407,49 @@ func TestListMineRejectsAnOutOfRangeLimit(t *testing.T) {
 	_, _, err = service.ListMine(context.Background(), inviter, nil, 101)
 	require.ErrorIs(t, err, invitations.ErrInvalidLimit)
 }
+
+func TestPendingByEmailResolvesTheInviterWithoutClosingTheInvitation(t *testing.T) {
+	t.Parallel()
+
+	repo := invitationsmem.NewRepository()
+	service := invitations.NewService(invitations.ServiceDeps{
+		Sender:     invitationsmem.NewSender(),
+		Repository: repo,
+		Members:    invitationsmem.NewMembers(),
+	})
+	ctx := context.Background()
+
+	inviter := uuid.New()
+	_, err := repo.Create(ctx, invitations.Invitation{
+		Email:     "alex@correo.com",
+		InviterID: inviter,
+		Status:    invitations.StatusPending,
+	})
+	require.NoError(t, err)
+
+	found, err := service.PendingByEmail(ctx, "  Alex@Correo.com  ")
+
+	require.NoError(t, err)
+	assert.Equal(t, inviter, found.InviterID)
+
+	// Reading must not consume it: the webhook only closes the invitation once
+	// the member it belongs to actually exists.
+	stillPending, err := repo.PendingByEmail(ctx, "alex@correo.com")
+	require.NoError(t, err, "looking the invitation up must leave it pending")
+	assert.Equal(t, invitations.StatusPending, stillPending.Status)
+}
+
+func TestPendingByEmailReportsNotFoundWhenNothingIsPending(t *testing.T) {
+	t.Parallel()
+
+	repo := invitationsmem.NewRepository()
+	service := invitations.NewService(invitations.ServiceDeps{
+		Sender:     invitationsmem.NewSender(),
+		Repository: repo,
+		Members:    invitationsmem.NewMembers(),
+	})
+
+	_, err := service.PendingByEmail(context.Background(), "nadie@correo.com")
+
+	assert.ErrorIs(t, err, invitations.ErrNotFound)
+}

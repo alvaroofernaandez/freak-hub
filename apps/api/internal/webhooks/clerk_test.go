@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -209,4 +210,163 @@ func TestWebhookIgnoresAnEventItDoesNotHandle(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, recorder.Code)
 	assert.Equal(t, 0, h.usersRepo.Count())
+}
+
+func TestWebhookRecordsWhoInvitedTheNewMember(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	inviter := uuid.New()
+	_, err := h.inviteRepo.Create(ctx, invitations.Invitation{
+		Email:     "alvaro@correo.com",
+		InviterID: inviter,
+		Status:    invitations.StatusPending,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusNoContent, h.post(t, userCreated).Code)
+
+	member, err := h.usersRepo.ByClerkID(ctx, "user_123")
+	require.NoError(t, err)
+	require.NotNil(t, member.InvitedBy, "the pending invitation knew who brought this member in")
+	assert.Equal(t, inviter, *member.InvitedBy)
+}
+
+func TestWebhookLeavesInvitedByNilWithoutAPendingInvitation(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+
+	require.Equal(t, http.StatusNoContent, h.post(t, userCreated).Code)
+
+	member, err := h.usersRepo.ByClerkID(context.Background(), "user_123")
+	require.NoError(t, err)
+	assert.Nil(t, member.InvitedBy, "a founder or a hand-made Clerk account has nobody to point at")
+}
+
+func TestWebhookRedeliveryDoesNotOverwriteInvitedBy(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	inviter := uuid.New()
+	_, err := h.inviteRepo.Create(ctx, invitations.Invitation{
+		Email:     "alvaro@correo.com",
+		InviterID: inviter,
+		Status:    invitations.StatusPending,
+	})
+	require.NoError(t, err)
+
+	// The second delivery finds nothing left to close, so it carries no
+	// inviter. It must not erase the one the first delivery recorded.
+	require.Equal(t, http.StatusNoContent, h.post(t, userCreated).Code)
+	require.Equal(t, http.StatusNoContent, h.post(t, userCreated).Code)
+
+	member, err := h.usersRepo.ByClerkID(ctx, "user_123")
+	require.NoError(t, err)
+	require.NotNil(t, member.InvitedBy)
+	assert.Equal(t, inviter, *member.InvitedBy)
+	assert.Equal(t, 1, h.usersRepo.Count())
+}
+
+func TestWebhookStillCreatesTheMemberWhenTheInvitationCannotBeClosed(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	inviter := uuid.New()
+	_, err := h.inviteRepo.Create(ctx, invitations.Invitation{
+		Email:     "alvaro@correo.com",
+		InviterID: inviter,
+		Status:    invitations.StatusPending,
+	})
+	require.NoError(t, err)
+
+	h.inviteRepo.MarkAcceptedErr = errors.New("the database is down")
+
+	// Closing the invitation is bookkeeping. Clerk must not be told to retry an
+	// event whose main effect succeeded, and the inviter was read before the
+	// upsert, so the member keeps it.
+	require.Equal(t, http.StatusNoContent, h.post(t, userCreated).Code)
+
+	member, err := h.usersRepo.ByClerkID(ctx, "user_123")
+	require.NoError(t, err)
+	require.NotNil(t, member.InvitedBy)
+	assert.Equal(t, inviter, *member.InvitedBy)
+}
+
+// userCreatedWithoutUsername is the same account as userCreated, minus the
+// username: EnsureFromClerk cannot project it, so the handler answers 422 and
+// Clerk stops retrying.
+const userCreatedWithoutUsername = `{
+  "type": "user.created",
+  "data": {
+    "id": "user_123",
+    "primary_email_address_id": "idn_1",
+    "email_addresses": [{"id": "idn_1", "email_address": "alvaro@correo.com"}]
+  }
+}`
+
+func TestWebhookKeepsTheInvitationPendingWhenTheMemberCannotBeCreated(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	inviter := uuid.New()
+	_, err := h.inviteRepo.Create(ctx, invitations.Invitation{
+		Email:     "alvaro@correo.com",
+		InviterID: inviter,
+		Status:    invitations.StatusPending,
+	})
+	require.NoError(t, err)
+
+	h.usersRepo.UpsertErr = errors.New("the database is down")
+	require.Equal(t, http.StatusInternalServerError, h.post(t, userCreated).Code)
+
+	pending, err := h.inviteRepo.PendingByEmail(ctx, "alvaro@correo.com")
+	require.NoError(t, err, "Clerk retries a 500: the invitation must still be there to close")
+	assert.Equal(t, inviter, pending.InviterID)
+
+	// The retry is the delivery that finally creates the member, and it still
+	// knows who invited them.
+	h.usersRepo.UpsertErr = nil
+	require.Equal(t, http.StatusNoContent, h.post(t, userCreated).Code)
+
+	member, err := h.usersRepo.ByClerkID(ctx, "user_123")
+	require.NoError(t, err)
+	require.NotNil(t, member.InvitedBy)
+	assert.Equal(t, inviter, *member.InvitedBy)
+}
+
+func TestWebhookKeepsTheInvitationPendingWhenTheProfileIsUnprocessable(t *testing.T) {
+	t.Parallel()
+
+	h := newHarness(t, nil)
+	ctx := context.Background()
+	inviter := uuid.New()
+	_, err := h.inviteRepo.Create(ctx, invitations.Invitation{
+		Email:     "alvaro@correo.com",
+		InviterID: inviter,
+		Status:    invitations.StatusPending,
+	})
+	require.NoError(t, err)
+
+	// 422 tells Clerk to stop retrying, so this delivery is the last one for
+	// this event. Burning the invitation here would strand the inviter
+	// forever.
+	require.Equal(t, http.StatusUnprocessableEntity, h.post(t, userCreatedWithoutUsername).Code)
+
+	pending, err := h.inviteRepo.PendingByEmail(ctx, "alvaro@correo.com")
+	require.NoError(t, err, "a rejected payload must not consume the invitation")
+	assert.Equal(t, inviter, pending.InviterID)
+
+	// Once the profile is fixed, user.updated projects the member and the
+	// invitation is still there to say who invited them.
+	require.Equal(t, http.StatusNoContent, h.post(t, strings.Replace(userCreated, "user.created", "user.updated", 1)).Code)
+
+	member, err := h.usersRepo.ByClerkID(ctx, "user_123")
+	require.NoError(t, err)
+	require.NotNil(t, member.InvitedBy)
+	assert.Equal(t, inviter, *member.InvitedBy)
 }

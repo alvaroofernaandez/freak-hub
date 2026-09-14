@@ -51,6 +51,11 @@ func NewService(repo Repository, opts ...ServiceOption) *Service {
 // arrive out of order, so it must be idempotent: keyed by ClerkUserID, it
 // creates the member the first time and refreshes the mutable profile fields
 // afterwards.
+//
+// InvitedBy only ever reaches the database on that first insert: who brought a
+// member in never changes, so the repository leaves the column alone on
+// conflict. A redelivery arriving without an inviter therefore cannot erase
+// one already recorded.
 func (s *Service) EnsureFromClerk(ctx context.Context, profile ClerkProfile) (User, error) {
 	clerkUserID := strings.TrimSpace(profile.ClerkUserID)
 	if clerkUserID == "" {
@@ -73,6 +78,7 @@ func (s *Service) EnsureFromClerk(ctx context.Context, profile ClerkProfile) (Us
 		DisplayName: displayName,
 		AvatarURL:   strings.TrimSpace(profile.AvatarURL),
 		Email:       strings.ToLower(strings.TrimSpace(profile.Email)),
+		InvitedBy:   profile.InvitedBy,
 	})
 	if err != nil {
 		return User{}, fmt.Errorf("upsert member %s: %w", clerkUserID, err)
